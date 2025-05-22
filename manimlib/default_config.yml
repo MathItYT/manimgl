@@ -73,7 +73,7 @@ vmobject:
   default_stroke_width: 4.0
 tex:
   # See tex_templates.yml
-  template: "default"
+  template: "mlmodern-spanish"
 text:
   font: "Consolas"
   alignment: "LEFT"
