@@ -52,6 +52,16 @@ ctex:
 
 # Simplified TeX templates
 
+mlmodern-spanish:
+  description: ""
+  compiler: latex
+  preamble: |-
+    \usepackage[spanish]{babel}
+    \usepackage{amsmath}
+    \usepackage{amssymb}
+    \usepackage{xcolor}
+    \usepackage{mlmodern}
+
 basic:
   description: ""
   compiler: latex
