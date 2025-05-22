@@ -99,7 +99,7 @@ def full_tex_to_svg(full_tex: str, compiler: str = "latex", message: str = ""):
         dvi_path = tex_path.with_suffix(dvi_ext)
 
         # Write tex file
-        tex_path.write_text(full_tex)
+        tex_path.write_text(full_tex, encoding="utf-8")
 
         # Run latex compiler
         process = subprocess.run(
@@ -120,7 +120,7 @@ def full_tex_to_svg(full_tex: str, compiler: str = "latex", message: str = ""):
             error_str = ""
             log_path = tex_path.with_suffix(".log")
             if log_path.exists():
-                content = log_path.read_text()
+                content = log_path.read_text(encoding="utf-8")
                 error_match = re.search(r"(?<=\n! ).*\n.*\n", content)
                 if error_match:
                     error_str = error_match.group()
