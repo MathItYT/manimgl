@@ -68,3 +68,9 @@ class Example(manimlib.InteractiveScene):
             self.hold_on_wait = True
             self.hold_loop()
 ```
+
+Then run in your terminal:
+
+```bash
+manimgl main.py Example
+```
