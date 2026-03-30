@@ -6,6 +6,7 @@ from functools import lru_cache
 import moderngl
 from PIL import Image
 import numpy as np
+import pathlib
 
 from manimlib.utils.directories import get_shader_dir
 from manimlib.utils.file_ops import find_file
@@ -21,8 +22,14 @@ PROGRAM_UNIFORM_MIRRORS: dict[int, dict[str, float | tuple]] = dict()
 
 
 @lru_cache()
-def image_path_to_texture(path: str, ctx: moderngl.Context) -> moderngl.Texture:
-    im = Image.open(path).convert("RGBA")
+def image_path_to_texture(path: str | pathlib.Path | tuple[bytes, int, int], ctx: moderngl.Context) -> moderngl.Texture:
+    if isinstance(path, tuple):
+        content, width, height = path
+        im = Image.frombytes("RGBA", (width, height), content)
+    elif isinstance(path, (str, pathlib.Path)):
+        im = Image.open(path).convert("RGBA")
+    else:
+        raise ValueError(f"Invalid type for image path: {type(path)}")
     return ctx.texture(
         size=im.size,
         components=len(im.getbands()),
@@ -32,10 +39,10 @@ def image_path_to_texture(path: str, ctx: moderngl.Context) -> moderngl.Texture:
 
 @lru_cache()
 def get_shader_program(
-        ctx: moderngl.context.Context,
-        vertex_shader: str,
-        fragment_shader: Optional[str] = None,
-        geometry_shader: Optional[str] = None,
+    ctx: moderngl.context.Context,
+    vertex_shader: str,
+    fragment_shader: Optional[str] = None,
+    geometry_shader: Optional[str] = None,
 ) -> moderngl.Program:
     return ctx.program(
         vertex_shader=vertex_shader,

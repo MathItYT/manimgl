@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import inspect
 import pyperclip
-import textwrap
 import traceback
+import textwrap
 
 from IPython.terminal import pt_inputhooks
 from IPython.terminal.embed import InteractiveShellEmbed
@@ -17,6 +17,7 @@ from manimlib.module_loader import ModuleLoader
 
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from manimlib.scene.scene import Scene
 
@@ -36,7 +37,9 @@ class InteractiveSceneEmbed:
     def launch(self):
         self.shell()
 
-    def get_ipython_shell_for_embedded_scene(self) -> InteractiveShellEmbed:
+    def get_ipython_shell_for_embedded_scene(
+        self,
+    ) -> InteractiveShellEmbed:
         """
         Create embedded IPython terminal configured to have access to
         the local namespace of the caller
@@ -46,7 +49,9 @@ class InteractiveSceneEmbed:
         caller_frame = inspect.currentframe().f_back.f_back.f_back
 
         # Update the module's namespace to include local variables
-        module = ModuleLoader.get_module(caller_frame.f_globals["__file__"])
+        module = ModuleLoader.get_module(
+            caller_frame.f_globals["__file__"]
+        )
         module.__dict__.update(caller_frame.f_locals)
         module.__dict__.update(self.get_shortcuts())
         exception_mode = manim_config.embed.exception_mode
@@ -54,7 +59,7 @@ class InteractiveSceneEmbed:
         return InteractiveShellEmbed(
             user_module=module,
             display_banner=False,
-            xmode=exception_mode
+            xmode=exception_mode,
         )
 
     def get_shortcuts(self):
@@ -77,11 +82,12 @@ class InteractiveSceneEmbed:
             i2m=scene.i2m,
             checkpoint_paste=self.checkpoint_paste,
             clear_checkpoints=self.checkpoint_manager.clear_checkpoints,
-            reload=self.reload_scene  # Defined below
+            reload=self.reload_scene,  # Defined below
         )
 
     def enable_gui(self):
         """Enables gui interactions during the embed"""
+
         def inputhook(context):
             while not context.input_is_ready():
                 if not self.scene.is_window_closing():
@@ -94,6 +100,7 @@ class InteractiveSceneEmbed:
 
     def ensure_frame_update_post_cell(self):
         """Ensure the scene updates its frame after each ipython cell"""
+
         def post_cell_func(*args, **kwargs):
             if not self.scene.is_window_closing():
                 self.scene.update_frame(dt=0, force_draw=True)
@@ -102,10 +109,17 @@ class InteractiveSceneEmbed:
 
     def ensure_flash_on_error(self):
         """Flash border, and potentially play sound, on exceptions"""
+
         def custom_exc(shell, etype, evalue, tb, tb_offset=None):
             # Show the error don't just swallow it
-            shell.showtraceback((etype, evalue, tb), tb_offset=tb_offset)
-            rect = FullScreenRectangle().set_stroke(RED, 30).set_fill(opacity=0)
+            shell.showtraceback(
+                (etype, evalue, tb), tb_offset=tb_offset
+            )
+            rect = (
+                FullScreenRectangle()
+                .set_stroke(RED, 30)
+                .set_fill(opacity=0)
+            )
             rect.fix_in_frame()
             self.scene.play(VFadeInThenOut(rect, run_time=0.5))
 
@@ -118,16 +132,18 @@ class InteractiveSceneEmbed:
         Prints syntax errors to the console if found.
         """
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 source_code = f.read()
 
             # Use compile() to check for syntax errors without executing
-            compile(source_code, file_path, 'exec')
+            compile(source_code, file_path, "exec")
             return True
 
         except SyntaxError as e:
             print(f"\nSyntax Error in {file_path}:")
-            print(f"  Line {e.lineno}: {e.text.strip() if e.text else ''}")
+            print(
+                f"  Line {e.lineno}: {e.text.strip() if e.text else ''}"
+            )
             print(f"  {' ' * (e.offset - 1 if e.offset else 0)}^")
             print(f"  {e.msg}")
             return False
@@ -164,7 +180,9 @@ class InteractiveSceneEmbed:
 
         # Validate syntax before attempting reload
         if not self.validate_syntax(current_file):
-            print("[ERROR] Reload cancelled due to syntax errors. Fix the errors and try again.")
+            print(
+                "[ERROR] Reload cancelled due to syntax errors. Fix the errors and try again."
+            )
             return
 
         # Update the global run configuration.
@@ -178,8 +196,11 @@ class InteractiveSceneEmbed:
 
     def auto_reload(self):
         """Enables reload the shell's module before all calls"""
+
         def pre_cell_func(*args, **kwargs):
-            new_mod = ModuleLoader.get_module(self.shell.user_module.__file__, is_during_reload=True)
+            new_mod = ModuleLoader.get_module(
+                self.shell.user_module.__file__, is_during_reload=True
+            )
             self.shell.user_ns.update(vars(new_mod))
 
         self.shell.events.register("pre_run_cell", pre_cell_func)
@@ -188,15 +209,21 @@ class InteractiveSceneEmbed:
         self,
         skip: bool = False,
         record: bool = False,
-        progress_bar: bool = True
+        progress_bar: bool = True,
     ):
-        with self.scene.temp_config_change(skip, record, progress_bar):
-            self.checkpoint_manager.checkpoint_paste(self.shell, self.scene)
+        with self.scene.temp_config_change(
+            skip, record, progress_bar
+        ):
+            self.checkpoint_manager.checkpoint_paste(
+                self.shell, self.scene
+            )
 
 
 class CheckpointManager:
     def __init__(self):
-        self.checkpoint_states: dict[str, list[tuple[Mobject, Mobject]]] = dict()
+        self.checkpoint_states: dict[
+            str, list[tuple[Mobject, Mobject]]
+        ] = dict()
 
     def checkpoint_paste(self, shell, scene):
         """
@@ -208,7 +235,9 @@ class CheckpointManager:
         was called on a block of code starting with that comment.
         """
         code_string = pyperclip.paste()
-        clean_lines = [line.rstrip() for line in code_string.splitlines()]
+        clean_lines = [
+            line.rstrip() for line in code_string.splitlines()
+        ]
         code_string = "\n".join(clean_lines)
         code_string = textwrap.dedent(code_string)
         checkpoint_key = self.get_leading_comment(code_string)
@@ -232,7 +261,7 @@ class CheckpointManager:
             # Clear out any saved states that show up later
             all_keys = list(self.checkpoint_states.keys())
             index = all_keys.index(key)
-            for later_key in all_keys[index + 1:]:
+            for later_key in all_keys[index + 1 :]:
                 self.checkpoint_states.pop(later_key)
         else:
             self.checkpoint_states[key] = scene.get_state()

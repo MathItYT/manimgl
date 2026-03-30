@@ -11,6 +11,7 @@ from functools import lru_cache
 
 from manimlib.config import parse_cli
 from manimlib.config import manim_config
+from typing import Callable
 from manimlib.utils.shaders import get_shader_code_from_file
 from manimlib.utils.shaders import get_shader_program
 from manimlib.utils.shaders import image_path_to_texture
@@ -35,10 +36,15 @@ class ShaderWrapper(object):
     def __init__(
         self,
         ctx: moderngl.context.Context,
+        is_hidden: Callable[[], bool],
         vert_data: np.ndarray,
         shader_folder: Optional[str] = None,
-        mobject_uniforms: Optional[UniformDict] = None,  # A dictionary mapping names of uniform variables
-        texture_paths: Optional[dict[str, str]] = None,  # A dictionary mapping names to filepaths for textures.
+        mobject_uniforms: Optional[
+            UniformDict
+        ] = None,  # A dictionary mapping names of uniform variables
+        texture_paths: Optional[
+            dict[str, str]
+        ] = None,  # A dictionary mapping names to filepaths for textures.
         depth_test: bool = False,
         render_primitive: int = moderngl.TRIANGLE_STRIP,
         code_replacements: dict[str, str] = dict(),
@@ -50,7 +56,7 @@ class ShaderWrapper(object):
         self.depth_test = depth_test
         self.render_primitive = render_primitive
         self.texture_paths = texture_paths or dict()
-
+        self.is_hidden = is_hidden
         self.program_uniform_mirror: UniformDict = dict()
         self.bind_to_mobject_uniforms(mobject_uniforms or dict())
 
@@ -86,25 +92,37 @@ class ShaderWrapper(object):
             self.vert_format = None
             self.programs = []
             return
-        self.program = get_shader_program(self.ctx, **self.program_code)
-        self.vert_format = moderngl.detect_format(self.program, self.vert_attributes)
+        self.program = get_shader_program(
+            self.ctx, **self.program_code
+        )
+        self.vert_format = moderngl.detect_format(
+            self.program, self.vert_attributes
+        )
         self.programs = [self.program]
+
+    def refresh_textures(self, texture_paths: dict[str, str]) -> None:
+        self.release_textures()
+        self.texture_paths = texture_paths
+        self.init_textures()
 
     def init_textures(self):
         self.texture_names_to_ids = dict()
         self.textures = []
         for name, path in self.texture_paths.items():
-            self.add_texture(name, image_path_to_texture(path, self.ctx))
+            self.add_texture(
+                name, image_path_to_texture(path, self.ctx)
+            )
 
     def init_vertex_objects(self):
         self.vbo = None
         self.vaos = []
 
     def add_texture(self, name: str, texture: moderngl.Texture):
-        max_units = self.ctx.info['GL_MAX_TEXTURE_IMAGE_UNITS']
+        max_units = self.ctx.info["GL_MAX_TEXTURE_IMAGE_UNITS"]
         if len(self.textures) >= max_units:
-            raise ValueError(f"Unable to use more than {max_units} textures for a program")
-        # The position in the list determines its id
+            raise ValueError(
+                f"Unable to use more than {max_units} textures for a program"
+            )
         self.texture_names_to_ids[name] = len(self.textures)
         self.textures.append(texture)
 
@@ -115,13 +133,20 @@ class ShaderWrapper(object):
         return self.id
 
     def refresh_id(self) -> None:
-        self.id = hash("".join(map(str, [
-            "".join(map(str, self.program_code.values())),
-            self.mobject_uniforms,
-            self.depth_test,
-            self.render_primitive,
-            self.texture_paths,
-        ])))
+        self.id = hash(
+            "".join(
+                map(
+                    str,
+                    [
+                        "".join(map(str, self.program_code.values())),
+                        self.mobject_uniforms,
+                        self.depth_test,
+                        self.render_primitive,
+                        self.texture_paths,
+                    ],
+                )
+            )
+        )
 
     def replace_code(self, old: str, new: str) -> None:
         code_map = self.program_code
@@ -132,12 +157,13 @@ class ShaderWrapper(object):
         self.init_program()
         self.refresh_id()
 
-    # Changing context
     def num_clip_planes(self):
         count = 0
         for n in range(4):
             key = f"clip_plane{n}"
-            if key in self.mobject_uniforms and any(self.mobject_uniforms[key]):
+            if key in self.mobject_uniforms and any(
+                self.mobject_uniforms[key]
+            ):
                 count = n + 1
         return count
 
@@ -190,7 +216,13 @@ class ShaderWrapper(object):
         self.vaos = [
             self.ctx.vertex_array(
                 program=program,
-                content=[(self.vbo, self.vert_format, *self.vert_attributes)],
+                content=[
+                    (
+                        self.vbo,
+                        self.vert_format,
+                        *self.vert_attributes,
+                    )
+                ],
                 mode=self.render_primitive,
             )
             for program in self.programs
@@ -198,12 +230,16 @@ class ShaderWrapper(object):
 
     # Related to data and rendering
     def pre_render(self):
+        if self.is_hidden():
+            return
         self.set_ctx_depth_test(self.depth_test)
         self.set_ctx_clip_plane(self.num_clip_planes())
         for tid, texture in enumerate(self.textures):
             texture.use(tid)
 
     def render(self):
+        if self.is_hidden():
+            return
         for vao in self.vaos:
             vao.render()
 
@@ -211,7 +247,11 @@ class ShaderWrapper(object):
         for program in self.programs:
             if program is None:
                 continue
-            for uniforms in [self.mobject_uniforms, camera_uniforms, self.texture_names_to_ids]:
+            for uniforms in [
+                self.mobject_uniforms,
+                camera_uniforms,
+                self.texture_names_to_ids,
+            ]:
                 for name, value in uniforms.items():
                     set_program_uniform(program, name, value)
 
@@ -233,15 +273,20 @@ class VShaderWrapper(ShaderWrapper):
     def __init__(
         self,
         ctx: moderngl.context.Context,
+        is_hidden: Callable[[], bool],
         vert_data: np.ndarray,
         shader_folder: Optional[str] = None,
-        mobject_uniforms: Optional[UniformDict] = None,  # A dictionary mapping names of uniform variables
-        texture_paths: Optional[dict[str, str]] = None,  # A dictionary mapping names to filepaths for textures.
+        mobject_uniforms: Optional[
+            UniformDict
+        ] = None,  # A dictionary mapping names of uniform variables
+        texture_paths: Optional[
+            dict[str, str]
+        ] = None,  # A dictionary mapping names to filepaths for textures.
         depth_test: bool = False,
         render_primitive: int = moderngl.TRIANGLES,
         code_replacements: dict[str, str] = dict(),
-        program_type: str | None = None,
         stroke_behind: bool = False,
+        program_type: str | None = None,
     ):
         self.stroke_behind = stroke_behind
         super().__init__(
@@ -251,18 +296,25 @@ class VShaderWrapper(ShaderWrapper):
             mobject_uniforms=mobject_uniforms,
             texture_paths=texture_paths,
             depth_test=depth_test,
-            render_primitive=render_primitive
+            render_primitive=render_primitive,
+            is_hidden=is_hidden,
         )
         self.fill_canvas = VShaderWrapper.get_fill_canvas(self.ctx)
-        self.add_texture('Texture', self.fill_canvas[0].color_attachments[0])
-        self.add_texture('DepthTexture', self.fill_canvas[2].color_attachments[0])
+        self.add_texture(
+            "Texture", self.fill_canvas[0].color_attachments[0]
+        )
+        self.add_texture(
+            "DepthTexture", self.fill_canvas[2].color_attachments[0]
+        )
         for old, new in code_replacements.items():
             self.replace_code_program(old, new, program_type)
 
     def init_program_code(self) -> None:
         self.program_code = {
             f"{vtype}_{name}": get_shader_code_from_file(
-                os.path.join("quadratic_bezier", f"{vtype}", f"{name}.glsl")
+                os.path.join(
+                    "quadratic_bezier", f"{vtype}", f"{name}.glsl"
+                )
             )
             for vtype in ["stroke", "fill", "depth"]
             for name in ["vert", "geom", "frag"]
@@ -288,7 +340,7 @@ class VShaderWrapper(ShaderWrapper):
             fragment_shader=self.program_code["stroke_frag"].replace(
                 "// MODIFY FRAG COLOR",
                 "frag_color.a *= 0.95; frag_color.rgb *= frag_color.a;",
-            )
+            ),
         )
         self.fill_depth_program = get_shader_program(
             self.ctx,
@@ -296,7 +348,12 @@ class VShaderWrapper(ShaderWrapper):
             geometry_shader=self.program_code["depth_geom"],
             fragment_shader=self.program_code["depth_frag"],
         )
-        self.programs = [self.stroke_program, self.fill_program, self.fill_border_program, self.fill_depth_program]
+        self.programs = [
+            self.stroke_program,
+            self.fill_program,
+            self.fill_border_program,
+            self.fill_depth_program,
+        ]
 
         # Full vert format looks like this (total of 4x23 = 92 bytes):
         # point 3
@@ -306,17 +363,33 @@ class VShaderWrapper(ShaderWrapper):
         # fill_rgba 4
         # base_normal 3
         # fill_border_width 1
-        self.stroke_vert_format = '3f 4f 1f 1f 16x 3f 4x'
-        self.stroke_vert_attributes = ['point', 'stroke_rgba', 'stroke_width', 'joint_angle', 'unit_normal']
+        self.stroke_vert_format = "3f 4f 1f 1f 16x 3f 4x"
+        self.stroke_vert_attributes = [
+            "point",
+            "stroke_rgba",
+            "stroke_width",
+            "joint_angle",
+            "unit_normal",
+        ]
 
-        self.fill_vert_format = '3f 24x 4f 3f 4x'
-        self.fill_vert_attributes = ['point', 'fill_rgba', 'base_normal']
+        self.fill_vert_format = "3f 24x 4f 3f 4x"
+        self.fill_vert_attributes = [
+            "point",
+            "fill_rgba",
+            "base_normal",
+        ]
 
-        self.fill_border_vert_format = '3f 20x 1f 4f 3f 1f'
-        self.fill_border_vert_attributes = ['point', 'joint_angle', 'stroke_rgba', 'unit_normal', 'stroke_width']
+        self.fill_border_vert_format = "3f 20x 1f 4f 3f 1f"
+        self.fill_border_vert_attributes = [
+            "point",
+            "joint_angle",
+            "stroke_rgba",
+            "unit_normal",
+            "stroke_width",
+        ]
 
-        self.fill_depth_vert_format = '3f 40x 3f 4x'
-        self.fill_depth_vert_attributes = ['point', 'base_normal']
+        self.fill_depth_vert_format = "3f 40x 3f 4x"
+        self.fill_depth_vert_attributes = ["point", "base_normal"]
 
     def init_vertex_objects(self):
         self.vbo = None
@@ -328,25 +401,54 @@ class VShaderWrapper(ShaderWrapper):
     def generate_vaos(self):
         self.stroke_vao = self.ctx.vertex_array(
             program=self.stroke_program,
-            content=[(self.vbo, self.stroke_vert_format, *self.stroke_vert_attributes)],
+            content=[
+                (
+                    self.vbo,
+                    self.stroke_vert_format,
+                    *self.stroke_vert_attributes,
+                )
+            ],
             mode=self.render_primitive,
         )
         self.fill_vao = self.ctx.vertex_array(
             program=self.fill_program,
-            content=[(self.vbo, self.fill_vert_format, *self.fill_vert_attributes)],
+            content=[
+                (
+                    self.vbo,
+                    self.fill_vert_format,
+                    *self.fill_vert_attributes,
+                )
+            ],
             mode=self.render_primitive,
         )
         self.fill_border_vao = self.ctx.vertex_array(
             program=self.fill_border_program,
-            content=[(self.vbo, self.fill_border_vert_format, *self.fill_border_vert_attributes)],
+            content=[
+                (
+                    self.vbo,
+                    self.fill_border_vert_format,
+                    *self.fill_border_vert_attributes,
+                )
+            ],
             mode=self.render_primitive,
         )
         self.fill_depth_vao = self.ctx.vertex_array(
             program=self.fill_depth_program,
-            content=[(self.vbo, self.fill_depth_vert_format, *self.fill_depth_vert_attributes)],
+            content=[
+                (
+                    self.vbo,
+                    self.fill_depth_vert_format,
+                    *self.fill_depth_vert_attributes,
+                )
+            ],
             mode=self.render_primitive,
         )
-        self.vaos = [self.stroke_vao, self.fill_vao, self.fill_border_vao, self.fill_depth_vao]
+        self.vaos = [
+            self.stroke_vao,
+            self.fill_vao,
+            self.fill_border_vao,
+            self.fill_depth_vao,
+        ]
 
     def set_backstroke(self, value: bool = True):
         self.stroke_behind = value
@@ -354,8 +456,10 @@ class VShaderWrapper(ShaderWrapper):
     def refresh_id(self):
         super().refresh_id()
         self.id = hash(str(self.id) + str(self.stroke_behind))
-        
-    def replace_code_program(self, old: str, new: str, program_type: str | None = None):
+
+    def replace_code_program(
+        self, old: str, new: str, program_type: str | None = None
+    ):
         if program_type is None:
             # fallback to generic behaviour
             super().replace_code(old, new)
@@ -370,7 +474,9 @@ class VShaderWrapper(ShaderWrapper):
                 continue
             if not name.startswith(program_type):
                 continue
-            self.program_code[name] = re.sub(old, new, self.program_code[name])
+            self.program_code[name] = re.sub(
+                old, new, self.program_code[name]
+            )
 
         self.init_program()
         self.refresh_id()
@@ -402,8 +508,10 @@ class VShaderWrapper(ShaderWrapper):
         # -a / (1 - a) cancels out, so we can cancel positively and negatively
         # oriented triangles
         gl.glBlendFuncSeparate(
-            gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA,
-            gl.GL_ONE_MINUS_DST_ALPHA, gl.GL_ONE
+            gl.GL_SRC_ALPHA,
+            gl.GL_ONE_MINUS_SRC_ALPHA,
+            gl.GL_ONE_MINUS_DST_ALPHA,
+            gl.GL_ONE,
         )
         self.fill_vao.render()
 
@@ -433,7 +541,9 @@ class VShaderWrapper(ShaderWrapper):
     # Static method returning one shared value across all VShaderWrappers
     @lru_cache
     @staticmethod
-    def get_fill_canvas(ctx: moderngl.Context) -> Tuple[Framebuffer, VertexArray, Framebuffer]:
+    def get_fill_canvas(
+        ctx: moderngl.Context,
+    ) -> Tuple[Framebuffer, VertexArray, Framebuffer]:
         """
         Because VMobjects with fill are rendered in a funny way, using
         alpha blending to effectively compute the winding number around
@@ -449,14 +559,18 @@ class VShaderWrapper(ShaderWrapper):
 
         # Important to make sure dtype is floating point (not fixed point)
         # so that alpha values can be negative and are not clipped
-        fill_texture = ctx.texture(size=double_size, components=4, dtype='f2')
+        fill_texture = ctx.texture(
+            size=double_size, components=4, dtype="f2"
+        )
         # Use another one to keep track of depth
-        depth_texture = ctx.texture(size=size, components=1, dtype='f4')
+        depth_texture = ctx.texture(
+            size=size, components=1, dtype="f4"
+        )
 
         fill_texture_fbo = ctx.framebuffer(fill_texture)
         depth_texture_fbo = ctx.framebuffer(depth_texture)
 
-        simple_vert = '''
+        simple_vert = """
             #version 330
 
             in vec2 texcoord;
@@ -466,8 +580,8 @@ class VShaderWrapper(ShaderWrapper):
                 gl_Position = vec4((2.0 * texcoord - 1.0), 0.0, 1.0);
                 uv = texcoord;
             }
-        '''
-        alpha_adjust_frag = '''
+        """
+        alpha_adjust_frag = """
             #version 330
 
             uniform sampler2D Texture;
@@ -490,27 +604,29 @@ class VShaderWrapper(ShaderWrapper):
 
                 gl_FragDepth = texture(DepthTexture, uv)[0];
             }
-        '''
+        """
         fill_program = ctx.program(
             vertex_shader=simple_vert,
             fragment_shader=alpha_adjust_frag,
         )
 
         verts = np.array([[0, 0], [0, 1], [1, 0], [1, 1]])
-        simple_vbo = ctx.buffer(verts.astype('f4').tobytes())
+        simple_vbo = ctx.buffer(verts.astype("f4").tobytes())
         fill_texture_vao = ctx.simple_vertex_array(
-            fill_program, simple_vbo, 'texcoord',
-            mode=moderngl.TRIANGLE_STRIP
+            fill_program,
+            simple_vbo,
+            "texcoord",
+            mode=moderngl.TRIANGLE_STRIP,
         )
 
         return (fill_texture_fbo, fill_texture_vao, depth_texture_fbo)
 
     def render(self):
+        if self.is_hidden():
+            return
         if self.stroke_behind:
             self.render_stroke()
             self.render_fill()
         else:
             self.render_fill()
             self.render_stroke()
-
-

@@ -3,7 +3,9 @@ from __future__ import annotations
 import numpy as np
 
 import moderngl_window as mglw
-from moderngl_window.context.pyglet.window import Window as PygletWindow
+from moderngl_window.context.pyglet.window import (
+    Window as PygletWindow,
+)
 from moderngl_window.timers.clock import Timer
 from functools import wraps
 import screeninfo
@@ -21,7 +23,6 @@ if TYPE_CHECKING:
 
 
 class Window(PygletWindow):
-    fullscreen: bool = False
     resizable: bool = True
     gl_version: tuple[int, int] = (3, 3)
     vsync: bool = True
@@ -35,16 +36,19 @@ class Window(PygletWindow):
         full_screen: bool = False,
         size: Optional[tuple[int, int]] = None,
         position: Optional[tuple[int, int]] = None,
-        samples: int = 0
+        samples: int = 0,
     ):
         self.scene = scene
         self.monitor = self.get_monitor(monitor_index)
         self.default_size = size or self.get_default_size(full_screen)
-        self.default_position = position or self.position_from_string(position_string)
+        self.default_position = position or self.position_from_string(
+            position_string
+        )
         self.pressed_keys = set()
 
-        super().__init__(samples=samples)
+        super().__init__(samples=samples, size=self.default_size)
         self.to_default_position()
+        self.fullscreen = full_screen
 
         if self.scene:
             self.init_for_scene(scene)
@@ -65,7 +69,9 @@ class Window(PygletWindow):
         self.init_mgl_context()
 
         self.timer = Timer()
-        self.config = mglw.WindowConfig(ctx=self.ctx, wnd=self, timer=self.timer)
+        self.config = mglw.WindowConfig(
+            ctx=self.ctx, wnd=self, timer=self.timer
+        )
         mglw.activate_context(window=self, ctx=self.ctx)
         self.timer.start()
 
@@ -118,10 +124,7 @@ class Window(PygletWindow):
 
     # Delegate event handling to scene
     def pixel_coords_to_space_coords(
-        self,
-        px: int,
-        py: int,
-        relative: bool = False
+        self, px: int, py: int, relative: bool = False
     ) -> np.ndarray:
         if self.scene is None or not hasattr(self.scene, "frame"):
             return np.zeros(3)
@@ -131,7 +134,9 @@ class Window(PygletWindow):
         frame = self.scene.frame
 
         coords = np.zeros(3)
-        coords[:2] = (fixed_frame_shape / pixel_shape) * np.array([px, py])
+        coords[:2] = (fixed_frame_shape / pixel_shape) * np.array(
+            [px, py]
+        )
         if not relative:
             coords[:2] -= 0.5 * fixed_frame_shape
         return frame.from_fixed_frame_point(coords, relative)
@@ -140,37 +145,58 @@ class Window(PygletWindow):
         return self._has_undrawn_event
 
     def swap_buffers(self):
+        if self._window.context is None:
+            return
         super().swap_buffers()
         self._has_undrawn_event = False
 
     @staticmethod
-    def note_undrawn_event(func: Callable[..., T]) -> Callable[..., T]:
+    def note_undrawn_event(
+        func: Callable[..., T],
+    ) -> Callable[..., T]:
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             func(self, *args, **kwargs)
             self._has_undrawn_event = True
+
         return wrapper
 
     @note_undrawn_event
-    def on_mouse_motion(self, x: int, y: int, dx: int, dy: int) -> None:
+    def on_mouse_motion(
+        self, x: int, y: int, dx: int, dy: int
+    ) -> None:
         super().on_mouse_motion(x, y, dx, dy)
         if not self.scene:
             return
         point = self.pixel_coords_to_space_coords(x, y)
-        d_point = self.pixel_coords_to_space_coords(dx, dy, relative=True)
+        d_point = self.pixel_coords_to_space_coords(
+            dx, dy, relative=True
+        )
         self.scene.on_mouse_motion(point, d_point)
 
     @note_undrawn_event
-    def on_mouse_drag(self, x: int, y: int, dx: int, dy: int, buttons: int, modifiers: int) -> None:
+    def on_mouse_drag(
+        self,
+        x: int,
+        y: int,
+        dx: int,
+        dy: int,
+        buttons: int,
+        modifiers: int,
+    ) -> None:
         super().on_mouse_drag(x, y, dx, dy, buttons, modifiers)
         if not self.scene:
             return
         point = self.pixel_coords_to_space_coords(x, y)
-        d_point = self.pixel_coords_to_space_coords(dx, dy, relative=True)
+        d_point = self.pixel_coords_to_space_coords(
+            dx, dy, relative=True
+        )
         self.scene.on_mouse_drag(point, d_point, buttons, modifiers)
 
     @note_undrawn_event
-    def on_mouse_press(self, x: int, y: int, button: int, mods: int) -> None:
+    def on_mouse_press(
+        self, x: int, y: int, button: int, mods: int
+    ) -> None:
         super().on_mouse_press(x, y, button, mods)
         if not self.scene:
             return
@@ -178,7 +204,9 @@ class Window(PygletWindow):
         self.scene.on_mouse_press(point, button, mods)
 
     @note_undrawn_event
-    def on_mouse_release(self, x: int, y: int, button: int, mods: int) -> None:
+    def on_mouse_release(
+        self, x: int, y: int, button: int, mods: int
+    ) -> None:
         super().on_mouse_release(x, y, button, mods)
         if not self.scene:
             return
@@ -186,12 +214,16 @@ class Window(PygletWindow):
         self.scene.on_mouse_release(point, button, mods)
 
     @note_undrawn_event
-    def on_mouse_scroll(self, x: int, y: int, x_offset: float, y_offset: float) -> None:
+    def on_mouse_scroll(
+        self, x: int, y: int, x_offset: float, y_offset: float
+    ) -> None:
         super().on_mouse_scroll(x, y, x_offset, y_offset)
         if not self.scene:
             return
         point = self.pixel_coords_to_space_coords(x, y)
-        offset = self.pixel_coords_to_space_coords(x_offset, y_offset, relative=True)
+        offset = self.pixel_coords_to_space_coords(
+            x_offset, y_offset, relative=True
+        )
         self.scene.on_mouse_scroll(point, offset, x_offset, y_offset)
 
     @note_undrawn_event
@@ -239,4 +271,4 @@ class Window(PygletWindow):
         self.scene.on_close()
 
     def is_key_pressed(self, symbol: int) -> bool:
-        return (symbol in self.pressed_keys)
+        return symbol in self.pressed_keys

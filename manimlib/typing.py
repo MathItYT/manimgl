@@ -1,7 +1,14 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Union, Tuple, Annotated, Literal, Iterable, Dict
+    from typing import (
+        Union,
+        Tuple,
+        Annotated,
+        Literal,
+        Iterable,
+        Dict,
+    )
     from colour import Color
     import numpy as np
     import re
@@ -14,7 +21,6 @@ if TYPE_CHECKING:
     # Abbreviations for a common types
     ManimColor = Union[str, Color, None]
     RangeSpecifier = Tuple[float, float, float] | Tuple[float, float]
-
 
     Span = tuple[int, int]
     SingleSelector = Union[

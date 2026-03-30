@@ -25,11 +25,8 @@ def run_scenes():
     # altering global configuration
     scene_config = Dict(manim_config.scene)
     run_config = manim_config.run
-
-    if run_config.show_in_window:
-        # Create a reusable window
-        window = Window(**manim_config.window)
-        scene_config.update(window=window)
+    window = Window(**manim_config.window)
+    scene_config.update(window=window)
 
     while True:
         try:

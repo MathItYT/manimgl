@@ -34,12 +34,14 @@ if TYPE_CHECKING:
 class Surface(Mobject):
     render_primitive: int = moderngl.TRIANGLES
     shader_folder: str = "surface"
-    data_dtype: np.dtype = np.dtype([
-        ('point', np.float32, (3,)),
-        ('d_normal_point', np.float32, (3,)),
-        ('rgba', np.float32, (4,)),
-    ])
-    pointlike_data_keys = ['point', 'd_normal_point']
+    data_dtype: np.dtype = np.dtype(
+        [
+            ("point", np.float32, (3,)),
+            ("d_normal_point", np.float32, (3,)),
+            ("rgba", np.float32, (4,)),
+        ]
+    )
+    pointlike_data_keys = ["point", "d_normal_point"]
 
     def __init__(
         self,
@@ -58,7 +60,7 @@ class Surface(Mobject):
         # Step off the surface to a new point which will
         # be used to determine the normal direction
         normal_nudge: float = 1e-3,
-        **kwargs
+        **kwargs,
     ):
         self.u_range = u_range
         self.v_range = v_range
@@ -75,7 +77,9 @@ class Surface(Mobject):
         )
         self.compute_triangle_indices()
 
-    def uv_func(self, u: float, v: float) -> tuple[float, float, float]:
+    def uv_func(
+        self, u: float, v: float
+    ) -> tuple[float, float, float]:
         # To be implemented in subclasses
         return (u, v, 0.0)
 
@@ -102,7 +106,9 @@ class Surface(Mobject):
         normals = normalize_along_axis(crosses, 1)
 
         self.set_points(points)
-        self.data['d_normal_point'] = points + self.normal_nudge * normals
+        self.data["d_normal_point"] = (
+            points + self.normal_nudge * normals
+        )
 
     def get_uv_grid(self) -> np.array:
         """
@@ -112,12 +118,14 @@ class Surface(Mobject):
         nu, nv = self.resolution
         u_range = np.linspace(*self.u_range, nu)
         v_range = np.linspace(*self.v_range, nv)
-        U, V = np.meshgrid(u_range, v_range, indexing='ij')
+        U, V = np.meshgrid(u_range, v_range, indexing="ij")
         return np.stack([U, V], axis=-1)
 
     def uv_to_point(self, u, v):
         nu, nv = self.resolution
-        verts_by_uv = np.reshape(self.get_points(), (nu, nv, self.dim))
+        verts_by_uv = np.reshape(
+            self.get_points(), (nu, nv, self.dim)
+        )
 
         alpha1 = clip(inverse_interpolate(*self.u_range[:2], u), 0, 1)
         alpha2 = clip(inverse_interpolate(*self.v_range[:2], v), 0, 1)
@@ -136,9 +144,7 @@ class Surface(Mobject):
         u_res = scaled_u % 1
         v_res = scaled_v % 1
         return interpolate(
-            interpolate(a, b, v_res),
-            interpolate(c, d, v_res),
-            u_res
+            interpolate(a, b, v_res), interpolate(c, d, v_res), u_res
         )
 
     def apply_points_function(self, *args, **kwargs) -> Self:
@@ -170,7 +176,9 @@ class Surface(Mobject):
 
     def get_unit_normals(self) -> Vect3Array:
         # TOOD, I could try a more resiliant way to compute this using the neighboring grid values
-        return normalize_along_axis(self.data['d_normal_point'] - self.data['point'], 1)
+        return normalize_along_axis(
+            self.data["d_normal_point"] - self.data["point"], 1
+        )
 
     @Mobject.affects_data
     def pointwise_become_partial(
@@ -178,7 +186,7 @@ class Surface(Mobject):
         smobject: "Surface",
         a: float,
         b: float,
-        axis: int | None = None
+        axis: int | None = None,
     ) -> Self:
         assert isinstance(smobject, Surface)
         if axis is None:
@@ -188,10 +196,8 @@ class Surface(Mobject):
             return self
 
         nu, nv = smobject.resolution
-        self.data['point'][:] = self.get_partial_points_array(
-            smobject.data['point'], a, b,
-            (nu, nv, 3),
-            axis=axis
+        self.data["point"][:] = self.get_partial_points_array(
+            smobject.data["point"], a, b, (nu, nv, 3), axis=axis
         )
         return self
 
@@ -201,37 +207,41 @@ class Surface(Mobject):
         a: float,
         b: float,
         resolution: Sequence[int],
-        axis: int
+        axis: int,
     ) -> Vect3Array:
         if len(points) == 0:
             return points
         nu, nv = resolution[:2]
         points = points.reshape(resolution).copy()
         max_index = resolution[axis] - 1
-        lower_index, lower_residue = integer_interpolate(0, max_index, a)
-        upper_index, upper_residue = integer_interpolate(0, max_index, b)
+        lower_index, lower_residue = integer_interpolate(
+            0, max_index, a
+        )
+        upper_index, upper_residue = integer_interpolate(
+            0, max_index, b
+        )
         if axis == 0:
             points[:lower_index] = interpolate(
                 points[lower_index],
                 points[lower_index + 1],
-                lower_residue
+                lower_residue,
             )
-            points[upper_index + 1:] = interpolate(
+            points[upper_index + 1 :] = interpolate(
                 points[upper_index],
                 points[upper_index + 1],
-                upper_residue
+                upper_residue,
             )
         else:
             shape = (nu, 1, resolution[2])
             points[:, :lower_index] = interpolate(
                 points[:, lower_index],
                 points[:, lower_index + 1],
-                lower_residue
+                lower_residue,
             ).reshape(shape)
-            points[:, upper_index + 1:] = interpolate(
+            points[:, upper_index + 1 :] = interpolate(
                 points[:, upper_index],
                 points[:, upper_index + 1],
-                upper_residue
+                upper_residue,
             ).reshape(shape)
         return points.reshape((nu * nv, *resolution[2:]))
 
@@ -250,15 +260,17 @@ class Surface(Mobject):
         def updater(surface: Surface):
             vect = camera.get_location() - surface.get_center()
             surface.sort_faces_back_to_front(vect)
+
         self.add_updater(updater)
         return self
 
-    def color_by_uv_function(self, uv_to_color: Callable[[Vect2], Color]):
+    def color_by_uv_function(
+        self, uv_to_color: Callable[[Vect2], Color]
+    ):
         uv_grid = self.get_uv_grid()
-        self.set_rgba_array_by_color([
-            uv_to_color(u, v)
-            for u, v in uv_grid.reshape(-1, 2)
-        ])
+        self.set_rgba_array_by_color(
+            [uv_to_color(u, v) for u, v in uv_grid.reshape(-1, 2)]
+        )
         return self
 
     def get_shader_vert_indices(self) -> np.ndarray:
@@ -271,7 +283,7 @@ class ParametricSurface(Surface):
         uv_func: Callable[[float, float], Iterable[float]],
         u_range: tuple[float, float] = (0, 1),
         v_range: tuple[float, float] = (0, 1),
-        **kwargs
+        **kwargs,
     ):
         self.passed_uv_func = uv_func
         super().__init__(u_range=u_range, v_range=v_range, **kwargs)
@@ -281,11 +293,7 @@ class ParametricSurface(Surface):
 
 
 class SGroup(Surface):
-    def __init__(
-        self,
-        *parametric_surfaces: Surface,
-        **kwargs
-    ):
+    def __init__(self, *parametric_surfaces: Surface, **kwargs):
         super().__init__(resolution=(0, 0), **kwargs)
         self.add(*parametric_surfaces)
 
@@ -296,10 +304,10 @@ class SGroup(Surface):
 class TexturedSurface(Surface):
     shader_folder: str = "textured_surface"
     data_dtype: Sequence[Tuple[str, type, Tuple[int]]] = [
-        ('point', np.float32, (3,)),
-        ('d_normal_point', np.float32, (3,)),
-        ('im_coords', np.float32, (2,)),
-        ('opacity', np.float32, (1,)),
+        ("point", np.float32, (3,)),
+        ("d_normal_point", np.float32, (3,)),
+        ("im_coords", np.float32, (2,)),
+        ("opacity", np.float32, (1,)),
     ]
 
     def __init__(
@@ -307,7 +315,7 @@ class TexturedSurface(Surface):
         uv_surface: Surface,
         image_file: str,
         dark_image_file: str | None = None,
-        **kwargs
+        **kwargs,
     ):
         if not isinstance(uv_surface, Surface):
             raise Exception("uv_surface must be of type Surface")
@@ -320,7 +328,9 @@ class TexturedSurface(Surface):
 
         texture_paths = {
             "LightTexture": get_full_raster_image_path(image_file),
-            "DarkTexture": get_full_raster_image_path(dark_image_file),
+            "DarkTexture": get_full_raster_image_path(
+                dark_image_file
+            ),
         }
 
         self.uv_surface = uv_surface
@@ -331,7 +341,7 @@ class TexturedSurface(Surface):
         super().__init__(
             texture_paths=texture_paths,
             shading=tuple(uv_surface.shading),
-            **kwargs
+            **kwargs,
         )
 
     @Mobject.affects_data
@@ -340,14 +350,30 @@ class TexturedSurface(Surface):
         nu, nv = surf.resolution
         self.resize_points(surf.get_num_points())
         self.resolution = surf.resolution
-        self.data['point'][:] = surf.data['point']
-        self.data['d_normal_point'][:] = surf.data['d_normal_point']
-        self.data['opacity'][:, 0] = surf.data["rgba"][:, 3]
-        self.data["im_coords"] = np.array([
-            [u, v]
-            for u in np.linspace(0, 1, nu)
-            for v in np.linspace(1, 0, nv)  # Reverse y-direction
-        ])
+        self.data["point"][:] = surf.data["point"]
+        self.data["d_normal_point"][:] = surf.data["d_normal_point"]
+        self.data["opacity"][:, 0] = surf.data["rgba"][:, 3]
+        self.data["im_coords"] = np.array(
+            [
+                [u, v]
+                for u in np.linspace(0, 1, nu)
+                for v in np.linspace(1, 0, nv)  # Reverse y-direction
+            ]
+        )
+
+    def init_uniforms(self):
+        super().init_uniforms()
+        self.uniforms["num_textures"] = self.num_textures
+
+    @Mobject.affects_data
+    def set_opacity(
+        self, opacity: float | Iterable[float], recurse=True
+    ) -> Self:
+        op_arr = np.array(listify(opacity))
+        self.data["opacity"][:, 0] = resize_with_interpolation(
+            op_arr, len(self.data)
+        )
+        return self
 
     @Mobject.affects_data
     def set_image_coords_by_uv_func(self, uv_func) -> Self:
@@ -356,28 +382,20 @@ class TexturedSurface(Surface):
         for coordinates when reading from the texture
         """
         nu, nv = self.uv_surface.resolution
-        self.data["im_coords"][:] = np.array([
-            uv_func(u, v)
-            for u in np.linspace(0, 1, nu)
-            for v in np.linspace(1, 0, nv)  # Reverse y-direction
-        ])
-        return self
-
-    def init_uniforms(self):
-        super().init_uniforms()
-        self.uniforms["num_textures"] = self.num_textures
-
-    @Mobject.affects_data
-    def set_opacity(self, opacity: float | Iterable[float], recurse=True) -> Self:
-        op_arr = np.array(listify(opacity))
-        self.data["opacity"][:, 0] = resize_with_interpolation(op_arr, len(self.data))
+        self.data["im_coords"][:] = np.array(
+            [
+                uv_func(u, v)
+                for u in np.linspace(0, 1, nu)
+                for v in np.linspace(1, 0, nv)  # Reverse y-direction
+            ]
+        )
         return self
 
     def set_color(
         self,
         color: ManimColor | Iterable[ManimColor] | None,
         opacity: float | Iterable[float] | None = None,
-        recurse: bool = True
+        recurse: bool = True,
     ) -> Self:
         if opacity is not None:
             self.set_opacity(opacity)
@@ -388,7 +406,7 @@ class TexturedSurface(Surface):
         tsmobject: "TexturedSurface",
         a: float,
         b: float,
-        axis: int | None = None
+        axis: int | None = None,
     ) -> Self:
         if axis is None:
             axis = self.preferred_creation_axis
@@ -405,14 +423,23 @@ class TexturedSurface(Surface):
 
 
 class TexturedGeometry(TexturedSurface):
-    def __init__(self, geometry: trimesh.base.Trimesh, texture_file: str, **kwargs):
+    def __init__(
+        self,
+        geometry: trimesh.base.Trimesh,
+        texture_file: str,
+        **kwargs,
+    ):
         self.num_textures = 1
         self.geometry = geometry
         self.texture_file = texture_file
         self.triangle_indices = geometry.faces.flatten()
         Mobject.__init__(
             self,
-            texture_paths={"LightTexture": get_full_raster_image_path(texture_file)}
+            texture_paths={
+                "LightTexture": get_full_raster_image_path(
+                    texture_file
+                )
+            },
         )
 
     def init_points(self):
@@ -445,10 +472,14 @@ class ThreeDModel(Group):
         mesh = trimesh.load(obj_file)
 
         if isinstance(mesh, trimesh.Scene):
-            self.add(*(
-                TexturedGeometry(geom, texture or default_texture)
-                for geom, texture in zip(mesh.geometry.values(), texture_files.values())
-            ))
+            self.add(
+                *(
+                    TexturedGeometry(geom, texture or default_texture)
+                    for geom, texture in zip(
+                        mesh.geometry.values(), texture_files.values()
+                    )
+                )
+            )
         elif isinstance(mesh, trimesh.Geometry):
             # TODO
             self.add(TexturedGeometry(mesh, default_texture))
@@ -457,7 +488,9 @@ class ThreeDModel(Group):
         self.set_height(height)
         self.center()
 
-    def get_textures_from_mtl(self, obj_filepath, suppress_warnings=True):
+    def get_textures_from_mtl(
+        self, obj_filepath, suppress_warnings=True
+    ):
         """
         Load an OBJ file and extract all texture filenames from its MTL file.
 
@@ -467,10 +500,12 @@ class ThreeDModel(Group):
 
         # Suppress pywavefront warnings if desired
         if suppress_warnings:
-            logging.getLogger('pywavefront').setLevel(logging.ERROR)
+            logging.getLogger("pywavefront").setLevel(logging.ERROR)
 
         # Load the OBJ file (automatically loads MTL)
-        obj_scene = pywavefront.Wavefront(obj_filepath, collect_faces=True)
+        obj_scene = pywavefront.Wavefront(
+            obj_filepath, collect_faces=True
+        )
 
         textures = {}
 

@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from manimlib.constants import BLUE_B, BLUE_D, BLUE_E, GREY_BROWN, DEFAULT_MOBJECT_COLOR
+from manimlib.constants import (
+    BLUE_B,
+    BLUE_D,
+    BLUE_E,
+    GREY_BROWN,
+    DEFAULT_MOBJECT_COLOR,
+)
 from manimlib.mobject.mobject import Mobject
 from manimlib.mobject.types.vectorized_mobject import VGroup
 from manimlib.mobject.types.vectorized_mobject import VMobject
@@ -19,13 +25,18 @@ class AnimatedBoundary(VGroup):
     def __init__(
         self,
         vmobject: VMobject,
-        colors: List[ManimColor] = [BLUE_D, BLUE_B, BLUE_E, GREY_BROWN],
+        colors: List[ManimColor] = [
+            BLUE_D,
+            BLUE_B,
+            BLUE_E,
+            GREY_BROWN,
+        ],
         max_stroke_width: float = 3.0,
         cycle_rate: float = 0.5,
         back_and_forth: bool = True,
         draw_rate_func: Callable[[float], float] = smooth,
         fade_rate_func: Callable[[float], float] = smooth,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.vmobject: VMobject = vmobject
@@ -37,10 +48,7 @@ class AnimatedBoundary(VGroup):
         self.fade_rate_func = fade_rate_func
 
         self.boundary_copies: list[VMobject] = [
-            vmobject.copy().set_style(
-                stroke_width=0,
-                fill_opacity=0
-            )
+            vmobject.copy().set_style(stroke_width=0, fill_opacity=0)
             for x in range(2)
         ]
         self.add(*self.boundary_copies)
@@ -74,19 +82,14 @@ class AnimatedBoundary(VGroup):
         if time >= 1:
             self.full_family_become_partial(fading, vmobject, 0, 1)
             fading.set_stroke(
-                color=colors[index - 1],
-                width=(1 - fade_alpha) * msw
+                color=colors[index - 1], width=(1 - fade_alpha) * msw
             )
 
         self.total_time += dt
         return self
 
     def full_family_become_partial(
-        self,
-        mob1: VMobject,
-        mob2: VMobject,
-        a: float,
-        b: float
+        self, mob1: VMobject, mob2: VMobject, a: float, b: float
     ) -> Self:
         family1 = mob1.family_members_with_points()
         family2 = mob2.family_members_with_points()
@@ -104,7 +107,7 @@ class TracedPath(VMobject):
         stroke_color: ManimColor = DEFAULT_MOBJECT_COLOR,
         stroke_width: float | Iterable[float] = 2.0,
         stroke_opacity: float = 1.0,
-        **kwargs
+        **kwargs,
     ):
         self.stroke_config = dict(
             color=stroke_color,
@@ -130,12 +133,18 @@ class TracedPath(VMobject):
             n_relevant_points = int(self.time_traced / dt + 0.5)
             n_tps = len(self.traced_points)
             if n_tps < n_relevant_points:
-                points = self.traced_points + [point] * (n_relevant_points - n_tps)
+                points = self.traced_points + [point] * (
+                    n_relevant_points - n_tps
+                )
             else:
-                points = self.traced_points[n_tps - n_relevant_points:]
+                points = self.traced_points[
+                    n_tps - n_relevant_points :
+                ]
             # Every now and then refresh the list
             if n_tps > 10 * n_relevant_points:
-                self.traced_points = self.traced_points[-n_relevant_points:]
+                self.traced_points = self.traced_points[
+                    -n_relevant_points:
+                ]
         else:
             points = self.traced_points
 
@@ -156,7 +165,7 @@ class TracingTail(TracedPath):
         stroke_color: ManimColor = DEFAULT_MOBJECT_COLOR,
         stroke_width: float | Iterable[float] = (0, 3),
         stroke_opacity: float | Iterable[float] = (0, 1),
-        **kwargs
+        **kwargs,
     ):
         if isinstance(mobject_or_func, Mobject):
             func = mobject_or_func.get_center
@@ -169,8 +178,10 @@ class TracingTail(TracedPath):
             stroke_color=stroke_color,
             stroke_width=stroke_width,
             stroke_opacity=stroke_opacity,
-            **kwargs
+            **kwargs,
         )
         curr_point = self.traced_point_func()
         n_points = int(self.time_traced / self.time_per_anchor)
-        self.traced_points: list[np.ndarray] = [curr_point.copy() for _ in range(n_points)]
+        self.traced_points: list[np.ndarray] = [
+            curr_point.copy() for _ in range(n_points)
+        ]

@@ -7,7 +7,7 @@ import numpy as np
 from manimlib.animation.animation import Animation
 from manimlib.mobject.svg.string_mobject import StringMobject
 from manimlib.mobject.types.vectorized_mobject import VMobject
-from manimlib.utils.bezier import integer_interpolate
+from manimlib.utils.bezier import integer_interpolate, partial_quadratic_bezier_points
 from manimlib.utils.rate_functions import linear
 from manimlib.utils.rate_functions import double_smooth
 from manimlib.utils.rate_functions import smooth
@@ -84,7 +84,6 @@ class DrawBorderThenFill(Animation):
         **kwargs
     ):
         assert isinstance(vmobject, VMobject)
-        self.sm_to_index = {hash(sm): 0 for sm in vmobject.get_family()}
         self.stroke_width = stroke_width
         self.stroke_color = stroke_color
         self.draw_border_animation_config = draw_border_animation_config
@@ -120,7 +119,7 @@ class DrawBorderThenFill(Animation):
 
     def get_all_mobjects(self) -> list[Mobject]:
         return [*super().get_all_mobjects(), self.outline]
-
+    
     def interpolate_submobject(
         self,
         submob: VMobject,
@@ -130,14 +129,60 @@ class DrawBorderThenFill(Animation):
     ) -> None:
         index, subalpha = integer_interpolate(0, 2, alpha)
 
-        if index == 1 and self.sm_to_index[hash(submob)] == 0:
-            # First time crossing over
-            submob.set_data(outline.data)
-            self.sm_to_index[hash(submob)] = 1
-
         if index == 0:
-            submob.pointwise_become_partial(outline, 0, subalpha)
+            vm_points = outline.get_points()
+            num_curves = outline.get_num_curves()
+
+            # 1. Si está vacío o no ha empezado a dibujarse
+            if num_curves == 0 or subalpha <= 0:
+                if len(vm_points) > 0:
+                    submob.data["point"][:] = vm_points[0]
+                else:
+                    submob.data["point"][:] = 0
+                
+                # ¡NUEVO! Avisar a OpenGL del cambio
+                submob.set_points(submob.data["point"], refresh=False)
+                submob._data_has_changed = True
+                return
+
+            # 2. Si el borde ya terminó de dibujarse
+            if subalpha >= 1:
+                submob.data["point"][:] = vm_points
+                submob.data["joint_angle"][:] = outline.data["joint_angle"]
+                
+                # ¡NUEVO! Avisar a OpenGL del cambio
+                submob.set_points(submob.data["point"], refresh=False)
+                submob._data_has_changed = True
+                return
+
+            # 3. Cálculo de la curva parcial
+            upper_index, upper_residue = integer_interpolate(0, num_curves, subalpha)
+            i3 = 2 * upper_index
+            i4 = i3 + 3
+
+            points = submob.data["point"]
+            
+            points[:i3] = vm_points[:i3]
+            
+            high_tup = partial_quadratic_bezier_points(vm_points[i3:i4], 0, upper_residue)
+            points[i3:i4] = high_tup
+            
+            points[i4:] = high_tup[2]
+
+            submob.data["joint_angle"][:] = outline.data["joint_angle"]
+            submob.data["joint_angle"][i4:] = 0
+            
+            # -----------------------------------------------------------------
+            # ¡NUEVO! LA CLAVE PARA QUE RENDERICE FLUIDO:
+            # Le pasamos el mismo array para evitar copias pesadas, pero 
+            # forzamos a Manim a registrar que los vértices están "sucios" (dirty)
+            # y deben enviarse de nuevo a la GPU en este frame.
+            # -----------------------------------------------------------------
+            submob.set_points(points, refresh=False)
+            submob._data_has_changed = True
+            
         else:
+            # El relleno (index == 1) ya se encarga de avisar a OpenGL internamente
             submob.interpolate(outline, start, subalpha)
 
 

@@ -9,7 +9,7 @@ from manimlib.utils.bezier import interpolate
 from manimlib.utils.space_ops import get_norm
 from manimlib.utils.space_ops import rotation_matrix_transpose
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
 if TYPE_CHECKING:
     from typing import Callable
@@ -20,9 +20,7 @@ STRAIGHT_PATH_THRESHOLD = 0.01
 
 
 def straight_path(
-    start_points: np.ndarray,
-    end_points: np.ndarray,
-    alpha: float
+    start_points: np.ndarray, end_points: np.ndarray, alpha: float
 ) -> np.ndarray:
     """
     Same function as interpolate, but renamed to reflect
@@ -35,7 +33,7 @@ def straight_path(
 
 def path_along_arc(
     arc_angle: float | Tuple[float, float] | np.ndarray,
-    axis: Vect3 = OUT
+    axis: Vect3 = OUT,
 ) -> Callable[[Vect3Array, Vect3Array, float], Vect3Array]:
     """
     arc_angle can be a single angle, or a pair of angles, in which case
@@ -44,7 +42,10 @@ def path_along_arc(
     If vect is vector from start to end, [vect[:,1], -vect[:,0]] is
     perpendicular to vect in the left direction.
     """
-    if isinstance(arc_angle, float | int) and abs(arc_angle) < STRAIGHT_PATH_THRESHOLD:
+    if (
+        isinstance(arc_angle, float | int)
+        and abs(arc_angle) < STRAIGHT_PATH_THRESHOLD
+    ):
         return straight_path
     if get_norm(axis) == 0:
         axis = OUT
@@ -54,30 +55,51 @@ def path_along_arc(
         if isinstance(arc_angle, float | int):
             theta = arc_angle
         else:
-            if isinstance(arc_angle, np.ndarray) and len(arc_angle) == len(start_points):
+            if isinstance(arc_angle, np.ndarray) and len(
+                arc_angle
+            ) == len(start_points):
                 theta_range = arc_angle
             else:
-                theta_range = np.linspace(arc_angle[0], arc_angle[-1], len(start_points))
+                theta_range = np.linspace(
+                    arc_angle[0], arc_angle[-1], len(start_points)
+                )
             # Avoid zero, mildly hacky
-            theta_range[np.abs(theta_range) < STRAIGHT_PATH_THRESHOLD] = STRAIGHT_PATH_THRESHOLD
+            theta_range[
+                np.abs(theta_range) < STRAIGHT_PATH_THRESHOLD
+            ] = STRAIGHT_PATH_THRESHOLD
             # Get shape to match
-            theta = theta_range[:, np.newaxis] * np.ones(start_points.shape[1])
+            theta = theta_range[:, np.newaxis] * np.ones(
+                start_points.shape[1]
+            )
         start_to_end = end_points - start_points
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            adjustments = np.nan_to_num(np.cross(unit_axis, start_to_end / 2.0) / np.tan(theta / 2))
-            arc_centers = start_points + 0.5 * start_to_end + adjustments
+        with np.errstate(divide="ignore", invalid="ignore"):
+            adjustments = np.nan_to_num(
+                np.cross(unit_axis, start_to_end / 2.0)
+                / np.tan(theta / 2)
+            )
+            arc_centers = (
+                start_points + 0.5 * start_to_end + adjustments
+            )
 
         c_to_start = start_points - arc_centers
         c_to_perp = np.cross(unit_axis, c_to_start)
-        return arc_centers + np.cos(alpha * theta) * c_to_start + np.sin(alpha * theta) * c_to_perp
+        return (
+            arc_centers
+            + np.cos(alpha * theta) * c_to_start
+            + np.sin(alpha * theta) * c_to_perp
+        )
 
     return path
 
 
-def clockwise_path() -> Callable[[Vect3Array, Vect3Array, float], Vect3Array]:
+def clockwise_path() -> Callable[
+    [Vect3Array, Vect3Array, float], Vect3Array
+]:
     return path_along_arc(-np.pi)
 
 
-def counterclockwise_path() -> Callable[[Vect3Array, Vect3Array, float], Vect3Array]:
+def counterclockwise_path() -> Callable[
+    [Vect3Array, Vect3Array, float], Vect3Array
+]:
     return path_along_arc(np.pi)

@@ -111,6 +111,7 @@ def full_tex_to_svg(full_tex: str, compiler: str = "latex", message: str = ""):
             *(['-no-pdf'] if compiler == "xelatex" else []),
             "-interaction=batchmode",
             "-halt-on-error",
+            "-shell-escape",
             f"-output-directory={temp_dir}",
             tex_path
         ],

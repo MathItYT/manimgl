@@ -321,7 +321,7 @@ def update_run_config(config: Dict, args: Namespace):
         scene_names=args.scene_names,
         quiet=args.quiet or args.write_all,
         write_all=args.write_all,
-        show_in_window=not args.write_file
+        show_in_window=True
     )
 
 

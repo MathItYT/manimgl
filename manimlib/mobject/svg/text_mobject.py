@@ -167,7 +167,7 @@ class MarkupText(StringMobject):
     ):
         text_config = manim_config.text
         self.text = text
-        self.font_size = font_size
+        self.font_size = 96
         self.justify = justify
         self.indent = indent
         self.alignment = alignment or text_config.alignment
@@ -200,7 +200,8 @@ class MarkupText(StringMobject):
         if self.t2c:
             self.set_color_by_text_to_color_map(self.t2c)
         if height is None:
-            self.scale(get_text_mob_scale_factor())
+            self.scale(get_text_mob_scale_factor() * font_size / self.font_size)
+            self.font_size = font_size
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content

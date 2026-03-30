@@ -12,7 +12,7 @@ from manimlib.mobject.mobject import Mobject
 from manimlib.utils.paths import path_along_arc
 from manimlib.utils.paths import straight_path
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
 if TYPE_CHECKING:
     from typing import Callable
@@ -31,7 +31,7 @@ class Transform(Animation):
         path_arc: float | Tuple[float, float] = 0.0,
         path_arc_axis: np.ndarray = OUT,
         path_func: Callable | None = None,
-        **kwargs
+        **kwargs,
     ):
         self.target_mobject = target_mobject
         self.path_arc = path_arc
@@ -96,8 +96,7 @@ class Transform(Animation):
         Animation.update_config(self, **kwargs)
         if "path_arc" in kwargs:
             self.path_func = path_along_arc(
-                kwargs["path_arc"],
-                kwargs.get("path_arc_axis", OUT)
+                kwargs["path_arc"], kwargs.get("path_arc_axis", OUT)
             )
 
     def get_all_mobjects(self) -> list[Mobject]:
@@ -109,21 +108,23 @@ class Transform(Animation):
         ]
 
     def get_all_families_zipped(self) -> zip[tuple[Mobject]]:
-        return zip(*[
-            mob.get_family()
-            for mob in [
-                self.mobject,
-                self.starting_mobject,
-                self.target_copy,
+        return zip(
+            *[
+                mob.get_family()
+                for mob in [
+                    self.mobject,
+                    self.starting_mobject,
+                    self.target_copy,
+                ]
             ]
-        ])
+        )
 
     def interpolate_submobject(
         self,
         submob: Mobject,
         start: Mobject,
         target_copy: Mobject,
-        alpha: float
+        alpha: float,
     ):
         submob.interpolate(start, target_copy, alpha, self.path_func)
         return self
@@ -136,7 +137,9 @@ class ReplacementTransform(Transform):
 class TransformFromCopy(Transform):
     replace_mobject_with_target_in_scene: bool = True
 
-    def __init__(self, mobject: Mobject, target_mobject: Mobject, **kwargs):
+    def __init__(
+        self, mobject: Mobject, target_mobject: Mobject, **kwargs
+    ):
         super().__init__(mobject.copy(), target_mobject, **kwargs)
 
 
@@ -153,7 +156,9 @@ class MoveToTarget(Transform):
 
 
 class _MethodAnimation(MoveToTarget):
-    def __init__(self, mobject: Mobject, methods: list[Callable], **kwargs):
+    def __init__(
+        self, mobject: Mobject, methods: list[Callable], **kwargs
+    ):
         self.methods = methods
         super().__init__(mobject, **kwargs)
 
@@ -201,9 +206,14 @@ class ApplyPointwiseFunction(ApplyMethod):
         function: Callable[[np.ndarray], np.ndarray],
         mobject: Mobject,
         run_time: float = 3.0,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(mobject.apply_function, function, run_time=run_time, **kwargs)
+        super().__init__(
+            mobject.apply_function,
+            function,
+            run_time=run_time,
+            **kwargs,
+        )
 
 
 class ApplyPointwiseFunctionToCenter(Transform):
@@ -211,31 +221,25 @@ class ApplyPointwiseFunctionToCenter(Transform):
         self,
         function: Callable[[np.ndarray], np.ndarray],
         mobject: Mobject,
-        **kwargs
+        **kwargs,
     ):
         self.function = function
         super().__init__(mobject, **kwargs)
 
     def create_target(self) -> Mobject:
-        return self.mobject.copy().move_to(self.function(self.mobject.get_center()))
+        return self.mobject.copy().move_to(
+            self.function(self.mobject.get_center())
+        )
 
 
 class FadeToColor(ApplyMethod):
-    def __init__(
-        self,
-        mobject: Mobject,
-        color: ManimColor,
-        **kwargs
-    ):
+    def __init__(self, mobject: Mobject, color: ManimColor, **kwargs):
         super().__init__(mobject.set_color, color, **kwargs)
 
 
 class ScaleInPlace(ApplyMethod):
     def __init__(
-        self,
-        mobject: Mobject,
-        scale_factor: npt.ArrayLike,
-        **kwargs
+        self, mobject: Mobject, scale_factor: npt.ArrayLike, **kwargs
     ):
         super().__init__(mobject.scale, scale_factor, **kwargs)
 
@@ -247,7 +251,10 @@ class ShrinkToCenter(ScaleInPlace):
 
 class Restore(Transform):
     def __init__(self, mobject: Mobject, **kwargs):
-        if not hasattr(mobject, "saved_state") or mobject.saved_state is None:
+        if (
+            not hasattr(mobject, "saved_state")
+            or mobject.saved_state is None
+        ):
             raise Exception("Trying to restore without having saved")
         super().__init__(mobject, mobject.saved_state, **kwargs)
 
@@ -257,7 +264,7 @@ class ApplyFunction(Transform):
         self,
         function: Callable[[Mobject], Mobject],
         mobject: Mobject,
-        **kwargs
+        **kwargs,
     ):
         self.function = function
         super().__init__(mobject, **kwargs)
@@ -265,16 +272,15 @@ class ApplyFunction(Transform):
     def create_target(self) -> Mobject:
         target = self.function(self.mobject.copy())
         if not isinstance(target, Mobject):
-            raise Exception("Functions passed to ApplyFunction must return object of type Mobject")
+            raise Exception(
+                "Functions passed to ApplyFunction must return object of type Mobject"
+            )
         return target
 
 
 class ApplyMatrix(ApplyPointwiseFunction):
     def __init__(
-        self,
-        matrix: npt.ArrayLike,
-        mobject: Mobject,
-        **kwargs
+        self, matrix: npt.ArrayLike, mobject: Mobject, **kwargs
     ):
         matrix = self.initialize_matrix(matrix)
 
@@ -299,7 +305,7 @@ class ApplyComplexFunction(ApplyMethod):
         self,
         function: Callable[[complex], complex],
         mobject: Mobject,
-        **kwargs
+        **kwargs,
     ):
         self.function = function
         method = mobject.apply_complex_function
@@ -310,12 +316,17 @@ class ApplyComplexFunction(ApplyMethod):
         self.path_arc = np.log(func1).imag
         super().init_path_func()
 
+
 ###
 
 
 class CyclicReplace(Transform):
-    def __init__(self, *mobjects: Mobject, path_arc=90 * DEG, **kwargs):
-        super().__init__(Group(*mobjects), path_arc=path_arc, **kwargs)
+    def __init__(
+        self, *mobjects: Mobject, path_arc=90 * DEG, **kwargs
+    ):
+        super().__init__(
+            Group(*mobjects), path_arc=path_arc, **kwargs
+        )
 
     def create_target(self) -> Mobject:
         group = self.mobject
@@ -328,4 +339,5 @@ class CyclicReplace(Transform):
 
 class Swap(CyclicReplace):
     """Alternate name for CyclicReplace"""
+
     pass

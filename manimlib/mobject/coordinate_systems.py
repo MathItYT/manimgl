@@ -6,9 +6,28 @@ import numbers
 import numpy as np
 import itertools as it
 
-from manimlib.constants import BLACK, BLUE, BLUE_D, BLUE_E, GREEN, GREY_A, RED, DEFAULT_MOBJECT_COLOR
+from manimlib.constants import (
+    BLACK,
+    BLUE,
+    BLUE_D,
+    BLUE_E,
+    GREEN,
+    GREY_A,
+    RED,
+    DEFAULT_MOBJECT_COLOR,
+)
 from manimlib.constants import DEG, PI
-from manimlib.constants import DL, UL, DOWN, DR, LEFT, ORIGIN, OUT, RIGHT, UP
+from manimlib.constants import (
+    DL,
+    UL,
+    DOWN,
+    DR,
+    LEFT,
+    ORIGIN,
+    OUT,
+    RIGHT,
+    UP,
+)
 from manimlib.constants import FRAME_X_RADIUS, FRAME_Y_RADIUS
 from manimlib.constants import MED_SMALL_BUFF, SMALL_BUFF
 from manimlib.mobject.functions import ParametricCurve
@@ -33,9 +52,23 @@ from manimlib.utils.space_ops import normalize
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Callable, Iterable, Sequence, Type, TypeVar, Optional
+    from typing import (
+        Callable,
+        Iterable,
+        Sequence,
+        Type,
+        TypeVar,
+        Optional,
+    )
     from manimlib.mobject.mobject import Mobject
-    from manimlib.typing import ManimColor, Vect3, Vect3Array, VectN, RangeSpecifier, Self
+    from manimlib.typing import (
+        ManimColor,
+        Vect3,
+        Vect3Array,
+        VectN,
+        RangeSpecifier,
+        Self,
+    )
 
     T = TypeVar("T", bound=Mobject)
 
@@ -55,6 +88,7 @@ class CoordinateSystem(ABC):
     """
     Abstract class for Axes and NumberPlane
     """
+
     dimension: int = 2
 
     def __init__(
@@ -65,14 +99,20 @@ class CoordinateSystem(ABC):
     ):
         self.x_range = full_range_specifier(x_range)
         self.y_range = full_range_specifier(y_range)
-        self.num_sampled_graph_points_per_tick = num_sampled_graph_points_per_tick
+        self.num_sampled_graph_points_per_tick = (
+            num_sampled_graph_points_per_tick
+        )
 
     @abstractmethod
-    def coords_to_point(self, *coords: float | VectN) -> Vect3 | Vect3Array:
+    def coords_to_point(
+        self, *coords: float | VectN
+    ) -> Vect3 | Vect3Array:
         raise Exception("Not implemented")
 
     @abstractmethod
-    def point_to_coords(self, point: Vect3 | Vect3Array) -> tuple[float | VectN, ...]:
+    def point_to_coords(
+        self, point: Vect3 | Vect3Array
+    ) -> tuple[float | VectN, ...]:
         raise Exception("Not implemented")
 
     def c2p(self, *coords: float) -> Vect3 | Vect3Array:
@@ -111,11 +151,10 @@ class CoordinateSystem(ABC):
         label_tex: str,
         edge: Vect3 = RIGHT,
         direction: Vect3 = DL,
-        **kwargs
+        **kwargs,
     ) -> Tex:
         return self.get_axis_label(
-            label_tex, self.get_x_axis(),
-            edge, direction, **kwargs
+            label_tex, self.get_x_axis(), edge, direction, **kwargs
         )
 
     def get_y_axis_label(
@@ -123,11 +162,10 @@ class CoordinateSystem(ABC):
         label_tex: str,
         edge: Vect3 = UP,
         direction: Vect3 = DR,
-        **kwargs
+        **kwargs,
     ) -> Tex:
         return self.get_axis_label(
-            label_tex, self.get_y_axis(),
-            edge, direction, **kwargs
+            label_tex, self.get_y_axis(), edge, direction, **kwargs
         )
 
     def get_axis_label(
@@ -138,22 +176,18 @@ class CoordinateSystem(ABC):
         direction: Vect3,
         buff: float = MED_SMALL_BUFF,
         ensure_on_screen: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Tex:
         label = Tex(label_tex, **kwargs)
         label.next_to(
-            axis.get_edge_center(edge), direction,
-            buff=buff
+            axis.get_edge_center(edge), direction, buff=buff
         )
         if ensure_on_screen:
             label.shift_onto_screen(buff=MED_SMALL_BUFF)
         return label
 
     def get_axis_labels(
-        self,
-        x_label_tex: str = "x",
-        y_label_tex: str = "y",
-        **kwargs
+        self, x_label_tex: str = "x", y_label_tex: str = "y", **kwargs
     ) -> VGroup:
         self.axis_labels = VGroup(
             self.get_x_axis_label(x_label_tex, **kwargs),
@@ -162,12 +196,12 @@ class CoordinateSystem(ABC):
         return self.axis_labels
 
     def get_line_from_axis_to_point(
-        self, 
+        self,
         index: int,
         point: Vect3,
         line_func: Type[T] = DashedLine,
         color: ManimColor = GREY_A,
-        stroke_width: float = 2
+        stroke_width: float = 2,
     ) -> T:
         axis = self.get_axis(index)
         line = line_func(axis.get_projection(point), point)
@@ -186,11 +220,11 @@ class CoordinateSystem(ABC):
         function: Callable[[float], float],
         x_range: Sequence[float] | None = None,
         bind: bool = False,
-        **kwargs
+        **kwargs,
     ) -> ParametricCurve:
         x_range = x_range or self.x_range
         t_range = np.ones(3)
-        t_range[:len(x_range)] = x_range
+        t_range[: len(x_range)] = x_range
         # For axes, the third coordinate of x_range indicates
         # tick frequency.  But for functions, it indicates a
         # sample frequency
@@ -200,9 +234,7 @@ class CoordinateSystem(ABC):
             return self.c2p(t, function(t))
 
         graph = ParametricCurve(
-            parametric_function,
-            t_range=tuple(t_range),
-            **kwargs
+            parametric_function, t_range=tuple(t_range), **kwargs
         )
         graph.underlying_function = function
         graph.x_range = x_range
@@ -213,25 +245,23 @@ class CoordinateSystem(ABC):
         return graph
 
     def get_parametric_curve(
-        self,
-        function: Callable[[float], Vect3],
-        **kwargs
+        self, function: Callable[[float], Vect3], **kwargs
     ) -> ParametricCurve:
         dim = self.dimension
         graph = ParametricCurve(
             lambda t: self.coords_to_point(*function(t)[:dim]),
-            **kwargs
+            **kwargs,
         )
         graph.underlying_function = function
         return graph
 
     def input_to_graph_point(
-        self,
-        x: float,
-        graph: ParametricCurve
+        self, x: float, graph: ParametricCurve
     ) -> Vect3 | None:
         if hasattr(graph, "underlying_function"):
-            return self.coords_to_point(x, graph.underlying_function(x))
+            return self.coords_to_point(
+                x, graph.underlying_function(x)
+            )
         else:
             alpha = binary_search(
                 function=lambda a: self.point_to_coords(
@@ -257,13 +287,15 @@ class CoordinateSystem(ABC):
         graph: VMobject,
         func: Callable[[VectN], VectN],
         jagged: bool = False,
-        get_discontinuities: Optional[Callable[[], Vect3]] = None
+        get_discontinuities: Optional[Callable[[], Vect3]] = None,
     ) -> VMobject:
         """
         Use for graphing functions which might change over time, or change with
         conditions
         """
-        x_values = np.array([self.x_axis.p2n(p) for p in graph.get_points()])
+        x_values = np.array(
+            [self.x_axis.p2n(p) for p in graph.get_points()]
+        )
 
         def get_graph_points():
             xs = x_values
@@ -271,7 +303,9 @@ class CoordinateSystem(ABC):
                 ds = get_discontinuities()
                 ep = 1e-6
                 added_xs = it.chain(*((d - ep, d + ep) for d in ds))
-                xs[:] = sorted([*x_values, *added_xs])[:len(x_values)]
+                xs[:] = sorted([*x_values, *added_xs])[
+                    : len(x_values)
+                ]
             return self.c2p(xs, func(xs))
 
         graph.add_updater(
@@ -288,7 +322,7 @@ class CoordinateSystem(ABC):
         x: float | None = None,
         direction: Vect3 = RIGHT,
         buff: float = MED_SMALL_BUFF,
-        color: ManimColor | None = None
+        color: ManimColor | None = None,
     ) -> Tex | Mobject:
         if isinstance(label, str):
             label = Tex(label)
@@ -316,34 +350,31 @@ class CoordinateSystem(ABC):
         label.shift_onto_screen()
         return label
 
-    def get_v_line_to_graph(self, x: float, graph: ParametricCurve, **kwargs):
+    def get_v_line_to_graph(
+        self, x: float, graph: ParametricCurve, **kwargs
+    ):
         return self.get_v_line(self.i2gp(x, graph), **kwargs)
 
-    def get_h_line_to_graph(self, x: float, graph: ParametricCurve, **kwargs):
+    def get_h_line_to_graph(
+        self, x: float, graph: ParametricCurve, **kwargs
+    ):
         return self.get_h_line(self.i2gp(x, graph), **kwargs)
 
-    def get_scatterplot(self,
-                        x_values: Vect3Array,
-                        y_values: Vect3Array,
-                        **dot_config):
+    def get_scatterplot(
+        self, x_values: Vect3Array, y_values: Vect3Array, **dot_config
+    ):
         return DotCloud(self.c2p(x_values, y_values), **dot_config)
 
     # For calculus
     def angle_of_tangent(
-        self,
-        x: float,
-        graph: ParametricCurve,
-        dx: float = EPSILON
+        self, x: float, graph: ParametricCurve, dx: float = EPSILON
     ) -> float:
         p0 = self.input_to_graph_point(x, graph)
         p1 = self.input_to_graph_point(x + dx, graph)
         return angle_of_vector(p1 - p0)
 
     def slope_of_tangent(
-        self,
-        x: float,
-        graph: ParametricCurve,
-        **kwargs
+        self, x: float, graph: ParametricCurve, **kwargs
     ) -> float:
         return np.tan(self.angle_of_tangent(x, graph, **kwargs))
 
@@ -352,7 +383,7 @@ class CoordinateSystem(ABC):
         x: float,
         graph: ParametricCurve,
         length: float = 5,
-        line_func: Type[T] = Line
+        line_func: Type[T] = Line,
     ) -> T:
         line = line_func(LEFT, RIGHT)
         line.set_width(length)
@@ -372,7 +403,7 @@ class CoordinateSystem(ABC):
         colors: Iterable[ManimColor] = (BLUE, GREEN),
         negative_color: ManimColor = RED,
         stroke_background: bool = True,
-        show_signed_area: bool = True
+        show_signed_area: bool = True,
     ) -> VGroup:
         if x_range is None:
             x_range = self.x_range[:2]
@@ -393,7 +424,9 @@ class CoordinateSystem(ABC):
                 sample = 0.5 * x0 + 0.5 * x1
             else:
                 raise Exception("Invalid input sample type")
-            height_vect = self.i2gp(sample, graph) - self.c2p(sample, 0)
+            height_vect = self.i2gp(sample, graph) - self.c2p(
+                sample, 0
+            )
             rect = Rectangle(
                 width=self.x_axis.n2p(x1)[0] - self.x_axis.n2p(x0)[0],
                 height=get_norm(height_vect),
@@ -407,14 +440,16 @@ class CoordinateSystem(ABC):
             stroke_width=stroke_width,
             stroke_color=stroke_color,
             fill_opacity=fill_opacity,
-            stroke_behind=stroke_background
+            stroke_behind=stroke_background,
         )
         for rect in result:
             if not rect.positive:
                 rect.set_fill(negative_color)
         return result
 
-    def get_area_under_graph(self, graph, x_range=None, fill_color=BLUE, fill_opacity=0.5):
+    def get_area_under_graph(
+        self, graph, x_range=None, fill_color=BLUE, fill_opacity=0.5
+    ):
         if x_range is None:
             x_range = [
                 self.x_axis.p2n(graph.get_start()),
@@ -453,7 +488,7 @@ class Axes(VGroup, CoordinateSystem):
         height: float | None = None,
         width: float | None = None,
         unit_size: float = 1.0,
-        **kwargs
+        **kwargs,
     ):
         CoordinateSystem.__init__(self, x_range, y_range, **kwargs)
         kwargs.pop("num_sampled_graph_points_per_tick", None)
@@ -466,7 +501,7 @@ class Axes(VGroup, CoordinateSystem):
                 self.default_axis_config,
                 self.default_x_axis_config,
                 axis_config,
-                x_axis_config
+                x_axis_config,
             ),
             length=width,
         )
@@ -476,7 +511,7 @@ class Axes(VGroup, CoordinateSystem):
                 self.default_axis_config,
                 self.default_y_axis_config,
                 axis_config,
-                y_axis_config
+                y_axis_config,
             ),
             length=height,
         )
@@ -492,24 +527,27 @@ class Axes(VGroup, CoordinateSystem):
         self,
         range_terms: RangeSpecifier,
         axis_config: dict,
-        length: float | None
+        length: float | None,
     ) -> NumberLine:
         axis = NumberLine(range_terms, width=length, **axis_config)
         axis.shift(-axis.n2p(0))
         return axis
 
-    def coords_to_point(self, *coords: float | VectN) -> Vect3 | Vect3Array:
+    def coords_to_point(
+        self, *coords: float | VectN
+    ) -> Vect3 | Vect3Array:
         origin = self.x_axis.number_to_point(0)
         return origin + sum(
             axis.number_to_point(coord) - origin
             for axis, coord in zip(self.get_axes(), coords)
         )
 
-    def point_to_coords(self, point: Vect3 | Vect3Array) -> tuple[float | VectN, ...]:
-        return tuple([
-            axis.point_to_number(point)
-            for axis in self.get_axes()
-        ])
+    def point_to_coords(
+        self, point: Vect3 | Vect3Array
+    ) -> tuple[float | VectN, ...]:
+        return tuple(
+            [axis.point_to_number(point) for axis in self.get_axes()]
+        )
 
     def get_axes(self) -> VGroup:
         return self.axes
@@ -522,12 +560,14 @@ class Axes(VGroup, CoordinateSystem):
         x_values: Iterable[float] | None = None,
         y_values: Iterable[float] | None = None,
         excluding: Iterable[float] = [0],
-        **kwargs
+        **kwargs,
     ) -> VGroup:
         axes = self.get_axes()
         self.coordinate_labels = VGroup()
         for axis, values in zip(axes, [x_values, y_values]):
-            labels = axis.add_numbers(values, excluding=excluding, **kwargs)
+            labels = axis.add_numbers(
+                values, excluding=excluding, **kwargs
+            )
             self.coordinate_labels.add(labels)
         return self.coordinate_labels
 
@@ -544,7 +584,7 @@ class ThreeDAxes(Axes):
         z_axis_config: dict = dict(),
         z_normal: Vect3 = DOWN,
         depth: float | None = None,
-        **kwargs
+        **kwargs,
     ):
         Axes.__init__(self, x_range, y_range, **kwargs)
 
@@ -555,14 +595,13 @@ class ThreeDAxes(Axes):
                 self.default_axis_config,
                 self.default_z_axis_config,
                 kwargs.get("axis_config", {}),
-                z_axis_config
+                z_axis_config,
             ),
             length=depth,
         )
         self.z_axis.rotate(-PI / 2, UP, about_point=ORIGIN)
         self.z_axis.rotate(
-            angle_of_vector(z_normal), OUT,
-            about_point=ORIGIN
+            angle_of_vector(z_normal), OUT, about_point=ORIGIN
         )
         self.z_axis.shift(self.x_axis.n2p(0))
         self.axes.add(self.z_axis)
@@ -571,14 +610,22 @@ class ThreeDAxes(Axes):
     def get_all_ranges(self) -> list[Sequence[float]]:
         return [self.x_range, self.y_range, self.z_range]
 
-    def add_axis_labels(self, x_tex="x", y_tex="y", z_tex="z", font_size=24, buff=0.2):
-        x_label, y_label, z_label = labels = VGroup(*(
-            Tex(tex, font_size=font_size)
-            for tex in [x_tex, y_tex, z_tex]
-        ))
+    def add_axis_labels(
+        self, x_tex="x", y_tex="y", z_tex="z", font_size=24, buff=0.2
+    ):
+        x_label, y_label, z_label = labels = VGroup(
+            *(
+                Tex(tex, font_size=font_size)
+                for tex in [x_tex, y_tex, z_tex]
+            )
+        )
         z_label.rotate(PI / 2, RIGHT)
         for label, axis in zip(labels, self):
-            label.next_to(axis, normalize(np.round(axis.get_vector()), 2), buff=buff)
+            label.next_to(
+                axis,
+                normalize(np.round(axis.get_vector()), 2),
+                buff=buff,
+            )
             axis.add(label)
         self.axis_labels = labels
 
@@ -589,7 +636,7 @@ class ThreeDAxes(Axes):
         opacity=0.9,
         u_range=None,
         v_range=None,
-        **kwargs
+        **kwargs,
     ) -> ParametricSurface:
         xu = self.x_axis.get_unit_size()
         yu = self.y_axis.get_unit_size()
@@ -598,25 +645,29 @@ class ThreeDAxes(Axes):
         u_range = u_range or self.x_range[:2]
         v_range = v_range or self.y_range[:2]
         return ParametricSurface(
-            lambda u, v: [xu * u + x0, yu * v + y0, zu * func(u, v) + z0],
+            lambda u, v: [
+                xu * u + x0,
+                yu * v + y0,
+                zu * func(u, v) + z0,
+            ],
             u_range=u_range,
             v_range=v_range,
             color=color,
             opacity=opacity,
-            **kwargs
+            **kwargs,
         )
 
     def get_parametric_surface(
-        self,
-        func,
-        color=BLUE_E,
-        opacity=0.9,
-        **kwargs
+        self, func, color=BLUE_E, opacity=0.9, **kwargs
     ) -> ParametricSurface:
-        surface = ParametricSurface(func, color=color, opacity=opacity, **kwargs)
+        surface = ParametricSurface(
+            func, color=color, opacity=opacity, **kwargs
+        )
         axes = [self.x_axis, self.y_axis, self.z_axis]
         for dim, axis in zip(range(3), axes):
-            surface.stretch(axis.get_unit_size(), dim, about_point=ORIGIN)
+            surface.stretch(
+                axis.get_unit_size(), dim, about_point=ORIGIN
+            )
         surface.shift(self.get_origin())
         return surface
 
@@ -650,18 +701,22 @@ class NumberPlane(Axes):
         ),
         faded_line_ratio: int = 4,
         make_smooth_after_applying_functions: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(x_range, y_range, **kwargs)
         self.background_line_style = dict(background_line_style)
         self.faded_line_style = dict(faded_line_style)
         self.faded_line_ratio = faded_line_ratio
-        self.make_smooth_after_applying_functions = make_smooth_after_applying_functions
+        self.make_smooth_after_applying_functions = (
+            make_smooth_after_applying_functions
+        )
         self.init_background_lines()
 
     def init_background_lines(self) -> None:
         if "stroke_color" not in self.faded_line_style:
-            self.faded_line_style["stroke_color"] = self.background_line_style["stroke_color"]
+            self.faded_line_style["stroke_color"] = (
+                self.background_line_style["stroke_color"]
+            )
 
         self.background_lines, self.faded_lines = self.get_lines()
         self.background_lines.set_style(**self.background_line_style)
@@ -675,21 +730,23 @@ class NumberPlane(Axes):
         x_axis = self.get_x_axis()
         y_axis = self.get_y_axis()
 
-        x_lines1, x_lines2 = self.get_lines_parallel_to_axis(x_axis, y_axis)
-        y_lines1, y_lines2 = self.get_lines_parallel_to_axis(y_axis, x_axis)
+        x_lines1, x_lines2 = self.get_lines_parallel_to_axis(
+            x_axis, y_axis
+        )
+        y_lines1, y_lines2 = self.get_lines_parallel_to_axis(
+            y_axis, x_axis
+        )
         lines1 = VGroup(*x_lines1, *y_lines1)
         lines2 = VGroup(*x_lines2, *y_lines2)
         return lines1, lines2
 
     def get_lines_parallel_to_axis(
-        self,
-        axis1: NumberLine,
-        axis2: NumberLine
+        self, axis1: NumberLine, axis2: NumberLine
     ) -> tuple[VGroup, VGroup]:
         freq = axis2.x_step
         ratio = self.faded_line_ratio
         line = Line(axis1.get_start(), axis1.get_end())
-        dense_freq = (1 + ratio)
+        dense_freq = 1 + ratio
         step = (1 / dense_freq) * freq
 
         lines1 = VGroup()
@@ -719,7 +776,9 @@ class NumberPlane(Axes):
         kwargs["buff"] = 0
         return Arrow(self.c2p(0, 0), self.c2p(*coords), **kwargs)
 
-    def prepare_for_nonlinear_transform(self, num_inserted_curves: int = 50) -> Self:
+    def prepare_for_nonlinear_transform(
+        self, num_inserted_curves: int = 50
+    ) -> Self:
         for mob in self.family_members_with_points():
             num_curves = mob.get_num_curves()
             if num_inserted_curves > num_curves:
@@ -729,7 +788,9 @@ class NumberPlane(Axes):
 
 
 class ComplexPlane(NumberPlane):
-    def number_to_point(self, number: complex | float | np.array) -> Vect3:
+    def number_to_point(
+        self, number: complex | float | np.array
+    ) -> Vect3:
         return self.coords_to_point(np.real(number), np.imag(number))
 
     def n2p(self, number: complex | float | np.array) -> Vect3:
@@ -742,12 +803,8 @@ class ComplexPlane(NumberPlane):
     def p2n(self, point: Vect3) -> complex:
         return self.point_to_number(point)
 
-    def get_unit_size(self) -> float:
-        return self.x_axis.get_unit_size()
-
     def get_default_coordinate_values(
-        self,
-        skip_first: bool = True
+        self, skip_first: bool = True
     ) -> list[complex]:
         x_numbers = self.get_x_axis().get_tick_range()[1:]
         y_numbers = self.get_y_axis().get_tick_range()[1:]
@@ -759,7 +816,7 @@ class ComplexPlane(NumberPlane):
         numbers: list[complex] | None = None,
         skip_first: bool = True,
         font_size: int = 36,
-        **kwargs
+        **kwargs,
     ) -> Self:
         if numbers is None:
             numbers = self.get_default_coordinate_values(skip_first)
@@ -774,7 +831,12 @@ class ComplexPlane(NumberPlane):
             else:
                 axis = self.get_x_axis()
                 value = z.real
-            number_mob = axis.get_number_mobject(value, font_size=font_size, **kwargs)
+            number_mob = axis.get_number_mobject(
+                value, font_size=font_size, **kwargs
+            )
             self.coordinate_labels.add(number_mob)
         self.add(self.coordinate_labels)
         return self
+
+    def get_unit_size(self) -> float:
+        return self.x_axis.get_unit_size()

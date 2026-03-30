@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import moderngl
 from PIL import Image
+import pathlib
 
 from manimlib.constants import DL, DR, UL, UR
 from manimlib.mobject.mobject import Mobject
@@ -29,13 +30,13 @@ class ImageMobject(Mobject):
 
     def __init__(
         self,
-        filename: str,
+        filename: str | pathlib.Path | np.ndarray,
         height: float = 4.0,
         **kwargs
     ):
         self.height = height
-        self.image_path = get_full_raster_image_path(filename)
-        self.image = Image.open(self.image_path)
+        self.image_path = get_full_raster_image_path(filename) if isinstance(filename, (str, pathlib.Path)) else (filename.tobytes(), filename.shape[1], filename.shape[0])
+        self.image = Image.open(self.image_path) if isinstance(filename, str) else Image.fromarray(filename)
         super().__init__(texture_paths={"Texture": self.image_path}, **kwargs)
 
     def init_data(self) -> None:

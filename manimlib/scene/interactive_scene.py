@@ -532,7 +532,7 @@ class InteractiveScene(Scene):
             self.add(self.crosshair)
 
         # Conditions for saving state
-        if char in [GRAB_KEY, X_GRAB_KEY, Y_GRAB_KEY, Z_GRAB_KEY, RESIZE_KEY]:
+        if char in [GRAB_KEY, X_GRAB_KEY, Y_GRAB_KEY, Z_GRAB_KEY, RESIZE_KEY] and (modifiers & ALL_MODIFIERS) == 0:
             self.save_state()
 
     def on_key_release(self, symbol: int, modifiers: int) -> None:

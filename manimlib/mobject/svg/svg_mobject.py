@@ -66,7 +66,7 @@ class SVGMobject(VMobject):
         color: ManimColor = None,
         fill_color: ManimColor = None,
         fill_opacity: float | None = None,
-        stroke_width: float | None = 0.0,
+        stroke_width: float | None = None,
         stroke_color: ManimColor = None,
         stroke_opacity: float | None = None,
         # Style that fills only when not specified

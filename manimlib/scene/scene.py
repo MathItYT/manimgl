@@ -76,6 +76,7 @@ class Scene(object):
         presenter_mode: bool = False,
         default_wait_time: float = 1.0,
     ):
+        self.updaters: list[Callable[[float], None]] = []
         self.skip_animations = skip_animations
         self.always_update_mobjects = always_update_mobjects
         self.start_at_animation_number = start_at_animation_number
@@ -199,6 +200,7 @@ class Scene(object):
         self.skip_animations = False
         while not self.is_window_closing():
             self.update_frame(1 / self.camera.fps)
+            self.emit_frame()
 
     def embed(
         self,
@@ -223,7 +225,7 @@ class Scene(object):
     def get_image(self) -> Image:
         if self.window is not None:
             self.camera.use_window_fbo(False)
-            self.camera.capture(*self.render_groups)
+            self.camera.capture(*self.render_groups, swap=False)
         image = self.camera.get_image()
         if self.window is not None:
             self.camera.use_window_fbo(True)
@@ -232,10 +234,18 @@ class Scene(object):
     def show(self) -> None:
         self.update_frame(force_draw=True)
         self.get_image().show()
+    
+    def update_self(self, dt: float) -> None:
+        for updater in self.updaters:
+            updater(dt)
+    
+    def add_updater(self, updater: Callable[[float], None]) -> None:
+        self.updaters.append(updater)
 
     def update_frame(self, dt: float = 0, force_draw: bool = False) -> None:
         self.increment_time(dt)
         self.update_mobjects(dt)
+        self.update_self(dt)
         if self.skip_animations and not force_draw:
             return
 
@@ -248,7 +258,7 @@ class Scene(object):
             self.window._window.dispatch_events()
             return
 
-        self.camera.capture(*self.render_groups)
+        self.camera.capture(*self.render_groups, swap=not self.file_writer.write_to_movie)
 
         if self.window and not self.skip_animations:
             vt = self.time - self.virtual_animation_start_time
@@ -623,6 +633,7 @@ class Scene(object):
     def hold_loop(self):
         while self.hold_on_wait:
             self.update_frame(dt=1 / self.camera.fps)
+            self.emit_frame()
         self.hold_on_wait = True
 
     def wait_until(
@@ -842,16 +853,21 @@ class Scene(object):
 
         if char == manim_config.key_bindings.reset:
             self.play(self.camera.frame.animate.to_default_state())
+        elif char == "y" and (modifiers & (PygletWindowKeys.MOD_COMMAND | PygletWindowKeys.MOD_CTRL)):
+            self.redo()
         elif char == "z" and (modifiers & (PygletWindowKeys.MOD_COMMAND | PygletWindowKeys.MOD_CTRL)):
             self.undo()
-        elif char == "z" and (modifiers & (PygletWindowKeys.MOD_COMMAND | PygletWindowKeys.MOD_CTRL | PygletWindowKeys.MOD_SHIFT)):
-            self.redo()
         # command + q
         elif char == manim_config.key_bindings.quit and (modifiers & (PygletWindowKeys.MOD_COMMAND | PygletWindowKeys.MOD_CTRL)):
             self.quit_interaction = True
         # Space or right arrow
         elif char == " " or symbol == PygletWindowKeys.RIGHT:
+            if self.redo_stack:
+                self.redo()
+                return
             self.hold_on_wait = False
+        elif symbol == PygletWindowKeys.LEFT:
+            self.undo()
 
     def on_resize(self, width: int, height: int) -> None:
         pass
@@ -880,13 +896,15 @@ class Scene(object):
 
 
 class SceneState():
-    def __init__(self, scene: Scene, ignore: list[Mobject] | None = None):
+    def __init__(self, scene: Scene, ignore: list[Mobject] | None = None, dont_modify: list[Mobject] | None = None):
         self.time = scene.time
         self.num_plays = scene.num_plays
         self.mobjects_to_copies = OrderedDict.fromkeys(scene.mobjects)
         if ignore:
             for mob in ignore:
                 self.mobjects_to_copies.pop(mob, None)
+
+        self.dont_modify = set(dont_modify) if dont_modify else set()
 
         last_m2c = scene.undo_stack[-1].mobjects_to_copies if scene.undo_stack else dict()
         for mob in self.mobjects_to_copies:
@@ -918,7 +936,7 @@ class SceneState():
         scene.time = self.time
         scene.num_plays = self.num_plays
         scene.mobjects = [
-            mob.become(mob_copy, match_updaters=True)
+            mob.become(mob_copy, match_updaters=True) if mob not in self.dont_modify else mob
             for mob, mob_copy in self.mobjects_to_copies.items()
         ]
 

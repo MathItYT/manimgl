@@ -5,6 +5,8 @@ import platform
 import shutil
 import subprocess as sp
 import sys
+import threading
+import queue
 
 import numpy as np
 from pydub import AudioSegment
@@ -75,6 +77,25 @@ class SceneFileWriter(object):
 
         self.init_output_directories()
         self.init_audio()
+    
+    def _writer_loop(self) -> None:
+        """Hilo en segundo plano para escribir frames en ffmpeg sin bloquear."""
+        while True:
+            raw_bytes = self.write_queue.get()
+            if raw_bytes is None:  # El valor None será nuestra señal para detener el hilo
+                self.write_queue.task_done()
+                break
+            
+            try:
+                self.writing_process.stdin.write(raw_bytes)
+            except BrokenPipeError:
+                # Ocurre si el proceso de ffmpeg se cerró inesperadamente
+                pass
+                
+            if self.progress_display is not None:
+                self.progress_display.update()
+                
+            self.write_queue.task_done()
 
     # Output directories and files
     def init_output_directories(self) -> None:
@@ -229,6 +250,10 @@ class SceneFileWriter(object):
         command += [self.temp_file_path]
         self.writing_process = sp.Popen(command, stdin=sp.PIPE)
 
+        self.write_queue = queue.Queue()
+        self.writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
+        self.writer_thread.start()
+
         if not self.quiet:
             self.progress_display = ProgressDisplay(
                 range(self.total_frames),
@@ -284,11 +309,12 @@ class SceneFileWriter(object):
     def write_frame(self, camera: Camera) -> None:
         if self.write_to_movie:
             raw_bytes = camera.get_raw_fbo_data()
-            self.writing_process.stdin.write(raw_bytes)
-            if self.progress_display is not None:
-                self.progress_display.update()
+            self.write_queue.put(raw_bytes)
 
     def close_movie_pipe(self) -> None:
+        if hasattr(self, 'writer_thread') and self.writer_thread.is_alive():
+            self.write_queue.put(None)
+            self.writer_thread.join()
         self.writing_process.stdin.close()
         self.writing_process.wait()
         self.writing_process.terminate()

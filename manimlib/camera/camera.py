@@ -65,6 +65,20 @@ class Camera(object):
         self.init_context()
         self.init_fbo()
         self.init_light_source()
+    
+    def hide(self, mobject: Mobject, recursive: bool = True) -> Mobject:
+        mobject.hide = True
+        if recursive:
+            for submob in mobject.submobjects:
+                self.hide(submob, recursive=True)
+        return mobject
+    
+    def show(self, mobject: Mobject, recursive: bool = True) -> Mobject:
+        mobject.hide = False
+        if recursive:
+            for submob in mobject.submobjects:
+                self.show(submob, recursive=True)
+        return mobject
 
     def init_frame(self, **config) -> None:
         self.frame = CameraFrame(**config)
@@ -121,10 +135,10 @@ class Camera(object):
             )
         )
 
-    def clear(self) -> None:
-        self.fbo.clear(*self.background_rgba)
-        if self.window:
-            self.window.clear(*self.background_rgba)
+    def clear(self, clear_window: bool = True, transparent: bool = False) -> None:
+        self.fbo.clear(*self.background_rgba if not transparent else (0, 0, 0, 0))
+        if self.window and clear_window:
+            self.window.clear(*self.background_rgba if not transparent else (0, 0, 0, 0))
 
     def blit(self, src_fbo, dst_fbo):
         """
@@ -138,27 +152,34 @@ class Camera(object):
             gl.GL_COLOR_BUFFER_BIT, gl.GL_LINEAR
         )
 
-    def get_raw_fbo_data(self, dtype: str = 'f1') -> bytes:
+    def get_raw_fbo_data(self, dtype: str = 'f1', swap: bool = True) -> bytes:
         self.blit(self.fbo, self.draw_fbo)
-        return self.draw_fbo.read(
+        result = self.draw_fbo.read(
             viewport=self.draw_fbo.viewport,
             components=self.n_channels,
             dtype=dtype,
         )
+        if self.window and swap:
+            self.window.swap_buffers()
+            if self.fbo is not self.window_fbo:
+                self.blit(self.fbo, self.window_fbo)
+                self.window.swap_buffers()
+        return result
 
-    def get_image(self) -> Image.Image:
+    def get_image(self, swap: bool = True) -> Image.Image:
         return Image.frombytes(
             'RGBA',
             self.get_pixel_shape(),
-            self.get_raw_fbo_data(),
+            self.get_raw_fbo_data(swap=swap),
             'raw', 'RGBA', 0, -1
         )
 
-    def get_pixel_array(self) -> np.ndarray:
-        raw = self.get_raw_fbo_data(dtype='f4')
+    def get_pixel_array(self, swap: bool = True, reverse: bool = True) -> np.ndarray:
+        raw = self.get_raw_fbo_data(dtype='f4', swap=swap)
         flat_arr = np.frombuffer(raw, dtype='f4')
         arr = flat_arr.reshape([*reversed(self.draw_fbo.size), self.n_channels])
-        arr = arr[::-1]
+        if reverse:
+            arr = arr[::-1]
         # Convert from float
         return (self.rgb_max_val * arr).astype(self.pixel_array_dtype)
 
@@ -167,7 +188,7 @@ class Camera(object):
         texture = self.ctx.texture(
             size=self.fbo.size,
             components=4,
-            data=self.get_raw_fbo_data(),
+            data=self.get_raw_fbo_data(swap=False),
             dtype='f4'
         )
         return texture
@@ -222,14 +243,13 @@ class Camera(object):
         self.frame.set_width(frame_width, stretch=True)
 
     # Rendering
-    def capture(self, *mobjects: Mobject) -> None:
-        self.clear()
+    def capture(self, *mobjects: Mobject, clear_window: bool = True, transparent: bool = False, swap: bool = False) -> None:
+        self.clear(clear_window, transparent)
         self.refresh_uniforms()
         self.fbo.use()
         for mobject in mobjects:
             mobject.render(self.ctx, self.uniforms)
-
-        if self.window:
+        if swap and self.window:
             self.window.swap_buffers()
             if self.fbo is not self.window_fbo:
                 self.blit(self.fbo, self.window_fbo)
