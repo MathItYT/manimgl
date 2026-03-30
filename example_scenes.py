@@ -3,6 +3,7 @@ import manimlib
 
 class Example(manimlib.InteractiveScene):
     def construct(self) -> None:
+        self.start_mic_recording(rate=48000, channels=2)  # Iniciar grabación de micrófono
         video_mob = manimlib.VideoMobject.from_video(
             0, height=3, flip_horizontal=True
         )  # Cámara por defecto y flip horizontal para efecto espejo

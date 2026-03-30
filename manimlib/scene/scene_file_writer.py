@@ -7,6 +7,7 @@ import subprocess as sp
 import sys
 import threading
 import queue
+import pyaudio
 
 import numpy as np
 from pydub import AudioSegment
@@ -14,7 +15,6 @@ from tqdm.auto import tqdm as ProgressDisplay
 from pathlib import Path
 
 from manimlib.logger import log
-from manimlib.mobject.mobject import Mobject
 from manimlib.utils.file_ops import guarantee_existence
 from manimlib.utils.sounds import get_full_sound_file_path
 
@@ -60,7 +60,9 @@ class SceneFileWriter(object):
         self.output_directory = output_directory
         self.file_name = file_name
         self.open_file_upon_completion = open_file_upon_completion
-        self.show_file_location_upon_completion = show_file_location_upon_completion
+        self.show_file_location_upon_completion = (
+            show_file_location_upon_completion
+        )
         self.quiet = quiet
         self.total_frames = total_frames
         self.progress_description_len = progress_description_len
@@ -75,26 +77,98 @@ class SceneFileWriter(object):
         self.progress_display: ProgressDisplay | None = None
         self.ended_with_interrupt: bool = False
 
+        # --- Nuevas variables para PyAudio ---
+        self.pyaudio_instance = None
+        self.mic_stream = None
+        self.mic_frames = []
+        self.is_recording_mic = False
+        # -------------------------------------
+
         self.init_output_directories()
         self.init_audio()
     
+    # Micrófono
+    def start_mic_recording(self, rate: int = 44100, channels: int = 1, chunk: int = 1024) -> None:
+        """Inicia la grabación de audio desde el micrófono de forma asíncrona."""
+        if self.pyaudio_instance is None:
+            self.pyaudio_instance = pyaudio.PyAudio()
+
+        self.mic_rate = rate
+        self.mic_channels = channels
+        self.mic_chunk = chunk
+        self.mic_format = pyaudio.paInt16
+        self.mic_frames = []
+        self.is_recording_mic = True
+        self.mic_start_time = self.scene.time
+        # --- NUEVO: Bandera para sincronizar con el primer frame de video ---
+        self.waiting_for_first_mic_frame = True
+
+        # El callback permite que PyAudio lea el micrófono en su propio hilo
+        def _mic_callback(in_data, frame_count, time_info, status):
+            if self.is_recording_mic:
+                self.mic_frames.append(in_data)
+                return (None, pyaudio.paContinue)
+            return (None, pyaudio.paComplete)
+
+        self.mic_stream = self.pyaudio_instance.open(
+            format=self.mic_format,
+            channels=self.mic_channels,
+            rate=self.mic_rate,
+            input=True,
+            frames_per_buffer=self.mic_chunk,
+            stream_callback=_mic_callback
+        )
+        self.mic_stream.start_stream()
+
+    def stop_mic_recording(self) -> None:
+        """Detiene el micrófono y acopla el audio grabado a la pista del video."""
+        if not self.is_recording_mic:
+            return
+
+        self.is_recording_mic = False
+        self.mic_stream.stop_stream()
+        self.mic_stream.close()
+
+        # Convertir los bytes crudos a un AudioSegment de pydub
+        raw_audio = b''.join(self.mic_frames)
+        sample_width = self.pyaudio_instance.get_sample_size(self.mic_format)
+
+        mic_segment = AudioSegment(
+            data=raw_audio,
+            sample_width=sample_width,
+            frame_rate=self.mic_rate,
+            channels=self.mic_channels
+        )
+
+        # --- NUEVO: Forzar que el audio coincida con la duración virtual ---
+        virtual_duration = self.scene.time - self.mic_start_time
+        if mic_segment.duration_seconds > virtual_duration:
+            # Recortamos cualquier exceso al final (pydub usa milisegundos)
+            mic_segment = mic_segment[:int(virtual_duration * 1000)]
+        # -------------------------------------------------------------------
+
+        # Usamos el método existente para incorporar la grabación en el momento exacto
+        self.add_audio_segment(mic_segment, time=self.mic_start_time)
+
     def _writer_loop(self) -> None:
         """Hilo en segundo plano para escribir frames en ffmpeg sin bloquear."""
         while True:
             raw_bytes = self.write_queue.get()
-            if raw_bytes is None:  # El valor None será nuestra señal para detener el hilo
+            if (
+                raw_bytes is None
+            ):  # El valor None será nuestra señal para detener el hilo
                 self.write_queue.task_done()
                 break
-            
+
             try:
                 self.writing_process.stdin.write(raw_bytes)
             except BrokenPipeError:
                 # Ocurre si el proceso de ffmpeg se cerró inesperadamente
                 pass
-                
+
             if self.progress_display is not None:
                 self.progress_display.update()
-                
+
             self.write_queue.task_done()
 
     # Output directories and files
@@ -104,13 +178,17 @@ class SceneFileWriter(object):
         if self.write_to_movie:
             self.movie_file_path = self.init_movie_file_path()
         if self.subdivide_output:
-            self.partial_movie_directory = self.init_partial_movie_directory()
+            self.partial_movie_directory = (
+                self.init_partial_movie_directory()
+            )
 
     def init_image_file_path(self) -> Path:
         return self.get_output_file_rootname().with_suffix(".png")
 
     def init_movie_file_path(self) -> Path:
-        return self.get_output_file_rootname().with_suffix(self.movie_file_extension)
+        return self.get_output_file_rootname().with_suffix(
+            self.movie_file_extension
+        )
 
     def init_partial_movie_directory(self):
         return guarantee_existence(self.get_output_file_rootname())
@@ -118,7 +196,7 @@ class SceneFileWriter(object):
     def get_output_file_rootname(self) -> Path:
         return Path(
             guarantee_existence(self.output_directory),
-            self.get_output_file_name()
+            self.get_output_file_name(),
         )
 
     def get_output_file_name(self) -> str:
@@ -140,7 +218,9 @@ class SceneFileWriter(object):
         return self.image_file_path
 
     def get_next_partial_movie_path(self) -> str:
-        result = Path(self.partial_movie_directory, f"{self.scene.num_plays:05}")
+        result = Path(
+            self.partial_movie_directory, f"{self.scene.num_plays:05}"
+        )
         return result.with_suffix(self.movie_file_extension)
 
     def get_movie_file_path(self) -> str:
@@ -157,7 +237,7 @@ class SceneFileWriter(object):
         self,
         new_segment: AudioSegment,
         time: float | None = None,
-        gain_to_background: float | None = None
+        gain_to_background: float | None = None,
     ) -> None:
         if not self.includes_sound:
             self.includes_sound = True
@@ -187,7 +267,7 @@ class SceneFileWriter(object):
         sound_file: str,
         time: float | None = None,
         gain: float | None = None,
-        gain_to_background: float | None = None
+        gain_to_background: float | None = None,
     ) -> None:
         file_path = get_full_sound_file_path(sound_file)
         new_segment = AudioSegment.from_file(file_path)
@@ -209,6 +289,8 @@ class SceneFileWriter(object):
             self.close_movie_pipe()
 
     def finish(self) -> None:
+        if getattr(self, "is_recording_mic", False):
+            self.stop_mic_recording()
         if not self.subdivide_output and self.write_to_movie:
             self.close_movie_pipe()
             if self.includes_sound:
@@ -228,37 +310,50 @@ class SceneFileWriter(object):
         fps = self.scene.camera.fps
         width, height = self.scene.camera.get_pixel_shape()
 
-        vf_arg = 'vflip'
-        vf_arg += f',eq=saturation={self.saturation}:gamma={self.gamma}'
+        vf_arg = "vflip"
+        vf_arg += (
+            f",eq=saturation={self.saturation}:gamma={self.gamma}"
+        )
 
         command = [
             self.ffmpeg_bin,
-            '-y',  # overwrite output file if it exists
-            '-f', 'rawvideo',
-            '-s', f'{width}x{height}',  # size of one frame
-            '-pix_fmt', 'rgba',
-            '-r', str(fps),  # frames per second
-            '-i', '-',  # The input comes from a pipe
-            '-vf', vf_arg,
-            '-an',  # Tells ffmpeg not to expect any audio
-            '-loglevel', 'error',
+            "-y",  # overwrite output file if it exists
+            "-f",
+            "rawvideo",
+            "-s",
+            f"{width}x{height}",  # size of one frame
+            "-pix_fmt",
+            "rgba",
+            "-r",
+            str(fps),  # frames per second
+            "-i",
+            "-",  # The input comes from a pipe
+            "-vf",
+            vf_arg,
+            "-an",  # Tells ffmpeg not to expect any audio
+            "-loglevel",
+            "error",
         ]
         if self.video_codec:
-            command += ['-vcodec', self.video_codec]
+            command += ["-vcodec", self.video_codec]
         if self.pixel_format:
-            command += ['-pix_fmt', self.pixel_format]
+            command += ["-pix_fmt", self.pixel_format]
         command += [self.temp_file_path]
         self.writing_process = sp.Popen(command, stdin=sp.PIPE)
 
         self.write_queue = queue.Queue()
-        self.writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
+        self.writer_thread = threading.Thread(
+            target=self._writer_loop, daemon=True
+        )
         self.writer_thread.start()
 
         if not self.quiet:
             self.progress_display = ProgressDisplay(
                 range(self.total_frames),
                 leave=False,
-                ascii=True if platform.system() == 'Windows' else None,
+                ascii=True
+                if platform.system() == "Windows"
+                else None,
                 dynamic_ncols=True,
             )
             self.set_progress_display_description()
@@ -272,14 +367,18 @@ class SceneFileWriter(object):
         scene_name = movie_path.stem
         insert_dir = Path(movie_path.parent, "inserts")
         guarantee_existence(insert_dir)
-        return Path(insert_dir, f"{scene_name}_{index}").with_suffix(self.movie_file_extension)
+        return Path(insert_dir, f"{scene_name}_{index}").with_suffix(
+            self.movie_file_extension
+        )
 
     def begin_insert(self):
         # Begin writing process
         self.write_to_movie = True
         self.init_output_directories()
         index = 0
-        while (insert_path := self.get_insert_file_path(index)).exists():
+        while (
+            insert_path := self.get_insert_file_path(index)
+        ).exists():
             index += 1
         self.inserted_file_path = insert_path
         self.open_movie_pipe(self.inserted_file_path)
@@ -292,7 +391,9 @@ class SceneFileWriter(object):
     def has_progress_display(self):
         return self.progress_display is not None
 
-    def set_progress_display_description(self, file: str = "", sub_desc: str = "") -> None:
+    def set_progress_display_description(
+        self, file: str = "", sub_desc: str = ""
+    ) -> None:
         if self.progress_display is None:
             return
 
@@ -301,18 +402,27 @@ class SceneFileWriter(object):
             file = os.path.split(self.get_movie_file_path())[1]
         full_desc = f"{file} {sub_desc}"
         if len(full_desc) > desc_len:
-            full_desc = full_desc[:desc_len - 3] + "..."
+            full_desc = full_desc[: desc_len - 3] + "..."
         else:
             full_desc += " " * (desc_len - len(full_desc))
         self.progress_display.set_description(full_desc)
 
     def write_frame(self, camera: Camera) -> None:
+        # --- NUEVO: Sincronización exacta con el primer frame ---
+        if getattr(self, "waiting_for_first_mic_frame", False):
+            self.waiting_for_first_mic_frame = False
+            self.mic_start_time = self.scene.time
+            self.mic_frames = []  # Descartamos el audio grabado durante la carga
+        # --------------------------------------------------------
         if self.write_to_movie:
             raw_bytes = camera.get_raw_fbo_data()
             self.write_queue.put(raw_bytes)
 
     def close_movie_pipe(self) -> None:
-        if hasattr(self, 'writer_thread') and self.writer_thread.is_alive():
+        if (
+            hasattr(self, "writer_thread")
+            and self.writer_thread.is_alive()
+        ):
             self.write_queue.put(None)
             self.writer_thread.join()
         self.writing_process.stdin.close()
@@ -334,22 +444,30 @@ class SceneFileWriter(object):
         self.add_audio_segment(AudioSegment.silent(0))
         self.audio_segment.export(
             sound_file_path,
-            bitrate='312k',
+            bitrate="312k",
         )
         temp_file_path = stem + "_temp" + ext
         commands = [
             self.ffmpeg_bin,
-            "-i", movie_file_path,
-            "-i", sound_file_path,
-            '-y',  # overwrite output file if it exists
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-b:a", "320k",
+            "-i",
+            movie_file_path,
+            "-i",
+            sound_file_path,
+            "-y",  # overwrite output file if it exists
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "320k",
             # select video stream from first file
-            "-map", "0:v:0",
+            "-map",
+            "0:v:0",
             # select audio stream from second file
-            "-map", "1:a:0",
-            '-loglevel', 'error',
+            "-map",
+            "1:a:0",
+            "-loglevel",
+            "error",
             # "-shortest",
             temp_file_path,
         ]
@@ -367,10 +485,12 @@ class SceneFileWriter(object):
             log.info(f"File ready at {file_path}")
 
     def should_open_file(self) -> bool:
-        return any([
-            self.show_file_location_upon_completion,
-            self.open_file_upon_completion,
-        ])
+        return any(
+            [
+                self.show_file_location_upon_completion,
+                self.open_file_upon_completion,
+            ]
+        )
 
     def open_file(self) -> None:
         if self.quiet:
@@ -402,7 +522,7 @@ class SceneFileWriter(object):
 
                 commands.append(file_path)
 
-                FNULL = open(os.devnull, 'w')
+                FNULL = open(os.devnull, "w")
                 sp.call(commands, stdout=FNULL, stderr=sp.STDOUT)
                 FNULL.close()
 

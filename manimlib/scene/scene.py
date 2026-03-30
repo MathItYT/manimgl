@@ -582,6 +582,9 @@ class Scene(object):
             self.update_mobjects(self.get_run_time(animations))
         else:
             self.update_mobjects(0)
+    
+    def start_mic_recording(self, rate: int = 44100, channels: int = 1, chunk: int = 1024) -> None:
+        self.file_writer.start_mic_recording(rate, channels, chunk)
 
     @affects_mobject_list
     def play(

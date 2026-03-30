@@ -45,7 +45,7 @@ window:
   # If using multiple monitors, which one should show the window
   monitor_index: 0
   # If not full screen, the default to give it half the screen width
-  full_screen: False
+  full_screen: True
   # Other optional specifications that override the above include:
   # position: (500, 500)  # Specific position, in pixel coordinates, for upper right corner
   # size: (1920, 1080)  # Specific size, in pixels
