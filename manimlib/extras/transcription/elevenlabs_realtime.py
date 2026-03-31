@@ -8,6 +8,7 @@ from collections import deque
 from queue import Empty
 from queue import Full
 from queue import Queue
+from typing import Callable
 from urllib.parse import urlencode
 
 from manimlib.logger import log
@@ -70,6 +71,48 @@ class ElevenLabsRealtimeTranscriber:
         self._text_queue: Queue[tuple[str, str]] = Queue()
         self._pending_chunks: deque[bytes] = deque()
         self._last_reconnect_log_time: float = 0.0
+        self._event_subscribers: list[Queue[tuple[str, str]]] = []
+        self._event_subscribers_lock = threading.Lock()
+
+    @staticmethod
+    def _queue_put_latest(queue: Queue[tuple[str, str]], item: tuple[str, str]) -> None:
+        try:
+            queue.put_nowait(item)
+            return
+        except Full:
+            pass
+
+        try:
+            queue.get_nowait()
+        except Empty:
+            pass
+
+        try:
+            queue.put_nowait(item)
+        except Full:
+            pass
+
+    def subscribe_text_events(self, max_queue_size: int = 128) -> Queue[tuple[str, str]]:
+        event_queue: Queue[tuple[str, str]] = Queue(maxsize=max(1, max_queue_size))
+        with self._event_subscribers_lock:
+            self._event_subscribers.append(event_queue)
+        return event_queue
+
+    def unsubscribe_text_events(self, event_queue: Queue[tuple[str, str]]) -> None:
+        with self._event_subscribers_lock:
+            self._event_subscribers = [
+                queue
+                for queue in self._event_subscribers
+                if queue is not event_queue
+            ]
+
+    def _publish_text_event(self, event_kind: str, text: str) -> None:
+        event = (event_kind, text)
+        self._queue_put_latest(self._text_queue, event)
+        with self._event_subscribers_lock:
+            subscribers = list(self._event_subscribers)
+        for event_queue in subscribers:
+            self._queue_put_latest(event_queue, event)
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -267,9 +310,48 @@ class ElevenLabsRealtimeTranscriber:
                 text = event.get("text", "").strip()
                 if text:
                     event_kind = "partial" if event_type == "partial_transcript" else "committed"
-                    self._text_queue.put((event_kind, text))
+                    self._publish_text_event(event_kind, text)
             elif event_type and event_type.endswith("error"):
                 log.error(f"ElevenLabs realtime error: {event}")
+
+
+def bind_transcriber_callback(
+    scene,
+    transcriber: ElevenLabsRealtimeTranscriber,
+    callback: Callable[[str, str], None],
+    event_kinds: tuple[str, ...] = ("committed",),
+    update_fps: float = 30.0,
+):
+    """Attach a scene updater that dispatches transcript events to any callback."""
+    transcriber.start()
+    event_queue = transcriber.subscribe_text_events()
+    allowed_event_kinds = set(event_kinds)
+
+    period = 0.0 if update_fps <= 0 else (1.0 / update_fps)
+    elapsed = 0.0
+
+    def _dispatch_transcript_events(dt: float) -> None:
+        nonlocal elapsed
+        elapsed += dt
+        if elapsed < period:
+            return
+        elapsed = 0.0
+
+        while True:
+            try:
+                event_kind, text = event_queue.get_nowait()
+            except Empty:
+                break
+
+            if allowed_event_kinds and event_kind not in allowed_event_kinds:
+                continue
+            try:
+                callback(event_kind, text)
+            except Exception:
+                log.exception("Transcript callback failed")
+
+    scene.add_updater(_dispatch_transcript_events)
+    return _dispatch_transcript_events
 
 
 def bind_transcriber_to_text(
@@ -284,6 +366,7 @@ def bind_transcriber_to_text(
 ):
     """Attach a scene updater that refreshes Text from latest transcript."""
     transcriber.start()
+    event_queue = transcriber.subscribe_text_events()
 
     committed_period = 0.0 if update_fps <= 0 else (1.0 / update_fps)
     partial_period = 0.0 if partial_update_fps <= 0 else (1.0 / partial_update_fps)
@@ -341,10 +424,10 @@ def bind_transcriber_to_text(
         elapsed_partial += dt
 
         while True:
-            event = transcriber.poll_latest_text_event()
-            if event is None:
+            try:
+                event_kind, text = event_queue.get_nowait()
+            except Empty:
                 break
-            event_kind, text = event
             if event_kind == "committed":
                 pending_committed = text
             elif render_partial:

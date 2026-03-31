@@ -128,6 +128,30 @@ class LLMSceneController:
         self.objects: dict[str, Any] = {"scene": self.scene}
         self.updaters: dict[str, tuple[str, Any]] = {}
 
+    def register_object(self, object_id: str, value: Any, overwrite: bool = False) -> None:
+        """Register an object id manually so the model can reference it."""
+        if not isinstance(object_id, str) or not object_id.strip():
+            raise LLMSceneExecutionError("object_id must be a non-empty string")
+        clean_id = object_id.strip()
+
+        if clean_id == "scene":
+            if value is not self.scene:
+                raise LLMSceneExecutionError("The reserved id 'scene' can only point to the active scene")
+            return
+
+        if clean_id in self.objects and not overwrite:
+            raise LLMSceneExecutionError(
+                f"Object id '{clean_id}' is already registered; pass overwrite=True to replace it"
+            )
+        self.objects[clean_id] = value
+
+    def register_objects(self, objects: dict[str, Any], overwrite: bool = False) -> None:
+        """Register multiple object ids manually."""
+        if not isinstance(objects, dict):
+            raise LLMSceneExecutionError("objects must be a dict[str, Any]")
+        for object_id, value in objects.items():
+            self.register_object(object_id, value, overwrite=overwrite)
+
     def _normalize_blacklist(self, raw: dict[str, dict[str, Any]]) -> dict[str, _ModuleBlacklist]:
         normalized: dict[str, _ModuleBlacklist] = {}
         for module_name, payload in raw.items():
@@ -541,9 +565,11 @@ class LLMSceneController:
         for index, op in enumerate(operations):
             if not isinstance(op, dict) or "op" not in op:
                 raise LLMSceneExecutionError(f"Operation {index} is invalid")
+            self.scene.save_state()
             try:
                 self._execute_operation(op)
             except Exception as exc:
+                self.scene.undo()
                 raise LLMSceneExecutionError(
                     f"Operation {index} ({op.get('op')}) failed: {exc}"
                 ) from exc
