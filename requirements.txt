@@ -13,6 +13,7 @@ moderngl
 moderngl_window
 numpy
 Pillow
+pyaudio
 pydub
 pygments
 PyOpenGL
