@@ -242,14 +242,11 @@ class LLMSceneController:
             "additionalProperties": False,
             "properties": {
                 "kind": {"type": "string", "enum": ["vector3"]},
-                "value": {
-                    "type": "array",
-                    "items": {"type": "number"},
-                    "minItems": 3,
-                    "maxItems": 3,
-                },
+                "x": {"type": "number"},
+                "y": {"type": "number"},
+                "z": {"type": "number"},
             },
-            "required": ["kind", "value"],
+            "required": ["kind", "x", "y", "z"],
         }
         tracker_value_schema = {
             "type": "object",
@@ -469,6 +466,7 @@ class LLMSceneController:
             "(5) IDs must be fully descriptive and self-explanatory, not generic. "
             "Do not use vague IDs like obj1, item, temp, x, y, a1, mobject_new. "
             "Use explicit semantic IDs such as title_main_text, axis_x_number_line, graph_sine_curve, animation_fade_out_title, tracker_progress_time. "
+            "Vector rules: vector3 values must always have x, y, z numeric fields. If there is no 3D content, set z to 0. "
             "Planning rules: prefer minimal valid operations, preserve operation ordering dependencies, and avoid redundant calls. "
             "Schema rules: obey field types exactly, include required fields, and use null explicitly where optional behavior is intended."
         )
@@ -483,15 +481,16 @@ class LLMSceneController:
         user_prompt: str,
         system_prompt: str | None = None,
         temperature: float = 0.0,
+        reasoning_effort: str | None = None,
     ) -> dict[str, Any]:
         last_error: Exception | None = None
         for attempt in range(1, self.max_request_retries + 1):
             try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    temperature=temperature,
-                    messages=self.build_messages(user_prompt, system_prompt),
-                    response_format={
+                request_kwargs = {
+                    "model": self.model,
+                    "temperature": temperature,
+                    "messages": self.build_messages(user_prompt, system_prompt),
+                    "response_format": {
                         "type": "json_schema",
                         "json_schema": {
                             "name": "manim_scene_plan",
@@ -499,7 +498,10 @@ class LLMSceneController:
                             "schema": self.build_json_schema(),
                         },
                     },
-                )
+                }
+                if reasoning_effort is not None:
+                    request_kwargs["reasoning_effort"] = reasoning_effort
+                response = self.client.chat.completions.create(**request_kwargs)
 
                 content = response.choices[0].message.content
                 if not content:
@@ -520,11 +522,13 @@ class LLMSceneController:
         user_prompt: str,
         system_prompt: str | None = None,
         temperature: float = 0.0,
+        reasoning_effort: str | None = None,
     ) -> dict[str, Any]:
         plan = self.request_plan(
             user_prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=temperature,
+            reasoning_effort=reasoning_effort,
         )
         self.execute_plan(plan)
         return plan
@@ -575,7 +579,7 @@ class LLMSceneController:
             if kind == "ref":
                 return self._get_object(value["id"])
             if kind == "vector3":
-                return np.array(value["value"], dtype=float)
+                return np.array([value["x"], value["y"], value["z"]], dtype=float)
             if kind == "tracker_value":
                 tracker = self._get_object(value["id"], expected_type=ValueTracker)
                 return tracker.get_value()

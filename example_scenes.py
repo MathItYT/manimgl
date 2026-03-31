@@ -160,7 +160,7 @@ class LLMExample(Example):
             prompt.become(manimlib.Text("").add(manimlib.Dot()).to_edge(manimlib.DOWN, buff=0.5))
             self.prompt.text = None
             self.prompt_mode = False
-            threading.Thread(target=self.llm_controller.run_prompt, args=(prompt_text,)).start()
+            threading.Thread(target=lambda: self.llm_controller.run_prompt(prompt_text, reasoning_effort="high")).start()
         elif not self.prompt_mode:
             super().on_key_press(symbol, modifiers)
         else:
