@@ -583,8 +583,14 @@ class Scene(object):
         else:
             self.update_mobjects(0)
     
-    def start_mic_recording(self, rate: int = 44100, channels: int = 1, chunk: int = 1024) -> None:
-        self.file_writer.start_mic_recording(rate, channels, chunk)
+    def start_mic_recording(
+        self,
+        rate: int = 44100,
+        channels: int = 1,
+        chunk: int = 1024,
+        callback: Callable[[bytes, int, dict, int], None] | None = None,
+    ) -> None:
+        self.file_writer.start_mic_recording(rate, channels, chunk, callback)
 
     @affects_mobject_list
     def play(

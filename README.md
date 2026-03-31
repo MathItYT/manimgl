@@ -2,7 +2,16 @@
 ManimGL Presentation Engine is a fork of original 3Blue1Brown's Manim aimed to be a live presentation engine with realtime performance.
 
 ## Installation
-`pip install git+https://github.com/MathItYT/manimgl.git`
+
+```bash
+pip install git+https://github.com/MathItYT/manimgl.git
+```
+
+If you want a transcription utility powered by ElevenLabs, also install with the `transcription` extra:
+
+```bash
+pip install "manimgl[transcription] @ git+https://github.com/MathItYT/manimgl"`
+```
 
 ## How to run?
 Create an `manimlib.InteractiveScene` subclass in a `main.py` (or any other filename else) module.
@@ -11,11 +20,31 @@ For example:
 
 ```python
 import manimlib
+import os
+
+imported_transcriber: bool = False
+
+try:
+    from manimlib.extras.transcription import ElevenLabsRealtimeTranscriber, bind_transcriber_to_text
+    imported_transcriber = True
+except ImportError:
+    pass
 
 
 class Example(manimlib.InteractiveScene):
-    def construct(self) -> None:
-        self.start_mic_recording(rate=48000, channels=2)  # Iniciar grabación de micrófono
+    def construct(
+        self,
+        callback=None,
+        mic_rate=48000,
+        mic_channels=2,
+        mic_chunk=4096,
+    ) -> None:
+        self.start_mic_recording(
+            rate=mic_rate,
+            channels=mic_channels,
+            chunk=mic_chunk,
+            callback=callback,
+        )  # Iniciar grabación de micrófono
         video_mob = manimlib.VideoMobject.from_video(
             0, height=3, flip_horizontal=True
         )  # Cámara por defecto y flip horizontal para efecto espejo
@@ -67,6 +96,46 @@ class Example(manimlib.InteractiveScene):
         if hold:
             self.hold_on_wait = True
             self.hold_loop()
+
+
+class TranscriptionExample(Example):
+    def construct(self) -> None:
+        if not imported_transcriber:
+            raise RuntimeError(
+                "ElevenLabsRealtimeTranscriber is required for TranscriptionExample. Install with: pip install \"manimgl @ git+https://github.com/MathItYT/manimgl[transcription]\""
+            )
+        api_key = os.getenv("ELEVENLABS_API_KEY")
+        if not api_key:
+            raise RuntimeError("Set ELEVENLABS_API_KEY environment variable before running TranscriptionExample")
+
+        transcriber = ElevenLabsRealtimeTranscriber(
+            api_key=api_key,
+            sample_rate=16000,
+            audio_format="pcm_16000",
+            commit_strategy="vad",
+            language_code="es",
+            max_audio_queue_chunks=24,
+            chunks_per_enqueue=2,
+        )
+        text = manimlib.Text("Habla para transcribir...", font_size=24).to_edge(manimlib.DOWN, buff=0.5)
+        text.fix_in_frame()
+        bind_transcriber_to_text(
+            self,
+            text,
+            transcriber,
+            update_fps=5,
+            partial_update_fps=2,
+            render_partial=False,
+            build_text_off_main_thread=True,
+            font_size=24,
+        )
+        self.add(text)
+        super().construct(
+            callback=transcriber.on_mic_chunk,
+            mic_rate=16000,
+            mic_channels=1,
+            mic_chunk=1024,
+        )
 ```
 
 Then run in your terminal:
@@ -74,3 +143,11 @@ Then run in your terminal:
 ```bash
 manimgl main.py Example
 ```
+
+Also you can run the `TranscriptionExample` scene to see the ElevenLabs transcription utility in action (remember to set your API key in the environment variable `ELEVENLABS_API_KEY`):
+
+```bash
+manimgl main.py TranscriptionExample -o
+```
+
+Note that `-o` flag is required to render the video as a file, since ManimGL Presentation Engine is designed for live presentations and won't render to file by default, but it can render to file seamlessly with the `-o` flag.

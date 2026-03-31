@@ -1,6 +1,6 @@
 addict
 appdirs
-audioop-lts; python_version>='3.13'
+audioop-lts; python_version >= "3.13"
 colour
 diskcache
 ipython>=8.18.0
@@ -17,8 +17,10 @@ pydub
 pygments
 PyOpenGL
 pyperclip
-pywavefront
 pyyaml
+trimesh
+pywavefront
+opencv-python
 rich
 scipy
 screeninfo
@@ -26,7 +28,6 @@ setuptools
 skia-pathops
 svgelements>=1.8.1
 sympy
-trimesh
 tqdm
 typing-extensions; python_version < "3.11"
 validators

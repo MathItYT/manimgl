@@ -19,6 +19,7 @@ from manimlib.utils.file_ops import guarantee_existence
 from manimlib.utils.sounds import get_full_sound_file_path
 
 from typing import TYPE_CHECKING
+from typing import Callable
 
 if TYPE_CHECKING:
     from PIL.Image import Image
@@ -88,7 +89,13 @@ class SceneFileWriter(object):
         self.init_audio()
     
     # Micrófono
-    def start_mic_recording(self, rate: int = 44100, channels: int = 1, chunk: int = 1024) -> None:
+    def start_mic_recording(
+        self,
+        rate: int = 44100,
+        channels: int = 1,
+        chunk: int = 1024,
+        callback: Callable[[bytes, int, dict, int], None] | None = None,
+    ) -> None:
         """Inicia la grabación de audio desde el micrófono de forma asíncrona."""
         if self.pyaudio_instance is None:
             self.pyaudio_instance = pyaudio.PyAudio()
@@ -106,6 +113,11 @@ class SceneFileWriter(object):
         # El callback permite que PyAudio lea el micrófono en su propio hilo
         def _mic_callback(in_data, frame_count, time_info, status):
             if self.is_recording_mic:
+                if callback is not None:
+                    try:
+                        callback(in_data, frame_count, time_info, status)
+                    except Exception:
+                        log.exception("Microphone callback failed")
                 self.mic_frames.append(in_data)
                 return (None, pyaudio.paContinue)
             return (None, pyaudio.paComplete)
