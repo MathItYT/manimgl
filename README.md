@@ -13,6 +13,12 @@ If you want a transcription utility powered by ElevenLabs, also install with the
 pip install "manimgl[transcription] @ git+https://github.com/MathItYT/manimgl"`
 ```
 
+If you want to control scenes with an LLM through OpenAI Chat Completions (with strict structured outputs), install with the `llm` extra:
+
+```bash
+pip install "manimgl[llm] @ git+https://github.com/MathItYT/manimgl"
+```
+
 ## How to run?
 Create an `manimlib.InteractiveScene` subclass in a `main.py` (or any other filename else) module.
 
@@ -151,3 +157,121 @@ manimgl main.py TranscriptionExample -o
 ```
 
 Note that `-o` flag is required to render the video as a file, since ManimGL Presentation Engine is designed for live presentations and won't render to file by default, but it can render to file seamlessly with the `-o` flag.
+
+## Transcription Extra
+
+The transcription extra adds realtime speech-to-text utilities powered by ElevenLabs.
+
+### Install
+
+```bash
+pip install "manimgl[transcription] @ git+https://github.com/MathItYT/manimgl"
+```
+
+### Environment variable
+
+Set your ElevenLabs API key before running scenes:
+
+```bash
+# PowerShell
+$env:ELEVENLABS_API_KEY="your_api_key"
+```
+
+### What it provides
+
+- `ElevenLabsRealtimeTranscriber`: receives audio chunks and streams transcription.
+- `bind_transcriber_to_text`: links transcriber output to a Manim text mobject.
+
+Import path:
+
+```python
+from manimlib.extras.transcription import ElevenLabsRealtimeTranscriber, bind_transcriber_to_text
+```
+
+### Minimal example
+
+```python
+import os
+import manimlib
+
+from manimlib.extras.transcription import ElevenLabsRealtimeTranscriber, bind_transcriber_to_text
+
+
+class TranscriptionMinimal(manimlib.InteractiveScene):
+    def construct(self) -> None:
+        api_key = os.getenv("ELEVENLABS_API_KEY")
+        if not api_key:
+            raise RuntimeError("Set ELEVENLABS_API_KEY before running this scene")
+
+        transcriber = ElevenLabsRealtimeTranscriber(
+            api_key=api_key,
+            sample_rate=16000,
+            audio_format="pcm_16000",
+            commit_strategy="vad",
+            language_code="es",
+        )
+
+        subtitle = manimlib.Text("Habla para transcribir...", font_size=24)
+        subtitle.to_edge(manimlib.DOWN, buff=0.5)
+        subtitle.fix_in_frame()
+
+        bind_transcriber_to_text(
+            self,
+            subtitle,
+            transcriber,
+            update_fps=5,
+            partial_update_fps=2,
+            render_partial=False,
+            build_text_off_main_thread=True,
+            font_size=24,
+        )
+
+        self.add(subtitle)
+        self.start_mic_recording(
+            rate=16000,
+            channels=1,
+            chunk=1024,
+            callback=transcriber.on_mic_chunk,
+        )
+
+        self.wait(10)
+```
+
+Run the scene:
+
+```bash
+manimgl main.py TranscriptionMinimal -o
+```
+
+## LLM Scene Control (Safe Structured Outputs)
+
+The `manimlib.extras.llm` module allows an LLM to operate a scene with strict JSON actions only.
+
+- Uses OpenAI Chat Completions with `response_format.json_schema.strict = true`
+- Supports custom `base_url` and custom `api_key`
+- Avoids `exec` by executing a declarative operation plan
+- Builds JSON schema from a symbol whitelist and per-module blacklists
+
+Example:
+
+```python
+import os
+import manimlib
+
+from manimlib.extras.llm import LLMSceneController
+
+
+class LLMExample(manimlib.InteractiveScene):
+    def construct(self) -> None:
+        controller = LLMSceneController(
+            scene=self,
+            api_key=os.environ["OPENAI_API_KEY"],
+            base_url="https://your-openai-compatible-endpoint/v1",
+            model="gpt-4.1-mini",
+            whitelist_modules=["manimlib"],
+        )
+
+        controller.run_prompt(
+            "Create a circle and a square, animate both, add a ValueTracker updater, then wait 1 second."
+        )
+```

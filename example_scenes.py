@@ -1,11 +1,22 @@
 import manimlib
 import os
+from pyglet.window import key
+import string
+import threading
 
 imported_transcriber: bool = False
+imported_llm_scene_controller: bool = False
 
 try:
     from manimlib.extras.transcription import ElevenLabsRealtimeTranscriber, bind_transcriber_to_text
     imported_transcriber = True
+except ImportError:
+    pass
+
+
+try:
+    from manimlib.extras.llm import LLMSceneController
+    imported_llm_scene_controller = True
 except ImportError:
     pass
 
@@ -81,7 +92,7 @@ class TranscriptionExample(Example):
     def construct(self) -> None:
         if not imported_transcriber:
             raise RuntimeError(
-                "ElevenLabsRealtimeTranscriber is required for TranscriptionExample. Install with: pip install \"manimgl @ git+https://github.com/MathItYT/manimgl[transcription]\""
+                "ElevenLabsRealtimeTranscriber is required for TranscriptionExample. Install with: pip install \"manimgl[transcription] @ git+https://github.com/MathItYT/manimgl\""
             )
         api_key = os.getenv("ELEVENLABS_API_KEY")
         if not api_key:
@@ -115,3 +126,58 @@ class TranscriptionExample(Example):
             mic_channels=1,
             mic_chunk=1024,
         )
+
+
+class LLMExample(Example):
+    def construct(self) -> None:
+        if not imported_llm_scene_controller:
+            raise RuntimeError(
+                "LLMSceneController is required for LLMExample. Install with: pip install \"manimgl[llm] @ git+https://github.com/MathItYT/manimgl\""
+            )
+        self.prompt_mode: bool = False
+        self.llm_controller = LLMSceneController(
+            self,
+            api_key=os.getenv("GROQ_API_KEY"),
+            base_url="https://api.groq.com/openai/v1",
+            model="openai/gpt-oss-120b",
+        )
+        self.prompt = manimlib.Text("").add(manimlib.Dot()).to_edge(manimlib.DOWN, buff=0.5)
+        self.add(self.prompt)
+        super().construct()
+    
+    def on_key_press(self, symbol, modifiers):
+        if symbol == key.P and modifiers & key.MOD_CTRL:
+            self.prompt_mode = not self.prompt_mode
+            if self.prompt_mode:
+                self.prompt.become(manimlib.Text("Escribe un prompt para el LLM y presiona Enter", font_size=24).to_edge(manimlib.DOWN, buff=0.5))
+                self.prompt.text = None
+            else:
+                self.prompt.become(manimlib.Text("").add(manimlib.Dot()).to_edge(manimlib.DOWN, buff=0.5))
+                self.prompt.text = None
+        elif symbol == key.ENTER and self.prompt_mode:
+            prompt: manimlib.Text = self.prompt
+            prompt_text = prompt.text
+            prompt.become(manimlib.Text("").add(manimlib.Dot()).to_edge(manimlib.DOWN, buff=0.5))
+            self.prompt.text = None
+            self.prompt_mode = False
+            threading.Thread(target=self.llm_controller.run_prompt, args=(prompt_text,)).start()
+        elif not self.prompt_mode:
+            super().on_key_press(symbol, modifiers)
+        else:
+            if symbol == key.BACKSPACE:
+                prompt: manimlib.Text = self.prompt
+                prompt_text = prompt.text
+                if prompt_text:
+                    prompt.become(manimlib.Text(prompt_text[:-1], font_size=24).to_edge(manimlib.DOWN, buff=0.5))
+                    prompt.text = prompt_text[:-1]
+            else:
+                char = chr(symbol)
+                if char not in string.printable:
+                    return
+                is_cap = modifiers & key.MOD_SHIFT
+                if char.isalpha():
+                    char = char.upper() if is_cap else char.lower()
+                prompt: manimlib.Text = self.prompt
+                prompt_text = prompt.text or ""
+                prompt.become(manimlib.Text(prompt_text + char, font_size=24).to_edge(manimlib.DOWN, buff=0.5))
+                prompt.text = prompt_text + char
