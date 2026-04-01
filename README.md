@@ -19,6 +19,12 @@ If you want to control scenes with an LLM through OpenAI Chat Completions (with 
 pip install "manimgl[llm] @ git+https://github.com/MathItYT/manimgl"
 ```
 
+If you want realtime hand tracking and gesture-driven interactions over `VideoMobject`, install with the `vision` extra:
+
+```bash
+pip install "manimgl[vision] @ git+https://github.com/MathItYT/manimgl"
+```
+
 ## How to run?
 Create an `manimlib.InteractiveScene` subclass in a `main.py` (or any other filename else) module.
 
@@ -241,6 +247,77 @@ Run the scene:
 
 ```bash
 manimgl main.py TranscriptionMinimal -o
+```
+
+## Vision Extra (Hand Tracking)
+
+The `vision` extra adds realtime hand tracking utilities running in a background thread.
+
+### Install
+
+```bash
+pip install "manimgl[vision] @ git+https://github.com/MathItYT/manimgl"
+```
+
+### What it provides
+
+- `HandMotionTracker`: processes webcam frames in a separate thread and emits motion state.
+- `HandMesh`: `VMobject` that renders a 2D hand mesh from detected landmarks.
+- `bind_hand_tracker_to_video`: taps frames from an existing `VideoMobject` into the tracker.
+- `bind_hand_position_to_mobject`: moves a mobject based on normalized hand position.
+- `bind_hand_mesh_to_tracker`: updates `HandMesh` automatically from tracker state.
+
+Import path:
+
+```python
+from manimlib.extras.vision import (
+    HandMesh,
+    HandMotionTracker,
+    bind_hand_mesh_to_tracker,
+    bind_hand_position_to_mobject,
+    bind_hand_tracker_to_video,
+)
+```
+
+### Minimal example
+
+```python
+import manimlib
+
+from manimlib.extras.vision import (
+    HandMesh,
+    HandMotionTracker,
+    bind_hand_mesh_to_tracker,
+    bind_hand_position_to_mobject,
+    bind_hand_tracker_to_video,
+)
+
+
+class HandTrackingMinimal(manimlib.InteractiveScene):
+    def construct(self) -> None:
+        video = manimlib.VideoMobject.from_video(0, height=5, flip_horizontal=True)
+        video.play()
+
+        tracker = HandMotionTracker()
+        bind_hand_tracker_to_video(video, tracker, enqueue_every_n_frames=2)
+
+        circle = manimlib.Circle(radius=0.2)
+        circle.set_fill(color=manimlib.YELLOW, opacity=0.85)
+        circle.set_stroke(color=manimlib.WHITE, width=3)
+
+        mesh = HandMesh(reference_mobject=video, stroke_color=manimlib.BLUE, stroke_width=3)
+
+        bind_hand_position_to_mobject(self, circle, tracker, reference_mobject=video, update_fps=30)
+        bind_hand_mesh_to_tracker(self, mesh, tracker, update_fps=30)
+
+        self.add(video, mesh, circle)
+        self.wait(10)
+```
+
+Run the scene:
+
+```bash
+manimgl main.py HandTrackingMinimal -o
 ```
 
 ## LLM Scene Control (Safe Structured Outputs)

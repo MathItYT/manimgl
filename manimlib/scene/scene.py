@@ -849,10 +849,13 @@ class Scene(object):
         symbol: int,
         modifiers: int
     ) -> None:
+        # Some backends/devices can emit non-Unicode key symbols.
+        # Ignore them silently to avoid warning spam during interaction.
+        if symbol < 0 or symbol > 0x10FFFF:
+            return
         try:
             char = chr(symbol)
-        except OverflowError:
-            log.warning("The value of the pressed key is too large.")
+        except (OverflowError, ValueError):
             return
 
         event_data = {"symbol": symbol, "modifiers": modifiers}

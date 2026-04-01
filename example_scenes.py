@@ -6,6 +6,7 @@ import threading
 
 imported_transcriber: bool = False
 imported_llm_scene_controller: bool = False
+imported_hand_tracking: bool = False
 
 try:
     from manimlib.extras.transcription import ElevenLabsRealtimeTranscriber, bind_transcriber_callback, bind_transcriber_to_text
@@ -17,6 +18,13 @@ except ImportError:
 try:
     from manimlib.extras.llm import LLMSceneController
     imported_llm_scene_controller = True
+except ImportError:
+    pass
+
+
+try:
+    from manimlib.extras.vision import HandMesh, HandMotionState, HandMotionTracker, bind_hand_gesture_callback, bind_hand_mesh_to_tracker, bind_hand_position_to_mobject, bind_hand_tracker_to_video
+    imported_hand_tracking = True
 except ImportError:
     pass
 
@@ -341,3 +349,76 @@ class TranscriptionLLMExample(Example):
                 arm_prompt_mode()
             return
         super().on_key_press(symbol, modifiers)
+
+
+class HandTrackingExample(manimlib.InteractiveScene):
+    def construct(self) -> None:
+        if not imported_hand_tracking:
+            raise RuntimeError(
+                "Vision extra is required for HandTrackingExample. Install with: pip install \"manimgl[vision] @ git+https://github.com/MathItYT/manimgl\""
+            )
+
+        video_mob = manimlib.VideoMobject.from_video(
+            0,
+            height=5,
+            flip_horizontal=True,
+        )
+        video_mob.play()
+
+        tracker = HandMotionTracker(
+            max_num_hands=1,
+            min_detection_confidence=0.6,
+            min_tracking_confidence=0.6,
+            pinch_threshold=0.055,
+            movement_threshold=0.012,
+            smoothing=0.45,
+            model_cache_dir="D:\\manimgl_cache"
+        )
+        bind_hand_tracker_to_video(video_mob, tracker, enqueue_every_n_frames=2)
+
+        circle = manimlib.Circle(radius=0.22)
+        circle.set_fill(color=manimlib.YELLOW, opacity=0.85)
+        circle.set_stroke(color=manimlib.WHITE, width=3)
+        circle.move_to(video_mob)
+
+        hand_mesh = HandMesh(
+            reference_mobject=video_mob,
+            stroke_color=manimlib.BLUE,
+            stroke_width=3,
+            z_value=0.05,
+        )
+        bind_hand_mesh_to_tracker(self, hand_mesh, tracker, update_fps=30)
+
+        status = manimlib.Text("Mueve tu mano para controlar el circulo", font_size=24)
+        status.to_edge(manimlib.DOWN, buff=0.3)
+        status.fix_in_frame()
+
+        bind_hand_position_to_mobject(
+            self,
+            circle,
+            tracker,
+            reference_mobject=video_mob,
+            update_fps=30,
+            z_value=0.0,
+            only_when_detected=True,
+        )
+
+        def _on_gesture(state: HandMotionState) -> None:
+            if not state.detected:
+                message = "No se detecta mano"
+            elif state.pinch:
+                message = "Gesto: pinch"
+            else:
+                message = f"Gesto: {state.gesture}"
+            status.become(manimlib.Text(message, font_size=24).to_edge(manimlib.DOWN, buff=0.3))
+            status.fix_in_frame()
+
+            if state.pinch:
+                circle.set_fill(color=manimlib.GREEN, opacity=0.9)
+            else:
+                circle.set_fill(color=manimlib.YELLOW, opacity=0.85)
+
+        bind_hand_gesture_callback(self, tracker, _on_gesture, update_fps=20)
+
+        self.add(video_mob, hand_mesh, circle, status)
+        self.hold_loop()
