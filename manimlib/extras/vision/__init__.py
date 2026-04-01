@@ -7,6 +7,7 @@ from manimlib.extras.vision.hand_tracking import bind_hand_gesture_callback
 from manimlib.extras.vision.hand_tracking import bind_hand_mesh_to_tracker
 from manimlib.extras.vision.hand_tracking import bind_hand_position_to_mobject
 from manimlib.extras.vision.hand_tracking import bind_hand_tracker_to_video
+from manimlib.extras.vision.hand_tracking import unbind_hand_tracker_from_video
 
 __all__ = [
     "HandMotionState",
@@ -16,4 +17,5 @@ __all__ = [
     "bind_hand_mesh_to_tracker",
     "bind_hand_position_to_mobject",
     "bind_hand_tracker_to_video",
+    "unbind_hand_tracker_from_video",
 ]

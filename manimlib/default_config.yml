@@ -90,6 +90,8 @@ text:
   alignment: "LEFT"
   # The font size at which Text("0") has a height of 1 manim unit
   font_size_for_unit_height: 144
+typst:
+  font_size_for_unit_height: 144
 embed:
   exception_mode: "Verbose"
   autoreload: False

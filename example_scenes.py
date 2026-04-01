@@ -23,7 +23,7 @@ except ImportError:
 
 
 try:
-    from manimlib.extras.vision import HandMesh, HandMotionState, HandMotionTracker, bind_hand_gesture_callback, bind_hand_mesh_to_tracker, bind_hand_position_to_mobject, bind_hand_tracker_to_video
+    from manimlib.extras.vision import HandMesh, HandMotionState, HandMotionTracker, bind_hand_gesture_callback, bind_hand_mesh_to_tracker, bind_hand_position_to_mobject, bind_hand_tracker_to_video, unbind_hand_tracker_from_video
     imported_hand_tracking = True
 except ImportError:
     pass
@@ -363,9 +363,10 @@ class HandTrackingExample(manimlib.InteractiveScene):
             height=5,
             flip_horizontal=True,
         )
+        self.video_mob = video_mob
         video_mob.play()
 
-        tracker = HandMotionTracker(
+        self.tracker = HandMotionTracker(
             max_num_hands=1,
             min_detection_confidence=0.6,
             min_tracking_confidence=0.6,
@@ -374,7 +375,7 @@ class HandTrackingExample(manimlib.InteractiveScene):
             smoothing=0.45,
             model_cache_dir="D:\\manimgl_cache"
         )
-        bind_hand_tracker_to_video(video_mob, tracker, enqueue_every_n_frames=2)
+        bind_hand_tracker_to_video(video_mob, self.tracker, enqueue_every_n_frames=2)
 
         circle = manimlib.Circle(radius=0.22)
         circle.set_fill(color=manimlib.YELLOW, opacity=0.85)
@@ -387,16 +388,17 @@ class HandTrackingExample(manimlib.InteractiveScene):
             stroke_width=3,
             z_value=0.05,
         )
-        bind_hand_mesh_to_tracker(self, hand_mesh, tracker, update_fps=30)
+        bind_hand_mesh_to_tracker(self, hand_mesh, self.tracker, update_fps=30)
 
         status = manimlib.Text("Mueve tu mano para controlar el circulo", font_size=24)
         status.to_edge(manimlib.DOWN, buff=0.3)
         status.fix_in_frame()
+        self._last_hand_status_message = "Mueve tu mano para controlar el circulo"
 
         bind_hand_position_to_mobject(
             self,
             circle,
-            tracker,
+            self.tracker,
             reference_mobject=video_mob,
             update_fps=30,
             z_value=0.0,
@@ -410,15 +412,36 @@ class HandTrackingExample(manimlib.InteractiveScene):
                 message = "Gesto: pinch"
             else:
                 message = f"Gesto: {state.gesture}"
-            status.become(manimlib.Text(message, font_size=24).to_edge(manimlib.DOWN, buff=0.3))
-            status.fix_in_frame()
+
+            # Avoid rebuilding text every callback; this removes expensive per-frame work.
+            if message != self._last_hand_status_message:
+                status.become(manimlib.Text(message, font_size=24).to_edge(manimlib.DOWN, buff=0.3))
+                status.fix_in_frame()
+                self._last_hand_status_message = message
 
             if state.pinch:
                 circle.set_fill(color=manimlib.GREEN, opacity=0.9)
             else:
                 circle.set_fill(color=manimlib.YELLOW, opacity=0.85)
 
-        bind_hand_gesture_callback(self, tracker, _on_gesture, update_fps=20)
+        bind_hand_gesture_callback(self, self.tracker, _on_gesture, update_fps=20)
 
         self.add(video_mob, hand_mesh, circle, status)
-        self.hold_loop()
+
+        if self.file_writer.write_to_movie:
+            self.wait(10)
+            video_mob.stop()
+            unbind_hand_tracker_from_video(video_mob)
+            self.tracker.stop(timeout=2.0)
+        else:
+            self.hold_loop()
+
+    def on_close(self) -> None:
+        if hasattr(self, "video_mob"):
+            self.video_mob.stop()
+            unbind_hand_tracker_from_video(self.video_mob)
+
+        if hasattr(self, "tracker"):
+            self.tracker.stop(timeout=0.0)
+
+        super().on_close()

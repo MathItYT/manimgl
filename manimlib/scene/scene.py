@@ -891,7 +891,8 @@ class Scene(object):
         pass
 
     def on_close(self) -> None:
-        pass
+        """Exit hold_loop when window is closed."""
+        self.hold_on_wait = False
 
     def focus(self) -> None:
         """

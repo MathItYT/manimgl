@@ -136,12 +136,17 @@ class HandMotionTracker:
         self._thread.start()
 
     def stop(self, timeout: float = 2.0) -> None:
+        """Signal the tracker to stop and optionally wait a short timeout."""
+        if not self._running.is_set() and (self._thread is None or not self._thread.is_alive()):
+            return
+
         self._running.clear()
         try:
             self._frame_queue.put_nowait(np.empty((0, 0, 0), dtype=np.uint8))
         except Full:
             pass
-        if self._thread is not None:
+
+        if timeout > 0 and self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=timeout)
 
     def on_frame(self, frame: np.ndarray) -> None:
@@ -328,7 +333,7 @@ class HandMotionTracker:
                     except Empty:
                         continue
                     if frame.size == 0:
-                        continue
+                        break  # Stop signal received
 
                     try:
                         self._process_frame_with_solutions(hands, frame)
@@ -378,7 +383,7 @@ class HandMotionTracker:
                 except Empty:
                     continue
                 if frame.size == 0:
-                    continue
+                    break  # Stop signal received
 
                 try:
                     self._process_frame_with_tasks(mp, hand_landmarker, frame)
@@ -424,13 +429,40 @@ def bind_hand_tracker_to_video(
     source_iterator = video_mobject.iterator
     step = max(1, int(enqueue_every_n_frames))
 
+    active = threading.Event()
+    active.set()
+
+    def _cleanup() -> None:
+        if not active.is_set():
+            return
+        active.clear()
+        tracker.stop(timeout=0.0)
+
     def tapped_iterator():
-        for frame_index, frame in enumerate(source_iterator):
-            if frame_index % step == 0:
-                tracker.on_frame(frame.copy() if copy_frame else frame)
-            yield frame
+        try:
+            for frame_index, frame in enumerate(source_iterator):
+                if active.is_set() and frame_index % step == 0:
+                    tracker.on_frame(frame.copy() if copy_frame else frame)
+                yield frame
+        finally:
+            _cleanup()
+            close_method = getattr(source_iterator, "close", None)
+            if callable(close_method):
+                try:
+                    close_method()
+                except Exception:
+                    pass
 
     video_mobject.iterator = tapped_iterator()
+    video_mobject._hand_tracker = tracker
+    video_mobject._hand_tracker_cleanup = _cleanup
+
+
+def unbind_hand_tracker_from_video(video_mobject) -> None:
+    """Detaches tracker binding from a video mobject and signals tracker shutdown."""
+    cleanup = getattr(video_mobject, "_hand_tracker_cleanup", None)
+    if callable(cleanup):
+        cleanup()
 
 
 def bind_hand_position_to_mobject(
