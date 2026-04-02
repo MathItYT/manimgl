@@ -378,10 +378,6 @@ class VMobjectFromSVGPath(VMobject):
                 ]
                 func(*points)
 
-        # Get rid of the side effect of trailing "Z M" commands.
-        if self.has_new_path_started():
-            self.resize_points(self.get_num_points() - 2)
-
     def handle_arc(self, arc: se.Arc) -> None:
         if self.transform_cache is not None:
             transform, rot, shift = self.transform_cache

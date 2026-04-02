@@ -111,7 +111,7 @@ class _BaseTypstMobject(StringMobject):
         t2c: dict = dict(),
         isolate=(),
         protect=(),
-        use_labelled_svg: bool = True,
+        use_labelled_svg: bool = False,
         color=None,
         fill_color=None,
         fill_opacity: float | None = None,
@@ -127,17 +127,15 @@ class _BaseTypstMobject(StringMobject):
         self.typst_to_color_map = dict(**t2c, **typst_to_color_map)
         super().__init__(
             content,
+            fill_color=fill_color or color,
+            stroke_color=stroke_color or color,
+            stroke_width=stroke_width or 0.0,
+            fill_opacity=fill_opacity,
+            stroke_opacity=stroke_opacity,
             isolate=isolate,
             protect=protect,
             use_labelled_svg=use_labelled_svg,
             **kwargs,
-        )
-        self.set_style(
-            fill_color=color or fill_color,
-            fill_opacity=fill_opacity,
-            stroke_color=color or stroke_color,
-            stroke_width=stroke_width,
-            stroke_opacity=stroke_opacity,
         )
 
     def get_svg_string_by_content(self, content: str) -> str:
@@ -353,15 +351,10 @@ class TypstMobject(_BaseTypstMobject):
         )
         document = prefix + f"$ {content} $"
         return typst_to_svg(document)
-
-    def get_content_prefix_and_suffix(
-        self, is_labelled: bool
-    ) -> tuple[str, str]:
-        if is_labelled:
-            return "", ""
-        # In math mode, #text() doesn't work, so we can't apply color wrapping
-        # Color will be applied through the SVG path processing instead
-        return "", ""
+    
+    def get_content_prefix_and_suffix(self, is_labelled):
+        prefix, suffix = super().get_content_prefix_and_suffix(is_labelled)
+        return prefix + "$ ", " $" + suffix
 
     def get_configured_items(self) -> list[tuple[Span, dict[str, str]]]:
         # In math mode, we cannot inject Typst code for coloring
@@ -416,3 +409,32 @@ class TypstTextMobject(_BaseTypstMobject):
 
     def get_typst(self) -> str:
         return self.get_string()
+
+
+class MarkdownMobject(TypstTextMobject):
+    """Render Markdown text using Typst as an SVG mobject."""
+    def __init__(
+        self,
+        markdown: str,
+        font_size: int = 48,
+        text_font: str = "New Computer Modern",
+        math_font: str = "New Computer Modern Math",
+        **kwargs,
+    ):
+        super().__init__(
+            self._build_markdown_as_typst(markdown),
+            font_size=font_size,
+            text_font=text_font,
+            math_font=math_font,
+            **kwargs,
+        )
+    
+    @staticmethod
+    def _build_markdown_as_typst(markdown: str) -> str:
+        markdown_with_quotes = json.dumps(markdown, ensure_ascii=False)
+        template = f"""
+#import "@preview/cmarker:0.1.8"
+#import "@preview/mitex:0.2.6": mitex
+#cmarker.render({markdown_with_quotes}, math: mitex)
+"""
+        return template.strip()
