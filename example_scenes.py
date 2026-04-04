@@ -7,6 +7,8 @@ import threading
 imported_transcriber: bool = False
 imported_llm_scene_controller: bool = False
 imported_hand_tracking: bool = False
+imported_virtual_camera: bool = False
+imported_youtube_chat: bool = False
 
 try:
     from manimlib.extras.transcription import ElevenLabsRealtimeTranscriber, bind_transcriber_callback, bind_transcriber_to_text
@@ -25,6 +27,20 @@ except ImportError:
 try:
     from manimlib.extras.vision import HandMesh, HandMotionState, HandMotionTracker, bind_hand_gesture_callback, bind_hand_mesh_to_tracker, bind_hand_position_to_mobject, bind_hand_tracker_to_video, unbind_hand_tracker_from_video
     imported_hand_tracking = True
+except ImportError:
+    pass
+
+
+try:
+    from manimlib.extras.virtual_camera import bind_scene_to_virtual_camera
+    imported_virtual_camera = True
+except ImportError:
+    pass
+
+
+try:
+    from manimlib.extras.youtube_chat import YouTubeLiveChatClient, bind_youtube_chat_to_feed
+    imported_youtube_chat = True
 except ImportError:
     pass
 
@@ -190,6 +206,79 @@ class LLMExample(Example):
                 prompt_text = prompt.text or ""
                 prompt.become(manimlib.Text(prompt_text + char, font_size=24).to_edge(manimlib.DOWN, buff=0.5))
                 prompt.text = prompt_text + char
+
+
+class VirtualCameraExample(Example):
+    def setup(self) -> None:
+        if not imported_virtual_camera:
+            raise RuntimeError(
+                "bind_scene_to_virtual_camera is required for VirtualCameraExample. Install with: pip install \"manimgl[virtual_camera] @ git+https://github.com/MathItYT/manimgl\""
+            )
+        self.virtual_camera_sink = bind_scene_to_virtual_camera(
+            self,
+            fps=30,
+            frame_stride=2,
+            block_until_next_frame=False,
+        )
+        super().setup()
+
+    def construct(self) -> None:
+        title = manimlib.Text("ManimGL Virtual Camera", font_size=72)
+        subtitle = manimlib.Text("Virtual camera output", font_size=28)
+        manimlib.Group(title, subtitle).arrange(manimlib.DOWN)
+        self.add(title, subtitle)
+        self.play(manimlib.FadeIn(title), manimlib.FadeIn(subtitle))
+        self.wait(5)
+
+
+class YouTubeChatExample(manimlib.InteractiveScene):
+    """Render YouTube live chat messages into a fixed text overlay.
+
+    Set YOUTUBE_LIVE_VIDEO_ID to an active livestream video id (or full URL).
+    """
+
+    def construct(self) -> None:
+        if not imported_youtube_chat:
+            raise RuntimeError(
+                "YouTube chat extra is required for YouTubeChatExample. Install with: pip install \"manimgl[youtube_chat] @ git+https://github.com/MathItYT/manimgl\""
+            )
+
+        video_id = os.getenv("YOUTUBE_LIVE_VIDEO_ID")
+        if not video_id:
+            raise RuntimeError("Set YOUTUBE_LIVE_VIDEO_ID with a live video id or URL before running YouTubeChatExample")
+
+        self.chat_client = YouTubeLiveChatClient(video_id)
+
+        title = manimlib.TypstTextMobject("Sample text", font_size=40).to_edge(manimlib.UP, buff=0.4)
+        title.fix_in_frame()
+
+        chat_box = manimlib.Rectangle(width=11.6, height=6.0)
+        chat_box.set_stroke(color=manimlib.BLUE, width=2)
+        chat_box.set_fill(color=manimlib.BLACK, opacity=0.3)
+        chat_box.to_edge(manimlib.DOWN, buff=0.4)
+        chat_box.fix_in_frame()
+
+        bind_youtube_chat_to_feed(
+            self,
+            chat_box,
+            self.chat_client,
+            max_messages=8,
+            update_fps=8,
+            avatar_height=0.25,
+            text_font_size=20,
+            markdown_mobject_config={
+                "text_font": ["SF Pro Display", "Twitter Color Emoji"],
+            },
+            line_buff=0.12,
+        )
+
+        self.add(chat_box, title)
+        self.wait(60)
+
+    def on_close(self) -> None:
+        if hasattr(self, "chat_client"):
+            self.chat_client.stop(timeout=0.0)
+        super().on_close()
 
 
 class TranscriptionLLMExample(Example):

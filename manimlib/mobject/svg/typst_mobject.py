@@ -7,6 +7,7 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 import re
+import emoji
 
 from manimlib.config import manim_config
 from manimlib.mobject.svg.string_mobject import StringMobject
@@ -38,9 +39,11 @@ def _typst_document_prefix(font_size_pt: int, *, text_font: str = "", math_font:
         f"#show math.equation: set text(size: {font_size_pt}pt)",
     ]
     if text_font:
-        lines.append(f"#set text(font: {json.dumps(text_font, ensure_ascii=False)})")
+        text_font = json.dumps(text_font, ensure_ascii=False) if isinstance(text_font, str) else "(" + ", ".join(json.dumps(f, ensure_ascii=False) for f in text_font) + ")"
+        lines.append(f"#set text(font: {text_font})")
     if math_font:
-        lines.append(f"#show math.equation: set text(font: {json.dumps(math_font, ensure_ascii=False)})")
+        math_font = json.dumps(math_font, ensure_ascii=False) if isinstance(math_font, str) else "(" + ", ".join(json.dumps(f, ensure_ascii=False) for f in math_font) + ")"
+        lines.append(f"#show math.equation: set text(font: {math_font})")
     return "\n".join(lines) + "\n"
 
 
@@ -105,8 +108,8 @@ class _BaseTypstMobject(StringMobject):
         content: str,
         *,
         font_size: int = 48,
-        text_font: str = "",
-        math_font: str = "",
+        text_font: str | list[str] = "",
+        math_font: str | list[str] = "",
         typst_to_color_map: dict = dict(),
         t2c: dict = dict(),
         isolate=(),
@@ -129,7 +132,7 @@ class _BaseTypstMobject(StringMobject):
             content,
             fill_color=fill_color or color,
             stroke_color=stroke_color or color,
-            stroke_width=stroke_width or 0.0,
+            stroke_width=stroke_width,
             fill_opacity=fill_opacity,
             stroke_opacity=stroke_opacity,
             isolate=isolate,
@@ -322,8 +325,8 @@ class TypstMobject(_BaseTypstMobject):
         self,
         *typst_strings: str,
         font_size: int = 48,
-        text_font: str = "New Computer Modern",
-        math_font: str = "New Computer Modern Math",
+        text_font: str | list[str] = ["New Computer Modern", "Twitter Color Emoji"],
+        math_font: str | list[str] = ["New Computer Modern Math", "Twitter Color Emoji"],
         **kwargs,
     ):
         typst_string = " ".join(typst_strings).strip()
@@ -378,8 +381,8 @@ class TypstTextMobject(_BaseTypstMobject):
         self,
         text: str,
         font_size: int = 48,
-        text_font: str = "New Computer Modern",
-        math_font: str = "New Computer Modern Math",
+        text_font: str | list[str] = ["New Computer Modern", "Twitter Color Emoji"],
+        math_font: str | list[str] = ["New Computer Modern Math", "Twitter Color Emoji"],
         **kwargs,
     ):
         self.text = text
@@ -417,8 +420,8 @@ class MarkdownMobject(TypstTextMobject):
         self,
         markdown: str,
         font_size: int = 48,
-        text_font: str = "New Computer Modern",
-        math_font: str = "New Computer Modern Math",
+        text_font: str | list[str] = ["New Computer Modern", "Twitter Color Emoji"],
+        math_font: str | list[str] = ["New Computer Modern Math", "Twitter Color Emoji"],
         **kwargs,
     ):
         super().__init__(
@@ -431,6 +434,7 @@ class MarkdownMobject(TypstTextMobject):
     
     @staticmethod
     def _build_markdown_as_typst(markdown: str) -> str:
+        markdown = emoji.emojize(markdown, language="alias")
         markdown_with_quotes = json.dumps(markdown, ensure_ascii=False)
         template = f"""
 #import "@preview/cmarker:0.1.8"

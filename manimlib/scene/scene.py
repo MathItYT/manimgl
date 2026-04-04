@@ -86,6 +86,7 @@ class Scene(object):
         self.preview_while_skipping = preview_while_skipping
         self.presenter_mode = presenter_mode
         self.default_wait_time = default_wait_time
+        self.frame_sinks: list[object] = []
 
         self.camera_config = merge_dicts_recursively(
             manim_config.camera,         # Global default
@@ -147,6 +148,30 @@ class Scene(object):
     def get_window(self) -> Window | None:
         return self.window
 
+    def add_frame_sink(self, frame_sink: object) -> object:
+        self.frame_sinks.append(frame_sink)
+        return frame_sink
+
+    def remove_frame_sink(self, frame_sink: object) -> None:
+        if frame_sink in self.frame_sinks:
+            self.frame_sinks.remove(frame_sink)
+
+    def clear_frame_sinks(self) -> None:
+        while self.frame_sinks:
+            frame_sink = self.frame_sinks.pop()
+            close = getattr(frame_sink, "close", None)
+            if callable(close):
+                close()
+
+    def _emit_frame_sinks(self) -> None:
+        for frame_sink in list(self.frame_sinks):
+            try:
+                push_frame = getattr(frame_sink, "push_frame", None)
+                if callable(push_frame):
+                    push_frame(self.camera)
+            except Exception:
+                log.exception("Frame sink failed while consuming a frame")
+
     def run(self) -> None:
         self.virtual_animation_start_time: float = 0
         self.real_animation_start_time: float = time.time()
@@ -180,6 +205,7 @@ class Scene(object):
     def tear_down(self) -> None:
         self.stop_skipping()
         self.file_writer.finish()
+        self.clear_frame_sinks()
         if self.window:
             self.window.destroy()
             self.window = None
@@ -197,7 +223,7 @@ class Scene(object):
             "you can interact with the scene. " +
             "Press `command + q` or `esc` to quit"
         )
-        self.skip_animations = False
+        self.stop_skipping()
         while not self.is_window_closing():
             self.update_frame(1 / self.camera.fps)
             self.emit_frame()
@@ -244,8 +270,8 @@ class Scene(object):
 
     def update_frame(self, dt: float = 0, force_draw: bool = False) -> None:
         self.increment_time(dt)
-        self.update_mobjects(dt)
         self.update_self(dt)
+        self.update_mobjects(dt)
         if self.skip_animations and not force_draw:
             return
 
@@ -258,7 +284,8 @@ class Scene(object):
             self.window._window.dispatch_events()
             return
 
-        self.camera.capture(*self.render_groups, swap=not self.file_writer.write_to_movie)
+        self.camera.capture(*self.render_groups, swap=not self.file_writer.write_to_movie and len(self.frame_sinks) == 0)
+        self._emit_frame_sinks()
 
         if self.window and not self.skip_animations:
             vt = self.time - self.virtual_animation_start_time

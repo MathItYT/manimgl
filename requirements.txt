@@ -14,6 +14,7 @@ moderngl_window
 numpy
 Pillow
 pyaudio
+emoji
 pydub
 pygments
 PyOpenGL

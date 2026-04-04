@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 import moderngl_window as mglw
+from pyglet.window import key as PygletWindowKeys
 from moderngl_window.context.pyglet.window import (
     Window as PygletWindow,
 )
@@ -228,6 +229,12 @@ class Window(PygletWindow):
 
     @note_undrawn_event
     def on_key_press(self, symbol: int, modifiers: int) -> None:
+        if symbol == PygletWindowKeys.ESCAPE and self.scene is not None:
+            if getattr(self.scene, "file_writer", None) is not None and getattr(self.scene.file_writer, "save_last_frame", False):
+                self.scene.file_writer.cache_last_frame(swap=False)
+            self.scene.quit_interaction = True
+            self.scene.hold_on_wait = False
+            return
         self.pressed_keys.add(symbol)  # Modifiers?
         super().on_key_press(symbol, modifiers)
         if not self.scene:
@@ -265,10 +272,13 @@ class Window(PygletWindow):
 
     @note_undrawn_event
     def on_close(self) -> None:
-        super().on_close()
-        if not self.scene:
+        if self.scene is not None:
+            if getattr(self.scene, "file_writer", None) is not None and getattr(self.scene.file_writer, "save_last_frame", False):
+                self.scene.file_writer.cache_last_frame(swap=False)
+            self.scene.quit_interaction = True
+            self.scene.on_close()
             return
-        self.scene.on_close()
+        super().on_close()
 
     def is_key_pressed(self, symbol: int) -> bool:
         return symbol in self.pressed_keys

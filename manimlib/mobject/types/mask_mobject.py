@@ -34,6 +34,10 @@ class MaskMobject(Mobject):
 
         super().__init__(**kwargs)
 
+        # MaskMobject binds per-instance runtime textures.
+        # Keep wrappers from being batched together across instances.
+        self.uniforms["_mask_uid"] = float(id(self))
+
         ctx = self.scene.camera.ctx
         size = self.scene.camera.get_pixel_shape()
 
@@ -63,10 +67,9 @@ class MaskMobject(Mobject):
         pass
 
     def update(self, dt=0, recurse=True):
+        camera = self.scene.camera
+        old_fbo = camera.fbo
         try:
-            camera = self.scene.camera
-            old_fbo = camera.fbo
-
             camera.fbo = self.src_fbo
             camera.show(self.src_mobject)
             camera.capture(
@@ -82,11 +85,11 @@ class MaskMobject(Mobject):
                 transparent=True,
             )
             camera.hide(self.mask_mobject)
-
-            camera.fbo = old_fbo
-            camera.fbo.use()
         except gl.error.GLError:
             pass
+        finally:
+            camera.fbo = old_fbo
+            camera.fbo.use()
 
         super().update(dt, recurse)
         return self

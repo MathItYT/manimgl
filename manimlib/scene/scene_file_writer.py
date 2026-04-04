@@ -78,6 +78,10 @@ class SceneFileWriter(object):
         self.progress_display: ProgressDisplay | None = None
         self.ended_with_interrupt: bool = False
 
+        # Cache last frame for `-s` when the window/context is closing
+        self._last_frame_bytes: bytes | None = None
+        self._last_frame_size: tuple[int, int] | None = None
+
         # --- Nuevas variables para PyAudio ---
         self.pyaudio_instance = None
         self.mic_stream = None
@@ -309,10 +313,50 @@ class SceneFileWriter(object):
                 self.add_sound_to_video()
             self.print_file_ready_message(self.get_movie_file_path())
         if self.save_last_frame:
-            self.scene.update_frame(force_draw=True)
-            self.save_final_image(self.scene.get_image())
+            from manimlib.scene.scene import EndScene
+            image = self._get_cached_last_image()
+            if image is None:
+                try:
+                    self.scene.update_frame(force_draw=True)
+                except EndScene:
+                    pass
+                try:
+                    image = self.scene.get_image()
+                except Exception:
+                    image = self._get_cached_last_image()
+                    if image is None:
+                        raise
+            self.save_final_image(image)
         if self.should_open_file():
             self.open_file()
+
+    def cache_last_frame(self, *, swap: bool = False) -> None:
+        """Cache the current frame buffer as raw bytes for later saving.
+
+        Intended for the `-s` (save last frame) option when the window is
+        requested to close and we might not be able to safely re-render.
+        """
+        try:
+            camera = self.scene.camera
+            self._last_frame_size = camera.get_pixel_shape()
+            self._last_frame_bytes = camera.get_raw_fbo_data(swap=swap)
+        except Exception:
+            # If the GL context is already gone, there's nothing to cache.
+            pass
+
+    def _get_cached_last_image(self):
+        if self._last_frame_bytes is None or self._last_frame_size is None:
+            return None
+        from PIL import Image
+        return Image.frombytes(
+            "RGBA",
+            self._last_frame_size,
+            self._last_frame_bytes,
+            "raw",
+            "RGBA",
+            0,
+            -1,
+        )
 
     def open_movie_pipe(self, file_path: str) -> None:
         stem, ext = os.path.splitext(file_path)
@@ -428,6 +472,8 @@ class SceneFileWriter(object):
         # --------------------------------------------------------
         if self.write_to_movie:
             raw_bytes = camera.get_raw_fbo_data()
+            self._last_frame_bytes = raw_bytes
+            self._last_frame_size = camera.get_pixel_shape()
             self.write_queue.put(raw_bytes)
 
     def close_movie_pipe(self) -> None:

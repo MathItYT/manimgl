@@ -7,7 +7,7 @@ import svgelements as se
 import io
 from pathlib import Path
 
-from manimlib.constants import RIGHT
+from manimlib.constants import RIGHT, UP, BLACK
 from manimlib.constants import TAU
 from manimlib.logger import log
 from manimlib.mobject.geometry import Circle
@@ -62,6 +62,7 @@ class SVGMobject(VMobject):
         should_center: bool = True,
         height: float | None = None,
         width: float | None = None,
+        unbatch: bool = False,
         # Style that overrides the original svg
         color: ManimColor = None,
         fill_color: ManimColor = None,
@@ -81,8 +82,11 @@ class SVGMobject(VMobject):
             stroke_opacity=None,
         ),
         path_string_config: dict = dict(),
+        needs_flip: bool = True,
         **kwargs
     ):
+        self.needs_flip = needs_flip
+        self.unbatch = unbatch
         if svg_string != "":
             self.svg_string = svg_string
         elif file_name != "":
@@ -129,7 +133,12 @@ class SVGMobject(VMobject):
             SVG_HASH_TO_MOB_MAP[hash_val] = [sm.copy() for sm in submobs]
 
         self.add(*submobs)
-        self.flip(RIGHT)  # Flip y
+        if self.needs_flip:
+            self.flip(RIGHT)  # Flip y
+        if self.unbatch:
+            for mob in self.get_family():
+                if hasattr(mob, "uniforms"):
+                    mob.uniforms["_svg_uid"] = float(id(mob))
 
     @property
     def hash_seed(self) -> tuple:
@@ -219,14 +228,19 @@ class SVGMobject(VMobject):
                 mob = self.polyline_to_mobject(shape)
             # elif isinstance(shape, se.Text):
             #     mob = self.text_to_mobject(shape)
+            elif isinstance(shape, se.Image):
+                mob = self.image_to_mobject(shape)
+                if mob is None:
+                    log.warning("Only SVG images with embedded base64 data are supported. Skipping image element.")
+                    continue
             elif type(shape) == se.SVGElement:
                 continue
             else:
                 log.warning("Unsupported element type: %s", type(shape))
                 continue
-            if not mob.has_points():
+            if not mob.has_points() and not isinstance(mob, SVGMobject):
                 continue
-            if isinstance(shape, se.GraphicObject):
+            if isinstance(shape, se.GraphicObject) and not isinstance(mob, SVGMobject):
                 self.apply_style_to_mobject(mob, shape)
             if isinstance(shape, se.Transformable) and shape.apply:
                 self.handle_transform(mob, shape.transform)
@@ -250,11 +264,11 @@ class SVGMobject(VMobject):
         shape: se.GraphicObject
     ) -> VMobject:
         mob.set_style(
-            stroke_width=shape.stroke_width,
-            stroke_color=shape.stroke.hexrgb,
-            stroke_opacity=shape.stroke.opacity,
-            fill_color=shape.fill.hexrgb,
-            fill_opacity=shape.fill.opacity
+            stroke_width=0 if not shape.stroke.hexrgb else shape.stroke_width,
+            stroke_color=shape.stroke.hexrgb or BLACK,
+            stroke_opacity=0 if not shape.stroke.hexrgb else shape.stroke.opacity,
+            fill_color=shape.fill.hexrgb or BLACK,
+            fill_opacity=0 if not shape.fill.hexrgb else shape.fill.opacity,
         )
         return mob
 
@@ -329,6 +343,20 @@ class SVGMobject(VMobject):
         ]
         return Polyline(*points)
 
+    def image_to_mobject(self, image: se.Image) -> SVGMobject | None:
+        try:
+            svg_string = image.data.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        mob = SVGMobject(svg_string=svg_string, needs_flip=False, unbatch=True)
+        if image.height:
+            mob.set_height(image.height)
+        if image.width:
+            mob.set_width(image.width)
+        mob.shift((image.x or 0) * RIGHT + (image.width or 0) * RIGHT / 2)
+        mob.shift((image.y or 0) * UP + (image.height or 0) * UP / 2)
+        return mob
+
     def text_to_mobject(self, text: se.Text):
         pass
 
@@ -358,6 +386,139 @@ class VMobjectFromSVGPath(VMobject):
             points = PATH_TO_POINTS[path_string]
             self.set_points(points)
 
+    @staticmethod
+    def _polygon_signed_area(poly: np.ndarray) -> float:
+        x = poly[:, 0]
+        y = poly[:, 1]
+        return 0.5 * float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y))
+
+    @staticmethod
+    def _point_in_polygon(point: np.ndarray, poly: np.ndarray) -> bool:
+        # Ray casting point-in-polygon test
+        x, y = float(point[0]), float(point[1])
+        n = len(poly)
+        if n < 3:
+            return False
+        inside = False
+        xj, yj = float(poly[-1, 0]), float(poly[-1, 1])
+        for i in range(n):
+            xi, yi = float(poly[i, 0]), float(poly[i, 1])
+            if (yi > y) != (yj > y):
+                denom = (yj - yi)
+                if denom != 0:
+                    x_intersect = (xj - xi) * (y - yi) / denom + xi
+                    if x < x_intersect:
+                        inside = not inside
+            xj, yj = xi, yi
+        return inside
+
+    @classmethod
+    def _find_point_inside_polygon(cls, poly: np.ndarray) -> np.ndarray:
+        xmin, ymin = poly.min(axis=0)
+        xmax, ymax = poly.max(axis=0)
+        w = float(xmax - xmin)
+        h = float(ymax - ymin)
+        cx = float(0.5 * (xmin + xmax))
+        cy = float(0.5 * (ymin + ymax))
+        candidates = [
+            (cx, cy),
+            (float(xmin + 0.25 * w), float(ymin + 0.25 * h)),
+            (float(xmin + 0.75 * w), float(ymin + 0.25 * h)),
+            (float(xmin + 0.25 * w), float(ymin + 0.75 * h)),
+            (float(xmin + 0.75 * w), float(ymin + 0.75 * h)),
+        ]
+        for px, py in candidates:
+            p = np.array([px, py], dtype=np.float32)
+            if cls._point_in_polygon(p, poly):
+                return p
+        # Fallback: midpoint of first edge (may be on boundary)
+        return 0.5 * (poly[0] + poly[1])
+
+    def _normalize_subpath_orientations(self) -> None:
+        # ManimGL's fill treats oppositely-oriented subpaths as subtractive.
+        # SVG's non-zero fill rule fills disjoint subpaths regardless of
+        # orientation.
+        #
+        # Be conservative: only normalize winding when the path consists of
+        # disjoint contours. If any contour appears nested (typical for true
+        # holes like inside glyphs), leave the original winding untouched.
+        subpaths = self.get_subpaths()
+        if len(subpaths) <= 1:
+            return
+
+        # Compute a cheap bbox per contour using all points (anchors + handles)
+        # so curved outlines don't get under-approximated.
+        areas: list[float] = []
+        bboxes: list[tuple[float, float, float, float] | None] = []
+        for sp in subpaths:
+            if len(sp) == 0:
+                areas.append(0.0)
+                bboxes.append(None)
+                continue
+
+            pts2d = sp[:, :2].astype(np.float32)
+            xmin, ymin = pts2d.min(axis=0)
+            xmax, ymax = pts2d.max(axis=0)
+            bboxes.append((float(xmin), float(ymin), float(xmax), float(ymax)))
+
+            anchors = sp[::2]
+            poly = anchors[:, :2].astype(np.float32)
+            if len(poly) >= 2 and np.allclose(poly[0], poly[-1], atol=1e-6):
+                poly = poly[:-1]
+            if len(poly) < 3:
+                areas.append(0.0)
+            else:
+                areas.append(self._polygon_signed_area(poly))
+
+        # If any contour's bbox is fully contained in another, assume the path
+        # intentionally encodes holes and don't touch winding.
+        tol = 1e-6
+        for i, bbi in enumerate(bboxes):
+            if bbi is None:
+                continue
+            xi0, yi0, xi1, yi1 = bbi
+            for j, bbj in enumerate(bboxes):
+                if i == j or bbj is None:
+                    continue
+                xj0, yj0, xj1, yj1 = bbj
+                if (
+                    (xi0 >= xj0 - tol) and (yi0 >= yj0 - tol) and
+                    (xi1 <= xj1 + tol) and (yi1 <= yj1 + tol) and
+                    (
+                        (xi0 > xj0 + tol) or (yi0 > yj0 + tol) or
+                        (xi1 < xj1 - tol) or (yi1 < yj1 - tol)
+                    )
+                ):
+                    return
+
+        # No nesting detected: unify all non-degenerate contours to the winding
+        # of the largest contour.
+        if not areas:
+            return
+        target_area = max(areas, key=lambda a: abs(a))
+        if abs(target_area) < 1e-8:
+            return
+        desired_positive = (target_area > 0)
+
+        new_subpaths: list[np.ndarray] = []
+        needs_rebuild = False
+        for sp, area in zip(subpaths, areas):
+            if abs(area) < 1e-8:
+                new_subpaths.append(sp)
+                continue
+            if (area > 0) != desired_positive:
+                new_subpaths.append(sp[::-1].copy())
+                needs_rebuild = True
+            else:
+                new_subpaths.append(sp)
+
+        if not needs_rebuild:
+            return
+
+        self.clear_points()
+        for sp in new_subpaths:
+            self.add_subpath(sp)
+
     def handle_commands(self) -> None:
         segment_class_to_func_map = {
             se.Move: (self.start_new_path, ("end",)),
@@ -377,6 +538,12 @@ class VMobjectFromSVGPath(VMobject):
                     for attr_name in attr_names
                 ]
                 func(*points)
+        
+        # Get rid of the side effect of trailing 'Z M' commands.
+        if self.has_new_path_started():
+            self.resize_points(self.get_num_points() - 2)
+
+        self._normalize_subpath_orientations()
 
     def handle_arc(self, arc: se.Arc) -> None:
         if self.transform_cache is not None:

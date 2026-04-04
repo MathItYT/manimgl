@@ -25,6 +25,18 @@ If you want realtime hand tracking and gesture-driven interactions over `VideoMo
 pip install "manimgl[vision] @ git+https://github.com/MathItYT/manimgl"
 ```
 
+If you want to stream the current ManimGL output into a virtual camera, install with the `virtual_camera` extra:
+
+```bash
+pip install "manimgl[virtual_camera] @ git+https://github.com/MathItYT/manimgl"
+```
+
+If you want to render YouTube live chat messages inside your scene, install with the `youtube_chat` extra:
+
+```bash
+pip install "manimgl[youtube_chat] @ git+https://github.com/MathItYT/manimgl"
+```
+
 ## How to run?
 Create an `manimlib.InteractiveScene` subclass in a `main.py` (or any other filename else) module.
 
@@ -318,6 +330,127 @@ Run the scene:
 
 ```bash
 manimgl main.py HandTrackingMinimal -o
+```
+
+## Virtual Camera Extra
+
+The `virtual_camera` extra sends rendered frames to a system virtual camera.
+
+### Install
+
+```bash
+pip install "manimgl[virtual_camera] @ git+https://github.com/MathItYT/manimgl"
+```
+
+### What it provides
+
+- `VirtualCameraSink`: pushes the current rendered frame into a virtual camera.
+- `bind_scene_to_virtual_camera`: attaches the sink to a `Scene`.
+- `unbind_scene_from_virtual_camera`: detaches and closes the sink.
+
+Import path:
+
+```python
+from manimlib.extras.virtual_camera import VirtualCameraSink, bind_scene_to_virtual_camera
+```
+
+### Minimal example
+
+```python
+import manimlib
+
+from manimlib.extras.virtual_camera import bind_scene_to_virtual_camera
+
+
+class VirtualCameraMinimal(manimlib.InteractiveScene):
+    def setup(self) -> None:
+        self.virtual_camera_sink = bind_scene_to_virtual_camera(self, fps=30)
+
+    def construct(self) -> None:
+        title = manimlib.Text("ManimGL Virtual Camera", font_size=72)
+        self.add(title)
+        self.wait(5)
+```
+
+Run the scene:
+
+```bash
+manimgl main.py VirtualCameraMinimal
+```
+
+Then in your video app (OBS, Zoom, Teams, Meet, etc.) choose the virtual camera exposed by `pyvirtualcam` as the camera source.
+
+## YouTube Chat Extra
+
+The `youtube_chat` extra streams YouTube live chat messages and exposes helpers to render them in-scene.
+
+### Install
+
+```bash
+pip install "manimgl[youtube_chat] @ git+https://github.com/MathItYT/manimgl"
+```
+
+### Environment variable
+
+Set the target live video id (or full YouTube live URL) before running scenes:
+
+```bash
+# PowerShell
+$env:YOUTUBE_LIVE_VIDEO_ID="your_live_video_id_or_url"
+```
+
+### What it provides
+
+- `YouTubeLiveChatClient`: background client that receives live chat messages.
+- `bind_youtube_chat_callback`: dispatches incoming messages to a callback.
+- `bind_youtube_chat_to_feed`: renders a rolling chat feed with circular masked avatars and bold author names.
+- `bind_youtube_chat_to_text`: simple text-only binding for lightweight use cases.
+
+Import path:
+
+```python
+from manimlib.extras.youtube_chat import YouTubeLiveChatClient, bind_youtube_chat_to_feed
+```
+
+### Minimal example
+
+```python
+import os
+import manimlib
+
+from manimlib.extras.youtube_chat import YouTubeLiveChatClient, bind_youtube_chat_to_feed
+
+
+class YouTubeChatMinimal(manimlib.InteractiveScene):
+    def construct(self) -> None:
+        video_id = os.getenv("YOUTUBE_LIVE_VIDEO_ID")
+        if not video_id:
+            raise RuntimeError("Set YOUTUBE_LIVE_VIDEO_ID before running this scene")
+
+        chat_client = YouTubeLiveChatClient(video_id)
+
+        chat_anchor = manimlib.Dot(radius=0.001)
+        chat_anchor.to_edge(manimlib.DOWN, buff=1.0)
+        chat_anchor.fix_in_frame()
+
+        bind_youtube_chat_to_feed(
+            self,
+            chat_anchor,
+            chat_client,
+            max_messages=8,
+            update_fps=8,
+            avatar_height=0.55,
+            text_font_size=20,
+        )
+
+        self.add(chat_anchor)
+        self.wait(60)
+```
+
+Run the scene:
+
+```bash
+manimgl main.py YouTubeChatMinimal
 ```
 
 ## LLM Scene Control (Safe Structured Outputs)
