@@ -32,7 +32,7 @@ def _typst_executable() -> str:
     return typst
 
 
-def _typst_document_prefix(font_size_pt: int, *, text_font: str = "", math_font: str = "") -> str:
+def _typst_document_prefix(font_size_pt: int, *, text_font: str = "", math_font: str = "", code_font: str = "") -> str:
     lines = [
         "#set page(width: auto, height: auto, margin: 0pt, fill: none)",
         f"#set text(size: {font_size_pt}pt)",
@@ -44,6 +44,9 @@ def _typst_document_prefix(font_size_pt: int, *, text_font: str = "", math_font:
     if math_font:
         math_font = json.dumps(math_font, ensure_ascii=False) if isinstance(math_font, str) else "(" + ", ".join(json.dumps(f, ensure_ascii=False) for f in math_font) + ")"
         lines.append(f"#show math.equation: set text(font: {math_font})")
+    if code_font:
+        code_font = json.dumps(code_font, ensure_ascii=False) if isinstance(code_font, str) else "(" + ", ".join(json.dumps(f, ensure_ascii=False) for f in code_font) + ")"
+        lines.append(f"#show raw: set text(font: {code_font})")
     return "\n".join(lines) + "\n"
 
 
@@ -110,6 +113,7 @@ class _BaseTypstMobject(StringMobject):
         font_size: int = 48,
         text_font: str | list[str] = "",
         math_font: str | list[str] = "",
+        code_font: str | list[str] = "",
         typst_to_color_map: dict = dict(),
         t2c: dict = dict(),
         isolate=(),
@@ -127,6 +131,7 @@ class _BaseTypstMobject(StringMobject):
         self.font_size = font_size
         self.text_font = text_font
         self.math_font = math_font
+        self.code_font = code_font
         self.typst_to_color_map = dict(**t2c, **typst_to_color_map)
         super().__init__(
             content,
@@ -327,6 +332,7 @@ class TypstMobject(_BaseTypstMobject):
         font_size: int = 48,
         text_font: str | list[str] = ["New Computer Modern", "Twitter Color Emoji"],
         math_font: str | list[str] = ["New Computer Modern Math", "Twitter Color Emoji"],
+        code_font: str | list[str] = ["JetBrains Mono", "Twitter Color Emoji"],
         **kwargs,
     ):
         typst_string = " ".join(typst_strings).strip()
@@ -338,6 +344,7 @@ class TypstMobject(_BaseTypstMobject):
             font_size=font_size,
             text_font=text_font,
             math_font=math_font,
+            code_font=code_font,
             **kwargs,
         )
         self.set_color_by_typst_to_color_map(self.typst_to_color_map)
@@ -351,6 +358,7 @@ class TypstMobject(_BaseTypstMobject):
             48,  # Reference size, not self.font_size
             text_font=self.text_font,
             math_font=self.math_font,
+            code_font=self.code_font,
         )
         document = prefix + f"$ {content} $"
         return typst_to_svg(document)
@@ -383,6 +391,7 @@ class TypstTextMobject(_BaseTypstMobject):
         font_size: int = 48,
         text_font: str | list[str] = ["New Computer Modern", "Twitter Color Emoji"],
         math_font: str | list[str] = ["New Computer Modern Math", "Twitter Color Emoji"],
+        code_font: str | list[str] = ["JetBrains Mono", "Twitter Color Emoji"],
         **kwargs,
     ):
         self.text = text
@@ -391,6 +400,7 @@ class TypstTextMobject(_BaseTypstMobject):
             font_size=font_size,
             text_font=text_font,
             math_font=math_font,
+            code_font=code_font,
             **kwargs,
         )
         self.set_color_by_typst_to_color_map(self.typst_to_color_map)
@@ -400,7 +410,7 @@ class TypstTextMobject(_BaseTypstMobject):
     def get_svg_string_by_content(self, content: str) -> str:
         # Always render at 48pt (the reference size)
         # Font size scaling happens via self.scale() in __init__
-        prefix = _typst_document_prefix(48, text_font=self.text_font)
+        prefix = _typst_document_prefix(48, text_font=self.text_font, code_font=self.code_font, math_font=self.math_font)
         document = prefix + content
         return typst_to_svg(document)
 
@@ -422,6 +432,7 @@ class MarkdownMobject(TypstTextMobject):
         font_size: int = 48,
         text_font: str | list[str] = ["New Computer Modern", "Twitter Color Emoji"],
         math_font: str | list[str] = ["New Computer Modern Math", "Twitter Color Emoji"],
+        code_font: str | list[str] = ["JetBrains Mono", "Twitter Color Emoji"],
         **kwargs,
     ):
         super().__init__(
@@ -429,6 +440,7 @@ class MarkdownMobject(TypstTextMobject):
             font_size=font_size,
             text_font=text_font,
             math_font=math_font,
+            code_font=code_font,
             **kwargs,
         )
     
