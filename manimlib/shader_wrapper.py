@@ -560,7 +560,7 @@ class VShaderWrapper(ShaderWrapper):
         # Important to make sure dtype is floating point (not fixed point)
         # so that alpha values can be negative and are not clipped
         fill_texture = ctx.texture(
-            size=double_size, components=4, dtype="f2"
+            size=double_size, components=4, dtype="f4"
         )
         # Use another one to keep track of depth
         depth_texture = ctx.texture(

@@ -127,6 +127,10 @@ class VMobject(Mobject):
         self.stroke_opacity = stroke_opacity
         self.stroke_width = stroke_width
         self.stroke_behind = stroke_behind
+        # If True, stroke_behind may be automatically toggled to avoid
+        # visible interior AA artifacts when fill and stroke have identical
+        # rgba values (see _update_stroke_behind_for_matching_fill).
+        self._auto_stroke_behind_for_matching_fill = not stroke_behind
         self.background_image_file = background_image_file
         self.long_lines = long_lines
         self.joint_type = joint_type
@@ -200,6 +204,8 @@ class VMobject(Mobject):
                     else mob._data_defaults
                 )
                 data["fill_border_width"] = border_width
+
+        self._update_stroke_behind_for_matching_fill(recurse=recurse)
         return self
 
     def set_stroke(
@@ -236,10 +242,53 @@ class VMobject(Mobject):
                 if mob.stroke_behind != behind:
                     mob.stroke_behind = behind
                     mob.refresh_shader_wrapper_id()
+                    # A manual change to stroke_behind should disable the
+                    # auto behaviour for this mobject going forward.
+                    mob._auto_stroke_behind_for_matching_fill = False
 
         if flat is not None:
             self.set_flat_stroke(flat)
 
+        self._update_stroke_behind_for_matching_fill(recurse=recurse)
+
+        return self
+
+    def _update_stroke_behind_for_matching_fill(
+        self, recurse: bool = True
+    ) -> Self:
+        """Prevent interior stroke AA artifacts when fill == stroke.
+
+        When a VMobject has both fill and stroke, and their rgba values match,
+        rendering stroke on top can make the stroke anti-aliasing visible on
+        both sides of the boundary (outside and slightly inside the fill).
+        In that specific case, rendering the stroke behind the fill produces
+        the same visual result (since colors match) but removes the inner AA.
+
+        This auto behaviour is disabled for any mobject where the user has
+        explicitly changed `stroke_behind`.
+        """
+        mobs = self.get_family(recurse) if recurse else [self]
+        for mob in mobs:
+            if not getattr(
+                mob, "_auto_stroke_behind_for_matching_fill", True
+            ):
+                continue
+            if not mob.has_points():
+                continue
+            if not (mob.has_fill() and mob.has_stroke()):
+                desired = False
+            else:
+                data = mob.data
+                desired = bool(
+                    np.allclose(
+                        data["fill_rgba"],
+                        data["stroke_rgba"],
+                        atol=1e-6,
+                    )
+                )
+            if mob.stroke_behind != desired:
+                mob.stroke_behind = desired
+                mob.refresh_shader_wrapper_id()
         return self
 
     def set_backstroke(
