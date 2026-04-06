@@ -224,6 +224,16 @@ def parse_cli():
             help="Automatically reload Python modules to pick up code changes " +
                  "across different files",
         )
+        parser.add_argument(
+            "--threaded",
+            action="store_true",
+            help="Run scene logic on a worker thread while keeping window + OpenGL on the main thread",
+        )
+        parser.add_argument(
+            "--parallel_animations",
+            action="store_true",
+            help="Update disjoint animations in parallel using threads (experimental)",
+        )
         args = parser.parse_args()
         args.write_file = any([args.write_file, args.open, args.finder])
         return args
@@ -295,6 +305,14 @@ def update_file_writer_config(config: Dict, args: Namespace):
 def update_scene_config(config: Dict, args: Namespace):
     scene_config = config.scene
     start, end = get_animations_numbers(args)
+
+    threaded = bool(scene_config.get("threaded", False))
+    if getattr(args, "threaded", False):
+        threaded = True
+
+    parallel_animations = bool(scene_config.get("parallel_animations", False))
+    if getattr(args, "parallel_animations", False):
+        parallel_animations = True
     scene_config.update(
         # Note, Scene.__init__ makes use of both manimlib.camera and
         # manimlib.file_writer below, so the arguments here are just for
@@ -305,6 +323,8 @@ def update_scene_config(config: Dict, args: Namespace):
         start_at_animation_number=start,
         end_at_animation_number=end,
         presenter_mode=args.presenter_mode,
+        threaded=threaded,
+        parallel_animations=parallel_animations,
     )
     if args.leave_progress_bars:
         scene_config.leave_progress_bars = True

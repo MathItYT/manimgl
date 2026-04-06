@@ -5,6 +5,7 @@ import numpy as np
 import moderngl
 from PIL import Image
 import pathlib
+import threading
 
 from manimlib.constants import DL, DR, UL, UR
 from manimlib.mobject.mobject import Mobject
@@ -107,16 +108,10 @@ class VideoMobject(ImageMobject):
     def __init__(
         self,
         iterator: Iterator[np.ndarray],
-        fps: float,
         **kwargs,
     ):
         self.iterator = iterator
-        self.fps = fps
-        self.update_each = 30 / self.fps
         super().__init__(next(iterator), **kwargs)
-        self.frame_counter: float = 0.0
-        self.passed_frames: int = 0
-        self.speed = 1.0
 
     @staticmethod
     def updater(mob: "VideoMobject", dt: float):
@@ -124,23 +119,23 @@ class VideoMobject(ImageMobject):
             mob.stop()
             return
         try:
-            mob.frame_counter += mob.speed * dt * mob.fps
-            frame_delta = round(mob.frame_counter) - mob.passed_frames
-
-            if frame_delta > 0:
-                frame = None
-                for _ in range(frame_delta):
-                    frame = next(mob.iterator)
-
-                mob.passed_frames = round(mob.frame_counter)
-
-                if frame is not None:
-                    # REGLA DE ORO (Zero-Copy) aplicada aquí
-                    if mob.shader_wrapper is not None:
-                        texture = mob.shader_wrapper.textures[0]
-                        texture.write(frame)
-                    else:
-                        mob.texture_paths["Texture"] = frame
+            frame = next(mob.iterator)
+            if mob.shader_wrapper is not None:
+                texture = mob.shader_wrapper.textures[0]
+                # In threaded preview mode, updaters may run off the
+                # main OpenGL thread; texture writes must be scheduled
+                # on the main thread.
+                try:
+                    from manimlib.scene.scene import get_main_thread_caller
+                    caller = get_main_thread_caller()
+                except Exception:
+                    caller = None
+                if caller is not None and not caller.is_main_thread():
+                    caller.call(texture.write, frame)
+                else:
+                    texture.write(frame)
+            else:
+                mob.texture_paths["Texture"] = (frame.tobytes(), frame.shape[1], frame.shape[0])
         except StopIteration:
             mob.iterator = None
 
@@ -154,12 +149,12 @@ class VideoMobject(ImageMobject):
         cap = cv2.VideoCapture(video_path_or_camera)
         if not cap.isOpened():
             raise ValueError("Failed to open video file")
-
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        if fps <= 0 or np.isnan(fps):
-            fps = 30.0  # Fallback seguro para webcams
+        
+        last_frame = np.zeros((int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), 4), dtype=np.uint8)
+        ready = threading.Event()
 
         def frame_reader():
+            nonlocal last_frame
             while True:
                 ret, frame = cap.read()
                 if not ret:
@@ -167,9 +162,18 @@ class VideoMobject(ImageMobject):
                 if flip_horizontal:
                     frame = cv2.flip(frame, 1)
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-                yield frame
+                last_frame[:] = frame
+                ready.set()
+        
+        def iterator():
+            ready.wait()
+            while True:
+                yield last_frame
 
-        return cls(frame_reader(), fps, **kwargs)
+        runner = threading.Thread(target=frame_reader)
+        runner.start()
+
+        return cls(iterator(), **kwargs)
 
     def play(self):
         self.add_updater(self.updater)

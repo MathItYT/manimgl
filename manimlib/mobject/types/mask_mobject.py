@@ -38,16 +38,26 @@ class MaskMobject(Mobject):
         # Keep wrappers from being batched together across instances.
         self.uniforms["_mask_uid"] = float(id(self))
 
-        ctx = self.scene.camera.ctx
-        size = self.scene.camera.get_pixel_shape()
+        def init_gl_resources() -> None:
+            ctx = self.scene.camera.ctx
+            size = self.scene.camera.get_pixel_shape()
 
-        self.src_tex = ctx.texture(size, components=4, dtype="f1")
-        self.mask_tex = ctx.texture(size, components=4, dtype="f1")
+            self.src_tex = ctx.texture(size, components=4, dtype="f1")
+            self.mask_tex = ctx.texture(size, components=4, dtype="f1")
 
-        self.src_fbo = ctx.framebuffer(color_attachments=self.src_tex)
-        self.mask_fbo = ctx.framebuffer(
-            color_attachments=self.mask_tex
-        )
+            self.src_fbo = ctx.framebuffer(color_attachments=self.src_tex)
+            self.mask_fbo = ctx.framebuffer(
+                color_attachments=self.mask_tex
+            )
+
+        # In threaded preview mode, scene logic may run on a worker thread.
+        # Creating textures/fbos must happen on the main OpenGL thread.
+        caller = getattr(self.scene, "_main_thread_caller", None)
+        threaded_active = bool(getattr(self.scene, "_threaded_mode_active", False))
+        if threaded_active and caller is not None and not caller.is_main_thread():
+            caller.call(init_gl_resources)
+        else:
+            init_gl_resources()
 
         self.fix_in_frame()
         self.set_height(height)
@@ -67,29 +77,37 @@ class MaskMobject(Mobject):
         pass
 
     def update(self, dt=0, recurse=True):
-        camera = self.scene.camera
-        old_fbo = camera.fbo
-        try:
-            camera.fbo = self.src_fbo
-            camera.show(self.src_mobject)
-            camera.capture(
-                self.src_mobject, clear_window=False, transparent=True
-            )
-            camera.hide(self.src_mobject)
+        def update_textures() -> None:
+            camera = self.scene.camera
+            old_fbo = camera.fbo
+            try:
+                camera.fbo = self.src_fbo
+                camera.show(self.src_mobject)
+                camera.capture(
+                    self.src_mobject, clear_window=False, transparent=True
+                )
+                camera.hide(self.src_mobject)
 
-            camera.fbo = self.mask_fbo
-            camera.show(self.mask_mobject)
-            camera.capture(
-                self.mask_mobject,
-                clear_window=False,
-                transparent=True,
-            )
-            camera.hide(self.mask_mobject)
-        except gl.error.GLError:
-            pass
-        finally:
-            camera.fbo = old_fbo
-            camera.fbo.use()
+                camera.fbo = self.mask_fbo
+                camera.show(self.mask_mobject)
+                camera.capture(
+                    self.mask_mobject,
+                    clear_window=False,
+                    transparent=True,
+                )
+                camera.hide(self.mask_mobject)
+            except gl.error.GLError:
+                pass
+            finally:
+                camera.fbo = old_fbo
+                camera.fbo.use()
+
+        caller = getattr(self.scene, "_main_thread_caller", None)
+        threaded_active = bool(getattr(self.scene, "_threaded_mode_active", False))
+        if threaded_active and caller is not None and not caller.is_main_thread():
+            caller.call(update_textures)
+        else:
+            update_textures()
 
         super().update(dt, recurse)
         return self

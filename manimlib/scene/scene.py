@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 import platform
+import queue
 import random
+import threading
 import time
 from functools import wraps
 from contextlib import contextmanager
@@ -49,6 +52,70 @@ if TYPE_CHECKING:
     from manimlib.animation.animation import Animation
 
 
+class _MainThreadCaller:
+    """Run callables on the thread that created this instance.
+
+    This is used to ensure OpenGL / pyglet calls stay on the main thread,
+    while scene logic can run on a worker thread.
+    """
+
+    def __init__(self):
+        self._main_thread_id = threading.get_ident()
+        self._queue: queue.Queue[tuple[callable, tuple, dict, threading.Event, dict]] = queue.Queue()
+
+    def is_main_thread(self) -> bool:
+        return threading.get_ident() == self._main_thread_id
+
+    def call(self, func, /, *args, **kwargs):
+        if self.is_main_thread():
+            return func(*args, **kwargs)
+
+        done = threading.Event()
+        holder: dict[str, object] = {"result": None, "exc": None}
+        self._queue.put((func, args, kwargs, done, holder))
+        done.wait()
+        exc = holder.get("exc")
+        if exc is not None:
+            raise exc  # type: ignore[misc]
+        return holder.get("result")
+
+    def run_one(self, *, block: bool = False, timeout: float | None = None) -> bool:
+        try:
+            func, args, kwargs, done, holder = self._queue.get(block=block, timeout=timeout)
+        except queue.Empty:
+            return False
+
+        try:
+            holder["result"] = func(*args, **kwargs)
+        except BaseException as exc:
+            holder["exc"] = exc
+        finally:
+            done.set()
+            self._queue.task_done()
+        return True
+
+    def run_all(self, *, max_tasks: int | None = None) -> int:
+        n = 0
+        while max_tasks is None or n < max_tasks:
+            if not self.run_one(block=False):
+                break
+            n += 1
+        return n
+
+
+_GLOBAL_MAIN_THREAD_CALLER: _MainThreadCaller | None = None
+
+
+def get_main_thread_caller() -> _MainThreadCaller | None:
+    """Return the active main-thread caller when threaded mode is running."""
+    return _GLOBAL_MAIN_THREAD_CALLER
+
+
+def _set_global_main_thread_caller(caller: _MainThreadCaller | None) -> None:
+    global _GLOBAL_MAIN_THREAD_CALLER
+    _GLOBAL_MAIN_THREAD_CALLER = caller
+
+
 class Scene(object):
     random_seed: int = 0
     pan_sensitivity: float = 0.5
@@ -75,6 +142,8 @@ class Scene(object):
         preview_while_skipping: bool = True,
         presenter_mode: bool = False,
         default_wait_time: float = 1.0,
+        threaded: bool = False,
+        parallel_animations: bool = False,
     ):
         self.updaters: list[Callable[[float], None]] = []
         self.skip_animations = skip_animations
@@ -87,6 +156,25 @@ class Scene(object):
         self.presenter_mode = presenter_mode
         self.default_wait_time = default_wait_time
         self.frame_sinks: list[object] = []
+
+        # Threading
+        self.threaded = threaded
+        self.parallel_animations = parallel_animations
+        self._threaded_mode_active: bool = False
+        self._main_thread_caller: _MainThreadCaller | None = None
+        self._threaded_window_event_queue: queue.Queue[tuple[str, tuple, dict]] | None = None
+        self._threaded_wake_event: threading.Event | None = None
+        self._threaded_stop_event: threading.Event | None = None
+        self._threaded_worker_thread: threading.Thread | None = None
+
+        # Threaded window event coalescing (high-frequency events)
+        self._threaded_event_lock = threading.Lock()
+        self._threaded_latest_mouse_motion: tuple[int, int, int, int] | None = None
+        self._threaded_latest_mouse_drag: tuple[int, int, int, int, int, int] | None = None
+        self._threaded_latest_mouse_scroll: tuple[int, int, float, float] | None = None
+
+        # Threaded key state shadow (read from worker thread)
+        self._threaded_pressed_keys: set[int] = set()
 
         self.camera_config = merge_dicts_recursively(
             manim_config.camera,         # Global default
@@ -102,8 +190,6 @@ class Scene(object):
         self.window = window
         if self.window:
             self.window.init_for_scene(self)
-            # Make sure camera and Pyglet window sync
-            self.camera_config["fps"] = 30
 
         # Core state of the scene
         self.camera: Camera = Camera(
@@ -177,6 +263,18 @@ class Scene(object):
         self.real_animation_start_time: float = time.time()
         self.file_writer.begin()
 
+        if self.window is not None and self.threaded:
+            try:
+                self._run_threaded()
+            except EndScene:
+                pass
+            except KeyboardInterrupt:
+                # Get rid keyboard interupt symbols
+                print("", end="\r")
+                self.file_writer.ended_with_interrupt = True
+            self.tear_down()
+            return
+
         self.setup()
         try:
             self.construct()
@@ -188,6 +286,92 @@ class Scene(object):
             print("", end="\r")
             self.file_writer.ended_with_interrupt = True
         self.tear_down()
+
+    def _run_threaded(self) -> None:
+        """Run scene logic on a worker thread; keep window + OpenGL on main.
+
+        This is primarily for preview-mode responsiveness: the main thread keeps
+        pumping the pyglet event loop, while the worker thread drives the scene.
+        """
+        assert self.window is not None
+
+        self._threaded_mode_active = True
+        self._main_thread_caller = _MainThreadCaller()
+        _set_global_main_thread_caller(self._main_thread_caller)
+        self._threaded_window_event_queue = queue.Queue()
+        self._threaded_wake_event = threading.Event()
+        self._threaded_stop_event = threading.Event()
+
+        worker_exc: dict[str, BaseException | None] = {"exc": None}
+
+        def worker() -> None:
+            try:
+                self.setup()
+                self.construct()
+                self.interact()
+            except BaseException as exc:
+                worker_exc["exc"] = exc
+            finally:
+                # Ensure the main loop wakes up and can exit
+                if self._threaded_stop_event is not None:
+                    self._threaded_stop_event.set()
+                if self._threaded_wake_event is not None:
+                    self._threaded_wake_event.set()
+
+        self._threaded_worker_thread = threading.Thread(
+            target=worker,
+            name=f"ManimSceneWorker:{self}",
+            daemon=True,
+        )
+        self._threaded_worker_thread.start()
+
+        try:
+            # Main loop: keep handling window events and servicing GL tasks.
+            while self._threaded_worker_thread.is_alive():
+                # Run one queued main-thread task (or wait briefly for one)
+                # to keep latency low without spinning.
+                if self._main_thread_caller is not None:
+                    self._main_thread_caller.run_one(block=True, timeout=0.001)
+
+                # Pump pyglet events (must be on main thread)
+                if self.window is not None and getattr(self.window, "_window", None) is not None:
+                    self.window._window.dispatch_events()
+
+                if self.is_window_closing():
+                    # Encourage the worker thread to unwind.
+                    if self._threaded_stop_event is not None:
+                        self._threaded_stop_event.set()
+                    if self._threaded_wake_event is not None:
+                        self._threaded_wake_event.set()
+
+            # Drain any leftover main-thread calls to prevent deadlocks on shutdown
+            if self._main_thread_caller is not None:
+                self._main_thread_caller.run_all(max_tasks=1000)
+
+        except KeyboardInterrupt:
+            # Propagate to Scene.run() which handles file_writer flags.
+            if self._threaded_stop_event is not None:
+                self._threaded_stop_event.set()
+            if self._threaded_wake_event is not None:
+                self._threaded_wake_event.set()
+            if self.window is not None:
+                self.quit_interaction = True
+                self.hold_on_wait = False
+            # Best-effort join
+            if self._threaded_worker_thread is not None:
+                self._threaded_worker_thread.join(timeout=0.5)
+            raise
+
+        finally:
+            if self._threaded_worker_thread is not None and self._threaded_worker_thread.is_alive():
+                self._threaded_worker_thread.join(timeout=1.0)
+            # Keep the wiring around until tear_down() completes (it may still
+            # need main-thread execution), but mark inactive.
+            self._threaded_mode_active = False
+            _set_global_main_thread_caller(None)
+
+        if worker_exc["exc"] is not None:
+            raise worker_exc["exc"]
 
     def setup(self) -> None:
         """
@@ -249,6 +433,12 @@ class Scene(object):
     # Only these methods should touch the camera
 
     def get_image(self) -> Image:
+        if (
+            self._threaded_mode_active
+            and self._main_thread_caller is not None
+            and not self._main_thread_caller.is_main_thread()
+        ):
+            return self._main_thread_caller.call(self.get_image)
         if self.window is not None:
             self.camera.use_window_fbo(False)
             self.camera.capture(*self.render_groups, swap=False)
@@ -269,6 +459,51 @@ class Scene(object):
         self.updaters.append(updater)
 
     def update_frame(self, dt: float = 0, force_draw: bool = False) -> None:
+        if (
+            self._threaded_mode_active
+            and self._main_thread_caller is not None
+            and not self._main_thread_caller.is_main_thread()
+        ):
+            # Worker thread: update scene state, then ask main thread to render.
+            if self._threaded_stop_event is not None and self._threaded_stop_event.is_set():
+                raise EndScene()
+
+            self.increment_time(dt)
+            self.update_self(dt)
+            self.update_mobjects(dt)
+
+            # Apply any queued window events (enqueued from the main thread)
+            self._process_queued_window_events()
+
+            if self.skip_animations and not force_draw:
+                return
+
+            if self.is_window_closing():
+                raise EndScene()
+
+            if (
+                self.window
+                and dt == 0
+                and not force_draw
+                and not self.window.has_undrawn_event()
+            ):
+                # No need to redraw; the main thread already pumps events.
+                return
+
+            self._main_thread_caller.call(self._render_frame_main_thread)
+
+            # Time-sync happens on the worker thread to keep main responsive.
+            if self.window and not self.skip_animations:
+                vt = self.time - self.virtual_animation_start_time
+                rt = time.time() - self.real_animation_start_time
+                delay = max(vt - rt, 0)
+                if delay > 0 and self._threaded_wake_event is not None:
+                    # Wake early on user input; we'll compensate in later frames.
+                    self._threaded_wake_event.wait(timeout=delay)
+                    self._threaded_wake_event.clear()
+            return
+
+        # Main thread / non-threaded mode: original behavior
         self.increment_time(dt)
         self.update_self(dt)
         self.update_mobjects(dt)
@@ -292,9 +527,176 @@ class Scene(object):
             rt = time.time() - self.real_animation_start_time
             time.sleep(max(vt - rt, 0))
 
+    def _render_frame_main_thread(self) -> None:
+        """Render a frame. Must be called on the main thread."""
+        if self.is_window_closing():
+            raise EndScene()
+        self.camera.capture(
+            *self.render_groups,
+            swap=(not self.file_writer.write_to_movie and len(self.frame_sinks) == 0),
+        )
+        self._emit_frame_sinks()
+
     def emit_frame(self) -> None:
+        if (
+            self._threaded_mode_active
+            and self._main_thread_caller is not None
+            and not self._main_thread_caller.is_main_thread()
+        ):
+            return self._main_thread_caller.call(self.emit_frame)
         if not self.skip_animations:
             self.file_writer.write_frame(self.camera)
+
+    def _dispatch_window_event(self, method_name: str, /, *args, **kwargs) -> None:
+        """Entry point used by Window to deliver events.
+
+        In threaded mode, events are queued to be executed by the worker thread.
+        """
+        # If no worker wiring exists yet, translate and call directly.
+        if (
+            not self._threaded_mode_active
+            or self._threaded_window_event_queue is None
+            or self._main_thread_caller is None
+        ):
+            self._handle_window_event(method_name, args, kwargs)
+            return
+
+        # If called from main thread (i.e. pyglet callbacks), enqueue.
+        if self._main_thread_caller.is_main_thread():
+            # Coalesce high-frequency events to avoid worker backlog when
+            # the mouse moves quickly or a key is held down.
+            if method_name == "on_mouse_motion" and len(args) >= 4:
+                with self._threaded_event_lock:
+                    x, y, dx, dy = args[0], args[1], args[2], args[3]
+                    if self._threaded_latest_mouse_motion is None:
+                        self._threaded_latest_mouse_motion = (x, y, dx, dy)
+                    else:
+                        _, _, acc_dx, acc_dy = self._threaded_latest_mouse_motion
+                        self._threaded_latest_mouse_motion = (x, y, acc_dx + dx, acc_dy + dy)
+            elif method_name == "on_mouse_drag" and len(args) >= 6:
+                with self._threaded_event_lock:
+                    x, y, dx, dy, buttons, modifiers = args[0], args[1], args[2], args[3], args[4], args[5]
+                    if self._threaded_latest_mouse_drag is None:
+                        self._threaded_latest_mouse_drag = (x, y, dx, dy, buttons, modifiers)
+                    else:
+                        _, _, acc_dx, acc_dy, _, _ = self._threaded_latest_mouse_drag
+                        self._threaded_latest_mouse_drag = (x, y, acc_dx + dx, acc_dy + dy, buttons, modifiers)
+            elif method_name == "on_mouse_scroll" and len(args) >= 4:
+                with self._threaded_event_lock:
+                    x, y, x_offset, y_offset = args[0], args[1], args[2], args[3]
+                    if self._threaded_latest_mouse_scroll is None:
+                        self._threaded_latest_mouse_scroll = (x, y, x_offset, y_offset)
+                    else:
+                        _, _, acc_x, acc_y = self._threaded_latest_mouse_scroll
+                        self._threaded_latest_mouse_scroll = (x, y, acc_x + x_offset, acc_y + y_offset)
+            else:
+                self._threaded_window_event_queue.put((method_name, args, kwargs))
+            if self._threaded_wake_event is not None:
+                self._threaded_wake_event.set()
+            return
+
+        # Otherwise (e.g. worker thread), call directly.
+        self._handle_window_event(method_name, args, kwargs)
+
+    def _process_queued_window_events(self) -> None:
+        if self._threaded_window_event_queue is None:
+            return
+        while True:
+            try:
+                method_name, args, kwargs = self._threaded_window_event_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                self._handle_window_event(method_name, args, kwargs)
+            except EndScene:
+                raise
+            except Exception:
+                log.exception(f"Exception while handling window event {method_name}")
+            finally:
+                self._threaded_window_event_queue.task_done()
+
+        # Apply latest coalesced high-frequency events (at most one of each)
+        with self._threaded_event_lock:
+            motion = self._threaded_latest_mouse_motion
+            drag = self._threaded_latest_mouse_drag
+            scroll = self._threaded_latest_mouse_scroll
+            self._threaded_latest_mouse_motion = None
+            self._threaded_latest_mouse_drag = None
+            self._threaded_latest_mouse_scroll = None
+
+        if motion is not None:
+            self._handle_window_event("on_mouse_motion", motion, {})
+        if drag is not None:
+            self._handle_window_event("on_mouse_drag", drag, {})
+        if scroll is not None:
+            self._handle_window_event("on_mouse_scroll", scroll, {})
+
+    def _handle_window_event(self, method_name: str, args: tuple, kwargs: dict) -> None:
+        """Translate raw window event arguments and call the appropriate handler."""
+        # Maintain a worker-thread shadow of pressed keys.
+        if method_name == "on_key_press" and len(args) >= 1:
+            symbol = args[0]
+            if isinstance(symbol, int):
+                self._threaded_pressed_keys.add(symbol)
+        elif method_name == "on_key_release" and len(args) >= 1:
+            symbol = args[0]
+            if isinstance(symbol, int):
+                self._threaded_pressed_keys.discard(symbol)
+
+        # Mouse events may be delivered as raw pixel coords (x, y, ...)
+        if self.window is not None:
+            if method_name == "on_mouse_motion" and len(args) >= 4:
+                try:
+                    x, y, dx, dy = args[:4]
+                    point = self.window.pixel_coords_to_space_coords(int(x), int(y))
+                    d_point = self.window.pixel_coords_to_space_coords(int(dx), int(dy), relative=True)
+                except Exception:
+                    log.exception("Failed to translate on_mouse_motion event")
+                    return
+                return getattr(self, method_name)(point, d_point)
+
+            if method_name == "on_mouse_drag" and len(args) >= 6:
+                try:
+                    x, y, dx, dy, buttons, modifiers = args[:6]
+                    point = self.window.pixel_coords_to_space_coords(int(x), int(y))
+                    d_point = self.window.pixel_coords_to_space_coords(int(dx), int(dy), relative=True)
+                except Exception:
+                    log.exception("Failed to translate on_mouse_drag event")
+                    return
+                return getattr(self, method_name)(point, d_point, buttons, modifiers)
+
+            if method_name in ("on_mouse_press", "on_mouse_release") and len(args) >= 4:
+                try:
+                    x, y, button, mods = args[:4]
+                    point = self.window.pixel_coords_to_space_coords(int(x), int(y))
+                except Exception:
+                    log.exception(f"Failed to translate {method_name} event")
+                    return
+                return getattr(self, method_name)(point, button, mods)
+
+            if method_name == "on_mouse_scroll" and len(args) >= 4 and not isinstance(args[0], np.ndarray):
+                try:
+                    x, y, x_offset, y_offset = args[:4]
+                    point = self.window.pixel_coords_to_space_coords(int(x), int(y))
+                    offset = self.window.pixel_coords_to_space_coords(x_offset, y_offset, relative=True)
+                except Exception:
+                    log.exception("Failed to translate on_mouse_scroll event")
+                    return
+                return getattr(self, method_name)(point, offset, x_offset, y_offset)
+
+        return getattr(self, method_name)(*args, **kwargs)
+
+    def is_key_pressed(self, symbol: int) -> bool:
+        """Thread-safe key query.
+
+        In threaded mode, window callbacks run on the main thread while scene
+        logic runs on a worker thread; rely on a worker-side shadow set.
+        """
+        if self._threaded_mode_active and (self._main_thread_caller is not None) and (not self._main_thread_caller.is_main_thread()):
+            return symbol in self._threaded_pressed_keys
+        if self.window is None:
+            return False
+        return self.window.is_key_pressed(symbol)
 
     # Related to updating
 
@@ -340,6 +742,15 @@ class Scene(object):
         same type are grouped together, so this function creates
         Groups of all clusters of adjacent Mobjects in the scene
         """
+        if (
+            self._threaded_mode_active
+            and self._main_thread_caller is not None
+            and not self._main_thread_caller.is_main_thread()
+        ):
+            # This touches OpenGL via ShaderWrapper initialization, so it must
+            # happen on the main thread.
+            return self._main_thread_caller.call(self.assemble_render_groups)
+
         batches = batch_by_property(
             self.mobjects,
             lambda m: str(type(m)) + str(m.get_shader_wrapper(self.camera.ctx).get_id()) + str(m.z_index)
@@ -590,6 +1001,51 @@ class Scene(object):
                 all_mobjects = all_mobjects.union(animation.mobject.get_family())
 
     def progress_through_animations(self, animations: Iterable[Animation]) -> None:
+        animations = list(animations)
+
+        # Experimental: run disjoint animations in parallel (thread-per-animation)
+        if self.parallel_animations and self._threaded_mode_active and len(animations) > 1:
+            # Greedily batch animations into conflict-free groups while preserving
+            # deterministic order for any animations that touch the same mobjects.
+            family_id_sets: list[set[int]] = []
+            for anim in animations:
+                try:
+                    family_id_sets.append({id(m) for m in anim.mobject.get_family()})
+                except Exception:
+                    family_id_sets.append({id(anim.mobject)})
+
+            groups: list[list[Animation]] = []
+            group_used_ids: list[set[int]] = []
+            for anim, fam_ids in zip(animations, family_id_sets):
+                placed = False
+                for used_ids, group in zip(group_used_ids, groups):
+                    if used_ids.isdisjoint(fam_ids):
+                        group.append(anim)
+                        used_ids.update(fam_ids)
+                        placed = True
+                        break
+                if not placed:
+                    groups.append([anim])
+                    group_used_ids.append(set(fam_ids))
+
+            def step(anim: Animation, dt: float, t: float) -> None:
+                anim.update_mobjects(dt)
+                alpha = t / anim.run_time
+                anim.interpolate(alpha)
+
+            last_t = 0
+            with ThreadPoolExecutor(max_workers=len(animations)) as executor:
+                for t in self.get_animation_time_progression(animations):
+                    dt = t - last_t
+                    last_t = t
+                    for group in groups:
+                        futures = [executor.submit(step, anim, dt, t) for anim in group]
+                        for fut in futures:
+                            fut.result()
+                    self.update_frame(dt)
+                    self.emit_frame()
+            return
+
         last_t = 0
         for t in self.get_animation_time_progression(animations):
             dt = t - last_t
@@ -795,13 +1251,13 @@ class Scene(object):
 
         frame = self.camera.frame
         # Handle perspective changes
-        if self.window.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
+        if self.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
             ff_d_point = frame.to_fixed_frame_point(d_point, relative=True)
             ff_d_point *= self.pan_sensitivity
             frame.increment_theta(-ff_d_point[0])
             frame.increment_phi(ff_d_point[1])
         # Handle frame movements
-        elif self.window.is_key_pressed(ord(manim_config.key_bindings.pan)):
+        elif self.is_key_pressed(ord(manim_config.key_bindings.pan)):
             frame.shift(-d_point)
 
     def on_mouse_drag(

@@ -79,6 +79,22 @@ class Window(PygletWindow):
         # This line seems to resync the viewport
         self.on_resize(*self.size)
 
+    def _dispatch_scene_event(self, method_name: str, /, *args, **kwargs) -> None:
+        """Dispatch a window event to the scene.
+
+        If the scene implements `_dispatch_window_event`, this allows it to
+        queue events to a worker thread (threaded preview mode).
+        """
+        if not self.scene:
+            return
+        dispatcher = getattr(self.scene, "_dispatch_window_event", None)
+        if callable(dispatcher):
+            dispatcher(method_name, *args, **kwargs)
+            return
+        handler = getattr(self.scene, method_name, None)
+        if callable(handler):
+            handler(*args, **kwargs)
+
     def get_monitor(self, index):
         try:
             monitors = screeninfo.get_monitors()
@@ -167,13 +183,9 @@ class Window(PygletWindow):
         self, x: int, y: int, dx: int, dy: int
     ) -> None:
         super().on_mouse_motion(x, y, dx, dy)
-        if not self.scene:
-            return
-        point = self.pixel_coords_to_space_coords(x, y)
-        d_point = self.pixel_coords_to_space_coords(
-            dx, dy, relative=True
-        )
-        self.scene.on_mouse_motion(point, d_point)
+        # Keep the main thread as light as possible: in threaded mode, the
+        # scene will convert pixel coords to space coords on the worker thread.
+        self._dispatch_scene_event("on_mouse_motion", x, y, dx, dy)
 
     @note_undrawn_event
     def on_mouse_drag(
@@ -186,46 +198,32 @@ class Window(PygletWindow):
         modifiers: int,
     ) -> None:
         super().on_mouse_drag(x, y, dx, dy, buttons, modifiers)
-        if not self.scene:
-            return
-        point = self.pixel_coords_to_space_coords(x, y)
-        d_point = self.pixel_coords_to_space_coords(
-            dx, dy, relative=True
+        self._dispatch_scene_event(
+            "on_mouse_drag",
+            x, y, dx, dy,
+            buttons, modifiers,
         )
-        self.scene.on_mouse_drag(point, d_point, buttons, modifiers)
 
     @note_undrawn_event
     def on_mouse_press(
         self, x: int, y: int, button: int, mods: int
     ) -> None:
         super().on_mouse_press(x, y, button, mods)
-        if not self.scene:
-            return
-        point = self.pixel_coords_to_space_coords(x, y)
-        self.scene.on_mouse_press(point, button, mods)
+        self._dispatch_scene_event("on_mouse_press", x, y, button, mods)
 
     @note_undrawn_event
     def on_mouse_release(
         self, x: int, y: int, button: int, mods: int
     ) -> None:
         super().on_mouse_release(x, y, button, mods)
-        if not self.scene:
-            return
-        point = self.pixel_coords_to_space_coords(x, y)
-        self.scene.on_mouse_release(point, button, mods)
+        self._dispatch_scene_event("on_mouse_release", x, y, button, mods)
 
     @note_undrawn_event
     def on_mouse_scroll(
         self, x: int, y: int, x_offset: float, y_offset: float
     ) -> None:
         super().on_mouse_scroll(x, y, x_offset, y_offset)
-        if not self.scene:
-            return
-        point = self.pixel_coords_to_space_coords(x, y)
-        offset = self.pixel_coords_to_space_coords(
-            x_offset, y_offset, relative=True
-        )
-        self.scene.on_mouse_scroll(point, offset, x_offset, y_offset)
+        self._dispatch_scene_event("on_mouse_scroll", x, y, x_offset, y_offset)
 
     @note_undrawn_event
     def on_key_press(self, symbol: int, modifiers: int) -> None:
@@ -237,38 +235,28 @@ class Window(PygletWindow):
             return
         self.pressed_keys.add(symbol)  # Modifiers?
         super().on_key_press(symbol, modifiers)
-        if not self.scene:
-            return
-        self.scene.on_key_press(symbol, modifiers)
+        self._dispatch_scene_event("on_key_press", symbol, modifiers)
 
     @note_undrawn_event
     def on_key_release(self, symbol: int, modifiers: int) -> None:
         self.pressed_keys.difference_update({symbol})  # Modifiers?
         super().on_key_release(symbol, modifiers)
-        if not self.scene:
-            return
-        self.scene.on_key_release(symbol, modifiers)
+        self._dispatch_scene_event("on_key_release", symbol, modifiers)
 
     @note_undrawn_event
     def on_resize(self, width: int, height: int) -> None:
         super().on_resize(width, height)
-        if not self.scene:
-            return
-        self.scene.on_resize(width, height)
+        self._dispatch_scene_event("on_resize", width, height)
 
     @note_undrawn_event
     def on_show(self) -> None:
         super().on_show()
-        if not self.scene:
-            return
-        self.scene.on_show()
+        self._dispatch_scene_event("on_show")
 
     @note_undrawn_event
     def on_hide(self) -> None:
         super().on_hide()
-        if not self.scene:
-            return
-        self.scene.on_hide()
+        self._dispatch_scene_event("on_hide")
 
     @note_undrawn_event
     def on_close(self) -> None:
