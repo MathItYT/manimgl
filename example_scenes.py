@@ -517,14 +517,6 @@ class HandTrackingExample(manimlib.InteractiveScene):
 
         self.add(video_mob, hand_mesh, circle, status)
 
-        if self.file_writer.write_to_movie:
-            self.wait(10)
-            video_mob.stop()
-            unbind_hand_tracker_from_video(video_mob)
-            self.tracker.stop(timeout=2.0)
-        else:
-            self.hold_loop()
-
     def on_close(self) -> None:
         if hasattr(self, "video_mob"):
             self.video_mob.stop()

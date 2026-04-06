@@ -422,7 +422,7 @@ def bind_hand_tracker_to_video(
     video_mobject,
     tracker: HandMotionTracker,
     enqueue_every_n_frames: int = 2,
-    copy_frame: bool = True,
+    copy_frame: bool = False,
 ) -> None:
     """Taps frames from an existing VideoMobject iterator and sends them to tracker."""
     tracker.start()
@@ -439,19 +439,17 @@ def bind_hand_tracker_to_video(
         tracker.stop(timeout=0.0)
 
     def tapped_iterator():
-        try:
-            for frame_index, frame in enumerate(source_iterator):
-                if active.is_set() and frame_index % step == 0:
-                    tracker.on_frame(frame.copy() if copy_frame else frame)
-                yield frame
-        finally:
-            _cleanup()
-            close_method = getattr(source_iterator, "close", None)
-            if callable(close_method):
-                try:
-                    close_method()
-                except Exception:
-                    pass
+        frame_count = 0
+        for frame in source_iterator:
+            if not active.is_set():
+                break
+            if frame_count % step == 0:
+                if copy_frame:
+                    tracker.on_frame(frame.copy())
+                else:
+                    tracker.on_frame(frame)
+            yield frame
+            frame_count += 1
 
     video_mobject.iterator = tapped_iterator()
     video_mobject._hand_tracker = tracker
