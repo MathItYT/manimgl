@@ -98,6 +98,27 @@ text:
   font_size_for_unit_height: 144
 typst:
   font_size_for_unit_height: 144
+
+# Optional OBS Studio automation.
+# Enable OBS > Tools > WebSocket Server if you later want finer control.
+obs:
+  # When true, ManimGL will launch OBS at scene start.
+  # Intended for screen-capture workflows (window/virtual camera sources).
+  autostart_recording: False
+  # Optional explicit path to the OBS executable.
+  # Windows example: "C:/Program Files/obs-studio/bin/64bit/obs64.exe"
+  executable: ""
+  # Whether to include OBS' start-recording flag on launch.
+  start_recording: False
+  # Whether to include OBS' start-streaming flag on launch.
+  # Requires OBS streaming to be configured (service + key) in OBS settings.
+  start_streaming: False
+  # Minimize OBS to tray on launch (when supported by OBS).
+  minimize_to_tray: True
+  # Extra CLI args passed to OBS on launch.
+  extra_args: []
+  # Optional delay (seconds) after launching OBS before starting the scene.
+  startup_wait_seconds: 0.0
 embed:
   exception_mode: "Verbose"
   autoreload: False

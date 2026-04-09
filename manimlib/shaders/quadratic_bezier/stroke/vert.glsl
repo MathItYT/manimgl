@@ -23,7 +23,11 @@ const float STROKE_WIDTH_CONVERSION = 0.01;
 void main(){
     verts = point;
     v_color = stroke_rgba;
-    v_stroke_width = STROKE_WIDTH_CONVERSION * stroke_width * mix(frame_scale, 1, scale_stroke_with_zoom);
+    float zoom_factor = mix(frame_scale, 1.0, scale_stroke_with_zoom);
+    // Fixed-in-frame objects are already in frame coordinates (no view scaling),
+    // so they must not scale stroke width with camera zoom.
+    zoom_factor = mix(zoom_factor, 1.0, is_fixed_in_frame);
+    v_stroke_width = STROKE_WIDTH_CONVERSION * stroke_width * zoom_factor;
     v_joint_angle = joint_angle;
     v_unit_normal = unit_normal;
 }

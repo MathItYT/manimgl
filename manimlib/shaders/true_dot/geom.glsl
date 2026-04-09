@@ -26,7 +26,9 @@ void main(){
     color = v_rgba[0];
     radius = v_radius[0];
     center = v_point[0];
-    scaled_aaw = (anti_alias_width * pixel_size) / v_radius[0];
+    float base_pixel_size = pixel_size / max(frame_scale, 1e-8);
+    float effective_pixel_size = mix(pixel_size, base_pixel_size, is_fixed_in_frame);
+    scaled_aaw = (anti_alias_width * effective_pixel_size) / v_radius[0];
 
     to_cam = normalize(camera_position - v_point[0]);
     vec3 right = v_radius[0] * normalize(cross(vec3(0, 1, 1), to_cam));

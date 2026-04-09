@@ -59,6 +59,7 @@ from manimlib.mobject.svg.typst_mobject import *
 from manimlib.mobject.three_dimensions import *
 from manimlib.mobject.types.dot_cloud import *
 from manimlib.mobject.types.image_mobject import *
+from manimlib.mobject.types.magnifying_glass import *
 from manimlib.mobject.types.mask_mobject import *
 from manimlib.mobject.types.point_cloud_mobject import *
 from manimlib.mobject.types.surface import *

@@ -7,6 +7,7 @@ import os
 import pickle
 import random
 import sys
+import threading
 
 import moderngl
 import numbers
@@ -43,6 +44,7 @@ from manimlib.utils.shaders import get_colormap_code
 from manimlib.utils.space_ops import angle_of_vector
 from manimlib.utils.space_ops import get_norm
 from manimlib.utils.space_ops import rotation_matrix_transpose
+from manimlib.utils.updater_parallel import run_updaters_in_parallel
 
 from typing import TYPE_CHECKING
 from typing import TypeVar, Generic, Iterable
@@ -925,13 +927,24 @@ class Mobject(object):
         if recurse:
             for submob in self.submobjects:
                 submob.update(dt, recurse)
-        for updater in self.updaters:
+        updaters = list(self.updaters)
+
+        def call_updater(updater: Updater) -> None:
             # This is hacky, but if an updater takes dt as an arg,
             # it will be passed the change in time from here
             if "dt" in updater.__code__.co_varnames:
                 updater(self, dt=dt)
             else:
                 updater(self)
+
+        if len(updaters) > 1 and threading.current_thread() is not threading.main_thread():
+            run_updaters_in_parallel(
+                (lambda u=updater: call_updater(u) for updater in updaters),
+                min_workers=len(updaters),
+            )
+        else:
+            for updater in updaters:
+                call_updater(updater)
         return self
 
     def get_updaters(self) -> list[Updater]:
@@ -2298,7 +2311,18 @@ class Mobject(object):
     def get_shader_wrapper_list(
         self, ctx: Context
     ) -> list[ShaderWrapper]:
-        family = self.family_members_with_points()
+        # When mobjects are batched together into a shared ShaderWrapper,
+        # the wrapper's `is_hidden` callback can only represent one mobject.
+        # If we include hidden and visible mobjects in the same batch, a hidden
+        # element can incorrectly hide the whole batch (or a hidden element can
+        # be rendered when the batch is driven by a visible element).
+        #
+        # Filter out hidden family members here and treat visibility changes as
+        # a reason to rebuild shader batches (see `render`).
+        family = [
+            m for m in self.family_members_with_points()
+            if not getattr(m, "hide", False)
+        ]
         batches = batch_by_property(
             family, lambda sm: sm.get_shader_wrapper(ctx).get_id()
         )

@@ -66,18 +66,85 @@ class Camera(object):
         self.init_fbo()
         self.init_light_source()
     
-    def hide(self, mobject: Mobject, recursive: bool = True) -> Mobject:
-        mobject.hide = True
-        if recursive:
-            for submob in mobject.submobjects:
-                self.hide(submob, recursive=True)
+    def hide(
+        self,
+        mobject: Mobject,
+        recursive: bool = True,
+        notify_render: bool = True,
+    ) -> Mobject:
+        """Mark an mobject (and optionally its descendants) as hidden.
+
+        Notes
+        -----
+        Rendering batches may cache combined vertex buffers across many mobjects.
+        If visibility changes, those caches must be invalidated so that hidden
+        mobjects are excluded from the next draw call.
+        """
+
+        if not notify_render:
+            def set_hide_fast(mob: Mobject) -> None:
+                mob.hide = True
+                if recursive:
+                    for submob in mob.submobjects:
+                        set_hide_fast(submob)
+
+            set_hide_fast(mobject)
+            return mobject
+
+        changed: list[Mobject] = []
+
+        def set_hide(mob: Mobject) -> None:
+            prev = bool(getattr(mob, "hide", False))
+            mob.hide = True
+            if prev is not True:
+                changed.append(mob)
+            if recursive:
+                for submob in mob.submobjects:
+                    set_hide(submob)
+
+        set_hide(mobject)
+
+        if notify_render and changed:
+            for mob in changed:
+                mob.note_changed_data(recurse_up=True)
+
         return mobject
     
-    def show(self, mobject: Mobject, recursive: bool = True) -> Mobject:
-        mobject.hide = False
-        if recursive:
-            for submob in mobject.submobjects:
-                self.show(submob, recursive=True)
+    def show(
+        self,
+        mobject: Mobject,
+        recursive: bool = True,
+        notify_render: bool = True,
+    ) -> Mobject:
+        """Mark an mobject (and optionally its descendants) as visible."""
+
+        if not notify_render:
+            def set_show_fast(mob: Mobject) -> None:
+                mob.hide = False
+                if recursive:
+                    for submob in mob.submobjects:
+                        set_show_fast(submob)
+
+            set_show_fast(mobject)
+            return mobject
+
+        changed: list[Mobject] = []
+
+        def set_show(mob: Mobject) -> None:
+            prev = bool(getattr(mob, "hide", False))
+            mob.hide = False
+            if prev is not False:
+                changed.append(mob)
+            if recursive:
+                for submob in mob.submobjects:
+                    set_show(submob)
+
+        set_show(mobject)
+
+        if notify_render and changed:
+            for mob in changed:
+                mob.note_changed_data(recurse_up=True)
+
         return mobject
 
     def init_frame(self, **config) -> None:

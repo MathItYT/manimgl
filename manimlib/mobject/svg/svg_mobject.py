@@ -62,7 +62,7 @@ class SVGMobject(VMobject):
         should_center: bool = True,
         height: float | None = None,
         width: float | None = None,
-        unbatch: bool = False,
+        unbatch: bool | str = False,
         # Style that overrides the original svg
         color: ManimColor = None,
         fill_color: ManimColor = None,
@@ -113,6 +113,20 @@ class SVGMobject(VMobject):
             stroke_opacity=stroke_opacity,
         )
 
+        # Control batching behaviour for complex SVGs.
+        #
+        # - unbatch=False: overlap-safe batching (fast in the common case where
+        #   shapes are spatially disjoint, while automatically splitting into a
+        #   few batches when overlaps would cause winding/blending artifacts).
+        # - unbatch=True: fully unbatch each VMobject (safest / correct, but
+        #   can be significantly slower due to many draw calls).
+        # - unbatch='style': split batching by (approximate) style signature
+        #   (mainly fill/stroke), which prevents cross-layer winding/blending
+        #   interference while still batching within layers.
+        # - unbatch='overlap'/'auto'/'safe': explicit alias for overlap-safe batching.
+        # - unbatch='max'/'raw': disable uid-based splitting (maximum batching; may show artifacts).
+        self._apply_unbatch_mode()
+
         # Initialize position
         height = height or self.height
         width = width or self.width
@@ -135,10 +149,195 @@ class SVGMobject(VMobject):
         self.add(*submobs)
         if self.needs_flip:
             self.flip(RIGHT)  # Flip y
-        if self.unbatch:
-            for mob in self.get_family():
+
+    @staticmethod
+    def _rects_overlap(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> bool:
+        ax0, ay0, ax1, ay1 = a
+        bx0, by0, bx1, by1 = b
+        return not (
+            (ax1 < bx0) or
+            (ax0 > bx1) or
+            (ay1 < by0) or
+            (ay0 > by1)
+        )
+
+    @staticmethod
+    def _rect_to_cell_range(
+        rect: tuple[float, float, float, float],
+        cell_size: float,
+    ) -> tuple[int, int, int, int]:
+        import math
+
+        x0, y0, x1, y1 = rect
+        inv = 1.0 / cell_size
+        ix0 = int(math.floor(x0 * inv))
+        ix1 = int(math.floor(x1 * inv))
+        iy0 = int(math.floor(y0 * inv))
+        iy1 = int(math.floor(y1 * inv))
+        return ix0, ix1, iy0, iy1
+
+    def _apply_overlap_safe_batching(self, mobs: list[VMobject]) -> None:
+        # Assign `_svg_uid` so that any two point mobjects whose
+        # axis-aligned bounding boxes overlap end up in different batches.
+        #
+        # This preserves correctness for ManimGL's winding-based fill pass
+        # while keeping batching maximal when shapes are spatially disjoint
+        # (common for text glyphs).
+
+        rects: list[tuple[float, float, float, float]] = []
+        sizes: list[float] = []
+
+        for mob in mobs:
+            bb = mob.get_bounding_box()
+            x0, y0 = float(bb[0, 0]), float(bb[0, 1])
+            x1, y1 = float(bb[2, 0]), float(bb[2, 1])
+            if x0 > x1:
+                x0, x1 = x1, x0
+            if y0 > y1:
+                y0, y1 = y1, y0
+
+            # Expand slightly to account for AA and curve hull slack
+            data = mob.data if mob.get_num_points() > 0 else mob._data_defaults
+            stroke_w = float(data["stroke_width"][0, 0]) if "stroke_width" in data.dtype.names else 0.0
+            buff = 1e-3 + 0.5 * max(0.0, stroke_w)
+            x0 -= buff
+            y0 -= buff
+            x1 += buff
+            y1 += buff
+
+            rects.append((x0, y0, x1, y1))
+            sizes.append(max(x1 - x0, y1 - y0))
+
+        if not rects:
+            return
+
+        # Choose a hashing grid size around the median bbox size.
+        cell_size = float(np.median(sizes)) if sizes else 1.0
+        cell_size = max(cell_size, 1e-2)
+
+        # Each group tracks a spatial hash for overlap queries.
+        groups: list[dict[str, object]] = []
+
+        for mob, rect in zip(mobs, rects):
+            placed = False
+            ix0, ix1, iy0, iy1 = self._rect_to_cell_range(rect, cell_size)
+
+            for gid, group in enumerate(groups):
+                cell_map = group["cell_map"]  # type: ignore[assignment]
+                group_rects = group["rects"]  # type: ignore[assignment]
+
+                # Gather candidates from occupied cells
+                candidates: set[int] = set()
+                for ix in range(ix0, ix1 + 1):
+                    for iy in range(iy0, iy1 + 1):
+                        candidates.update(cell_map.get((ix, iy), ()))  # type: ignore[arg-type]
+
+                if any(self._rects_overlap(rect, group_rects[i]) for i in candidates):  # type: ignore[index]
+                    continue
+
+                # Fits in this group
+                idx = len(group_rects)  # type: ignore[arg-type]
+                group_rects.append(rect)  # type: ignore[union-attr]
+                for ix in range(ix0, ix1 + 1):
+                    for iy in range(iy0, iy1 + 1):
+                        cell_map.setdefault((ix, iy), []).append(idx)  # type: ignore[union-attr]
+
+                mob.uniforms["_svg_uid"] = float(gid)
+                placed = True
+                break
+
+            if placed:
+                continue
+
+            # New group
+            new_group: dict[str, object] = {"rects": [rect], "cell_map": {}}
+            new_map = new_group["cell_map"]
+            for ix in range(ix0, ix1 + 1):
+                for iy in range(iy0, iy1 + 1):
+                    new_map.setdefault((ix, iy), []).append(0)  # type: ignore[union-attr]
+            groups.append(new_group)
+            mob.uniforms["_svg_uid"] = float(len(groups) - 1)
+
+    @staticmethod
+    def _quantize_rgba(rgba: np.ndarray) -> tuple[int, int, int, int]:
+        # rgba expected in [0, 1]
+        vals = [int(np.clip(round(255 * float(x)), 0, 255)) for x in rgba]
+        # Ensure length 4 even if input isn't
+        if len(vals) < 4:
+            vals += [255] * (4 - len(vals))
+        return (vals[0], vals[1], vals[2], vals[3])
+
+    @classmethod
+    def _style_signature(cls, mob: VMobject) -> tuple:
+        # Build a lightweight signature for batching that is stable within a run.
+        # We purposefully only use the first entry of each style array, since
+        # most SVG paths have constant style. This is used ONLY for batching.
+        data = mob.data if mob.get_num_points() > 0 else mob._data_defaults
+        fill = cls._quantize_rgba(data["fill_rgba"][0])
+        stroke = cls._quantize_rgba(data["stroke_rgba"][0])
+        stroke_width = int(round(1000 * float(data["stroke_width"][0, 0])))
+        fill_border_width = int(round(1000 * float(data["fill_border_width"][0, 0])))
+        stroke_behind = int(getattr(mob, "stroke_behind", False))
+        flat_stroke = int(getattr(mob, "get_flat_stroke", lambda: False)())
+        joint_type = int(round(float(mob.uniforms.get("joint_type", 0.0))))
+        anti_alias_width = int(round(1000 * float(mob.uniforms.get("anti_alias_width", 1.5))))
+        shading = tuple(int(round(1000 * float(v))) for v in mob.get_shading())
+        return (
+            fill,
+            stroke,
+            stroke_width,
+            fill_border_width,
+            stroke_behind,
+            flat_stroke,
+            joint_type,
+            anti_alias_width,
+            shading,
+        )
+
+    def _apply_unbatch_mode(self) -> None:
+        mode = self.unbatch
+
+        # Iterate only over point-bearing mobjects; those are the ones that
+        # produce shader wrappers.
+        mobs = self.family_members_with_points()
+        for mob in mobs:
+            if hasattr(mob, "uniforms"):
+                mob.uniforms.pop("_svg_uid", None)
+
+        if mode is False or mode is None:
+            # Default: keep batching as large as possible, but split batches
+            # when shapes overlap to avoid fill winding artifacts.
+            self._apply_overlap_safe_batching(mobs)
+            return
+        if mode is True:
+            for mob in mobs:
                 if hasattr(mob, "uniforms"):
                     mob.uniforms["_svg_uid"] = float(id(mob))
+            return
+
+        if isinstance(mode, str):
+            key = mode.strip().lower()
+            if key in {"max", "raw", "none", "off", "unsafe"}:
+                # Leave `_svg_uid` cleared for maximum batching.
+                return
+            if key in {"style", "by_style", "style_groups"}:
+                # Use a 24-bit id so it is exactly representable as a float32
+                # uniform (shader wrapper ids should still differ reliably).
+                for mob in mobs:
+                    if not hasattr(mob, "uniforms"):
+                        continue
+                    sig = self._style_signature(mob)
+                    uid = hash_obj(sig) & 0xFFFFFF
+                    mob.uniforms["_svg_uid"] = float(uid)
+                return
+
+            if key in {"overlap", "auto", "safe"}:
+                self._apply_overlap_safe_batching(mobs)
+                return
+
+        raise ValueError(
+            "Invalid `unbatch` value. Expected False, True, 'style', or 'overlap'."
+        )
 
     @property
     def hash_seed(self) -> tuple:
@@ -348,7 +547,8 @@ class SVGMobject(VMobject):
             svg_string = image.data.decode("utf-8")
         except UnicodeDecodeError:
             return None
-        mob = SVGMobject(svg_string=svg_string, needs_flip=False, unbatch=True)
+        # Preserve the parent's batching policy for embedded SVG images.
+        mob = SVGMobject(svg_string=svg_string, needs_flip=False, unbatch=self.unbatch)
         if image.height:
             mob.set_height(image.height)
         if image.width:

@@ -37,6 +37,7 @@ from manimlib.utils.family_ops import recursive_mobject_remove
 from manimlib.utils.iterables import batch_by_property
 from manimlib.utils.sounds import play_sound
 from manimlib.utils.color import color_to_rgba
+from manimlib.utils.updater_parallel import run_updaters_in_parallel
 from manimlib.window import Window
 
 from typing import TYPE_CHECKING
@@ -263,6 +264,15 @@ class Scene(object):
         self.real_animation_start_time: float = time.time()
         self.file_writer.begin()
 
+        # Optional: launch OBS Studio and start recording immediately.
+        try:
+            if hasattr(manim_config, "obs") and manim_config.obs.get("autostart_recording", False):
+                from manimlib.extras.obs import autostart_obs_recording
+
+                autostart_obs_recording(self)
+        except Exception:
+            log.exception("OBS autostart failed")
+
         if self.window is not None and self.threaded:
             try:
                 self._run_threaded()
@@ -331,7 +341,11 @@ class Scene(object):
                 # Run one queued main-thread task (or wait briefly for one)
                 # to keep latency low without spinning.
                 if self._main_thread_caller is not None:
+                    # Process at least one task (blocking briefly), then drain
+                    # the rest. Draining reduces jitter when multiple scene
+                    # updaters enqueue main-thread OpenGL work per frame.
                     self._main_thread_caller.run_one(block=True, timeout=0.001)
+                    self._main_thread_caller.run_all(max_tasks=1000)
 
                 # Pump pyglet events (must be on main thread)
                 if self.window is not None and getattr(self.window, "_window", None) is not None:
@@ -452,8 +466,18 @@ class Scene(object):
         self.get_image().show()
     
     def update_self(self, dt: float) -> None:
-        for updater in self.updaters:
-            updater(dt)
+        updaters = list(self.updaters)
+        if len(updaters) <= 1 or threading.current_thread() is threading.main_thread():
+            for updater in updaters:
+                updater(dt)
+            return
+
+        # In threaded mode (scene logic off the main thread), run each updater
+        # as an independent task.
+        run_updaters_in_parallel(
+            (lambda u=updater: u(dt) for updater in updaters),
+            min_workers=len(updaters),
+        )
     
     def add_updater(self, updater: Callable[[float], None]) -> None:
         self.updaters.append(updater)
@@ -519,8 +543,18 @@ class Scene(object):
             self.window._window.dispatch_events()
             return
 
-        self.camera.capture(*self.render_groups, swap=not self.file_writer.write_to_movie and len(self.frame_sinks) == 0)
+        capture_swap = (not self.file_writer.write_to_movie and len(self.frame_sinks) == 0)
+        self.camera.capture(*self.render_groups, swap=capture_swap)
         self._emit_frame_sinks()
+
+        # When frame sinks are active, we render without swapping so sinks can
+        # reliably read the back buffer (e.g. virtual camera). Present to the
+        # preview window after sinks consume the frame.
+        if self.window and not self.file_writer.write_to_movie and not capture_swap:
+            self.window.swap_buffers()
+            if self.camera.fbo is not self.camera.window_fbo:
+                self.camera.blit(self.camera.fbo, self.camera.window_fbo)
+                self.window.swap_buffers()
 
         if self.window and not self.skip_animations:
             vt = self.time - self.virtual_animation_start_time
@@ -531,11 +565,19 @@ class Scene(object):
         """Render a frame. Must be called on the main thread."""
         if self.is_window_closing():
             raise EndScene()
+        capture_swap = (not self.file_writer.write_to_movie and len(self.frame_sinks) == 0)
         self.camera.capture(
             *self.render_groups,
-            swap=(not self.file_writer.write_to_movie and len(self.frame_sinks) == 0),
+            swap=capture_swap,
         )
         self._emit_frame_sinks()
+
+        # Same presentation logic as the non-threaded path (see update_frame).
+        if self.window and not self.file_writer.write_to_movie and not capture_swap:
+            self.window.swap_buffers()
+            if self.camera.fbo is not self.camera.window_fbo:
+                self.camera.blit(self.camera.fbo, self.camera.window_fbo)
+                self.window.swap_buffers()
 
     def emit_frame(self) -> None:
         if (
@@ -701,8 +743,39 @@ class Scene(object):
     # Related to updating
 
     def update_mobjects(self, dt: float) -> None:
-        for mobject in self.mobjects:
-            mobject.update(dt)
+        # Keep original semantics in non-threaded mode (main thread).
+        if threading.current_thread() is threading.main_thread():
+            for mobject in self.mobjects:
+                mobject.update(dt)
+            return
+
+        # Threaded mode: run every individual mobject updater in parallel.
+        # Note: This is inherently non-deterministic for updaters that touch
+        # shared state / other mobjects.
+        tasks: list[Callable[[], object]] = []
+
+        def enqueue_updaters(mob: Mobject) -> None:
+            if mob.updating_suspended or (not mob.has_updaters()):
+                return
+            for submob in mob.submobjects:
+                enqueue_updaters(submob)
+            if not mob.updaters:
+                return
+            updaters = list(mob.updaters)
+            for updater in updaters:
+                def task(mob=mob, updater=updater) -> None:
+                    if "dt" in updater.__code__.co_varnames:
+                        updater(mob, dt=dt)
+                    else:
+                        updater(mob)
+                tasks.append(task)
+
+        for mobject in list(self.mobjects):
+            enqueue_updaters(mobject)
+
+        if not tasks:
+            return
+        run_updaters_in_parallel(tasks, min_workers=len(tasks))
 
     def should_update_mobjects(self) -> bool:
         return self.always_update_mobjects or any(
@@ -762,6 +835,19 @@ class Scene(object):
             batch[0].get_group_class()(*batch)
             for batch, key in batches
         ]
+
+        # Always render magnifying glasses last (overlay effect).
+        # Avoid importing the class here; use a lightweight marker attribute.
+        if self.render_groups:
+            magnifiers = []
+            others = []
+            for group in self.render_groups:
+                submobs = getattr(group, "submobjects", [])
+                if any(getattr(m, "is_magnifying_glass", False) for m in submobs):
+                    magnifiers.append(group)
+                else:
+                    others.append(group)
+            self.render_groups = others + magnifiers
 
     @staticmethod
     def affects_mobject_list(func: Callable[..., T]) -> Callable[..., T]:

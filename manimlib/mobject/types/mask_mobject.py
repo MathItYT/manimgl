@@ -63,6 +63,46 @@ class MaskMobject(Mobject):
         self.set_height(height)
         self.set_width(FRAME_WIDTH, stretch=True)
 
+        # Refresh textures every frame via an updater so this works under
+        # parallel-updater execution (which may bypass Mobject.update overrides).
+        def texture_updater(mob: "MaskMobject", dt: float = 0) -> None:
+            def update_textures() -> None:
+                camera = mob.scene.camera
+                old_fbo = camera.fbo
+                try:
+                    camera.fbo = mob.src_fbo
+                    camera.show(mob.src_mobject, notify_render=False)
+                    camera.capture(
+                        mob.src_mobject,
+                        clear_window=False,
+                        transparent=True,
+                    )
+                    camera.hide(mob.src_mobject, notify_render=False)
+
+                    camera.fbo = mob.mask_fbo
+                    camera.show(mob.mask_mobject, notify_render=False)
+                    camera.capture(
+                        mob.mask_mobject,
+                        clear_window=False,
+                        transparent=True,
+                    )
+                    camera.hide(mob.mask_mobject, notify_render=False)
+                except gl.error.GLError:
+                    pass
+                finally:
+                    camera.fbo = old_fbo
+                    camera.fbo.use()
+
+            caller = getattr(mob.scene, "_main_thread_caller", None)
+            threaded_active = bool(getattr(mob.scene, "_threaded_mode_active", False))
+            if threaded_active and caller is not None and not caller.is_main_thread():
+                caller.call(update_textures)
+            else:
+                update_textures()
+
+        # Avoid calling the updater immediately from inside __init__.
+        self.insert_updater(texture_updater, index=0)
+
     def init_shader_wrapper(self, ctx):
         super().init_shader_wrapper(ctx)
         self.shader_wrapper.add_texture("Source", self.src_tex)
@@ -75,39 +115,4 @@ class MaskMobject(Mobject):
 
     def set_color(self, color, opacity=None, recurse=True):
         pass
-
-    def update(self, dt=0, recurse=True):
-        def update_textures() -> None:
-            camera = self.scene.camera
-            old_fbo = camera.fbo
-            try:
-                camera.fbo = self.src_fbo
-                camera.show(self.src_mobject)
-                camera.capture(
-                    self.src_mobject, clear_window=False, transparent=True
-                )
-                camera.hide(self.src_mobject)
-
-                camera.fbo = self.mask_fbo
-                camera.show(self.mask_mobject)
-                camera.capture(
-                    self.mask_mobject,
-                    clear_window=False,
-                    transparent=True,
-                )
-                camera.hide(self.mask_mobject)
-            except gl.error.GLError:
-                pass
-            finally:
-                camera.fbo = old_fbo
-                camera.fbo.use()
-
-        caller = getattr(self.scene, "_main_thread_caller", None)
-        threaded_active = bool(getattr(self.scene, "_threaded_mode_active", False))
-        if threaded_active and caller is not None and not caller.is_main_thread():
-            caller.call(update_textures)
-        else:
-            update_textures()
-
-        super().update(dt, recurse)
-        return self
+    # Note: No update() override. Texture refresh is handled by the updater.

@@ -141,7 +141,12 @@ void emit_point_with_width(
     // Figure out the step from the point to the corners of the
     // triangle strip around the polyline
     vec3 step = step_to_corner(point, tangent, unit_normal, joint_angle, inside_curve, draw_flat);
-    float aaw = max(anti_alias_width * pixel_size, 1e-8);
+    // For fixed-in-frame objects, camera zoom changes `pixel_size` and
+    // `frame_scale`, but those objects are rendered in frame coordinates
+    // (no view scaling). Counteract zoom so AA doesn't blow up.
+    float base_pixel_size = pixel_size / max(frame_scale, 1e-8);
+    float effective_pixel_size = mix(pixel_size, base_pixel_size, is_fixed_in_frame);
+    float aaw = max(anti_alias_width * effective_pixel_size, 1e-8);
 
     // Emit two corners
     // The frag shader will receive a value from -1 to 1,
@@ -175,7 +180,8 @@ void main() {
     // Estimate how many line segment the curve should be divided into
     // based on the area of the triangle defined by these control points
     float area = 0.5 * length(cross(verts[1] - verts[0], verts[2] - verts[0]));
-    int count = int(round(POLYLINE_FACTOR * sqrt(area) / frame_scale));
+    float effective_frame_scale = max(mix(frame_scale, 1.0, is_fixed_in_frame), 1e-8);
+    int count = int(round(POLYLINE_FACTOR * sqrt(area) / effective_frame_scale));
     int n_steps = min(2 + count, MAX_STEPS);
 
     // Emit vertex pairs aroudn subdivided points
