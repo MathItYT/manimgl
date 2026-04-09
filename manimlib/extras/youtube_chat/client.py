@@ -15,7 +15,7 @@ from urllib.request import urlopen
 import cv2
 import numpy as np
 
-from build.lib.manimlib.scene.scene import Scene
+from manimlib.scene.scene import Scene
 from manimlib.logger import log
 from manimlib.mobject.geometry import Circle
 from manimlib.mobject.mobject import Group, Mobject
