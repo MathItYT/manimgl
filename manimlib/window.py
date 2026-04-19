@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 
 import moderngl_window as mglw
-from pyglet.window import key as PygletWindowKeys
 from moderngl_window.context.pyglet.window import (
     Window as PygletWindow,
 )
@@ -24,6 +23,7 @@ if TYPE_CHECKING:
 
 
 class Window(PygletWindow):
+    fullscreen: bool = False
     resizable: bool = True
     gl_version: tuple[int, int] = (3, 3)
     vsync: bool = True
@@ -47,9 +47,15 @@ class Window(PygletWindow):
         )
         self.pressed_keys = set()
 
-        super().__init__(samples=samples, size=self.default_size)
-        self.to_default_position()
-        self.fullscreen = full_screen
+        super().__init__(
+            samples=samples,
+            fullscreen=full_screen,
+            size=(self.monitor.width, self.monitor.height)
+            if full_screen
+            else self.default_size,
+        )
+        if not full_screen:
+            self.to_default_position()
 
         if self.scene:
             self.init_for_scene(scene)
@@ -77,23 +83,8 @@ class Window(PygletWindow):
         self.timer.start()
 
         # This line seems to resync the viewport
-        self.on_resize(*self.size)
-
-    def _dispatch_scene_event(self, method_name: str, /, *args, **kwargs) -> None:
-        """Dispatch a window event to the scene.
-
-        If the scene implements `_dispatch_window_event`, this allows it to
-        queue events to a worker thread (threaded preview mode).
-        """
-        if not self.scene:
-            return
-        dispatcher = getattr(self.scene, "_dispatch_window_event", None)
-        if callable(dispatcher):
-            dispatcher(method_name, *args, **kwargs)
-            return
-        handler = getattr(self.scene, method_name, None)
-        if callable(handler):
-            handler(*args, **kwargs)
+        if not self.fullscreen:
+            self.on_resize(*self.size)
 
     def get_monitor(self, index):
         try:
@@ -162,8 +153,6 @@ class Window(PygletWindow):
         return self._has_undrawn_event
 
     def swap_buffers(self):
-        if self._window.context is None:
-            return
         super().swap_buffers()
         self._has_undrawn_event = False
 
@@ -183,9 +172,13 @@ class Window(PygletWindow):
         self, x: int, y: int, dx: int, dy: int
     ) -> None:
         super().on_mouse_motion(x, y, dx, dy)
-        # Keep the main thread as light as possible: in threaded mode, the
-        # scene will convert pixel coords to space coords on the worker thread.
-        self._dispatch_scene_event("on_mouse_motion", x, y, dx, dy)
+        if not self.scene:
+            return
+        point = self.pixel_coords_to_space_coords(x, y)
+        d_point = self.pixel_coords_to_space_coords(
+            dx, dy, relative=True
+        )
+        self.scene.on_mouse_motion(point, d_point)
 
     @note_undrawn_event
     def on_mouse_drag(
@@ -198,75 +191,90 @@ class Window(PygletWindow):
         modifiers: int,
     ) -> None:
         super().on_mouse_drag(x, y, dx, dy, buttons, modifiers)
-        self._dispatch_scene_event(
-            "on_mouse_drag",
-            x, y, dx, dy,
-            buttons, modifiers,
+        if not self.scene:
+            return
+        point = self.pixel_coords_to_space_coords(x, y)
+        d_point = self.pixel_coords_to_space_coords(
+            dx, dy, relative=True
         )
+        self.scene.on_mouse_drag(point, d_point, buttons, modifiers)
 
     @note_undrawn_event
     def on_mouse_press(
         self, x: int, y: int, button: int, mods: int
     ) -> None:
         super().on_mouse_press(x, y, button, mods)
-        self._dispatch_scene_event("on_mouse_press", x, y, button, mods)
+        if not self.scene:
+            return
+        point = self.pixel_coords_to_space_coords(x, y)
+        self.scene.on_mouse_press(point, button, mods)
 
     @note_undrawn_event
     def on_mouse_release(
         self, x: int, y: int, button: int, mods: int
     ) -> None:
         super().on_mouse_release(x, y, button, mods)
-        self._dispatch_scene_event("on_mouse_release", x, y, button, mods)
+        if not self.scene:
+            return
+        point = self.pixel_coords_to_space_coords(x, y)
+        self.scene.on_mouse_release(point, button, mods)
 
     @note_undrawn_event
     def on_mouse_scroll(
         self, x: int, y: int, x_offset: float, y_offset: float
     ) -> None:
         super().on_mouse_scroll(x, y, x_offset, y_offset)
-        self._dispatch_scene_event("on_mouse_scroll", x, y, x_offset, y_offset)
+        if not self.scene:
+            return
+        point = self.pixel_coords_to_space_coords(x, y)
+        offset = self.pixel_coords_to_space_coords(
+            x_offset, y_offset, relative=True
+        )
+        self.scene.on_mouse_scroll(point, offset, x_offset, y_offset)
 
     @note_undrawn_event
     def on_key_press(self, symbol: int, modifiers: int) -> None:
-        if symbol == PygletWindowKeys.ESCAPE and self.scene is not None:
-            if getattr(self.scene, "file_writer", None) is not None and getattr(self.scene.file_writer, "save_last_frame", False):
-                self.scene.file_writer.cache_last_frame(swap=False)
-            self.scene.quit_interaction = True
-            self.scene.hold_on_wait = False
-            return
         self.pressed_keys.add(symbol)  # Modifiers?
         super().on_key_press(symbol, modifiers)
-        self._dispatch_scene_event("on_key_press", symbol, modifiers)
+        if not self.scene:
+            return
+        self.scene.on_key_press(symbol, modifiers)
 
     @note_undrawn_event
     def on_key_release(self, symbol: int, modifiers: int) -> None:
         self.pressed_keys.difference_update({symbol})  # Modifiers?
         super().on_key_release(symbol, modifiers)
-        self._dispatch_scene_event("on_key_release", symbol, modifiers)
+        if not self.scene:
+            return
+        self.scene.on_key_release(symbol, modifiers)
 
     @note_undrawn_event
     def on_resize(self, width: int, height: int) -> None:
         super().on_resize(width, height)
-        self._dispatch_scene_event("on_resize", width, height)
+        if not self.scene:
+            return
+        self.scene.on_resize(width, height)
 
     @note_undrawn_event
     def on_show(self) -> None:
         super().on_show()
-        self._dispatch_scene_event("on_show")
+        if not self.scene:
+            return
+        self.scene.on_show()
 
     @note_undrawn_event
     def on_hide(self) -> None:
         super().on_hide()
-        self._dispatch_scene_event("on_hide")
+        if not self.scene:
+            return
+        self.scene.on_hide()
 
     @note_undrawn_event
     def on_close(self) -> None:
-        if self.scene is not None:
-            if getattr(self.scene, "file_writer", None) is not None and getattr(self.scene.file_writer, "save_last_frame", False):
-                self.scene.file_writer.cache_last_frame(swap=False)
-            self.scene.quit_interaction = True
-            self.scene.on_close()
-            return
         super().on_close()
+        if not self.scene:
+            return
+        self.scene.on_close()
 
     def is_key_pressed(self, symbol: int) -> bool:
         return symbol in self.pressed_keys

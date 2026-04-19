@@ -2,6 +2,10 @@ uniform float is_fixed_in_frame;
 uniform mat4 view;
 uniform float focal_distance;
 uniform vec3 frame_rescale_factors;
+// Optional magnifier (camera-uniform driven) post-projection transform
+uniform float magnify_active;
+uniform vec2 magnify_center;
+uniform float magnify_zoom;
 uniform vec4 clip_plane0;
 uniform vec4 clip_plane1;
 uniform vec4 clip_plane2;
@@ -17,6 +21,17 @@ void emit_gl_Position(vec3 point){
     // Flip and scale to prevent premature clipping
     result.z *= -0.1;
     gl_Position = result;
+
+    // Apply optional magnifier transform in normalized device coordinates.
+    // This is used to re-render the scene with a "zoomed" camera without
+    // rasterizing a texture, preserving vector detail.
+    if(magnify_active > 0.5){
+        float w = max(gl_Position.w, 1e-8);
+        vec2 ndc = gl_Position.xy / w;
+        float zoom = max(magnify_zoom, 1e-6);
+        ndc = magnify_center + (ndc - magnify_center) * zoom;
+        gl_Position.xy = ndc * w;
+    }
     
     // Set clip planes
     if(clip_plane0.xyz != vec3(0.0, 0.0, 0.0)){

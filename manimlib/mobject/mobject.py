@@ -44,7 +44,6 @@ from manimlib.utils.shaders import get_colormap_code
 from manimlib.utils.space_ops import angle_of_vector
 from manimlib.utils.space_ops import get_norm
 from manimlib.utils.space_ops import rotation_matrix_transpose
-from manimlib.utils.updater_parallel import run_updaters_in_parallel
 
 from typing import TYPE_CHECKING
 from typing import TypeVar, Generic, Iterable
@@ -53,7 +52,7 @@ SubmobjectType = TypeVar("SubmobjectType", bound="Mobject")
 
 
 if TYPE_CHECKING:
-    from typing import Callable, Iterator, Union, Tuple, Optional, Any
+    from typing import Callable, Iterator, Union, Tuple, Optional
     import numpy.typing as npt
     from manimlib.typing import (
         ManimColor,
@@ -937,14 +936,8 @@ class Mobject(object):
             else:
                 updater(self)
 
-        if len(updaters) > 1 and threading.current_thread() is not threading.main_thread():
-            run_updaters_in_parallel(
-                (lambda u=updater: call_updater(u) for updater in updaters),
-                min_workers=len(updaters),
-            )
-        else:
-            for updater in updaters:
-                call_updater(updater)
+        for updater in updaters:
+            call_updater(updater)
         return self
 
     def get_updaters(self) -> list[Updater]:
@@ -2320,7 +2313,8 @@ class Mobject(object):
         # Filter out hidden family members here and treat visibility changes as
         # a reason to rebuild shader batches (see `render`).
         family = [
-            m for m in self.family_members_with_points()
+            m
+            for m in self.family_members_with_points()
             if not getattr(m, "hide", False)
         ]
         batches = batch_by_property(

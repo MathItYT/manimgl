@@ -26,9 +26,10 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Callable, Iterable, Sequence, Tuple
+    from colour import Color
 
     from manimlib.camera.camera import Camera
-    from manimlib.typing import ManimColor, Vect3, Vect3Array, Self
+    from manimlib.typing import ManimColor, Vect2, Vect3, Vect3Array, Self
 
 
 class Surface(Mobject):
@@ -116,8 +117,8 @@ class Surface(Mobject):
         (nu, nv) is the resolution
         """
         nu, nv = self.resolution
-        u_range = np.linspace(*self.u_range, nu)
-        v_range = np.linspace(*self.v_range, nv)
+        u_range = np.linspace(*self.u_range[:2], nu)
+        v_range = np.linspace(*self.v_range[:2], nv)
         U, V = np.meshgrid(u_range, v_range, indexing="ij")
         return np.stack([U, V], axis=-1)
 
@@ -280,7 +281,7 @@ class Surface(Mobject):
 class ParametricSurface(Surface):
     def __init__(
         self,
-        uv_func: Callable[[float, float], Iterable[float]],
+        uv_func: Callable[[float, float], Vect3],
         u_range: tuple[float, float] = (0, 1),
         v_range: tuple[float, float] = (0, 1),
         **kwargs,

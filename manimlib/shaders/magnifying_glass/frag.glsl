@@ -3,11 +3,13 @@
 in vec3 v_point;
 
 uniform sampler2D Scene;
+uniform sampler2D Zoomed;
 
 // Magnifier parameters (world/frame coords depending on is_fixed_in_frame)
 uniform vec3 lens_center;
 uniform float lens_radius;
 uniform float magnification;
+uniform float rasterize;
 
 // Camera uniforms (see inserts/emit_gl_Position.glsl)
 uniform float is_fixed_in_frame;
@@ -46,11 +48,21 @@ void main(){
     float effective_pixel_size = mix(pixel_size, base_pixel_size, is_fixed_in_frame);
     float aa = max(1.5 * effective_pixel_size, 1e-8);
     float edge_alpha = 1.0 - smoothstep(lens_radius - aa, lens_radius, dist);
+
+    // Only draw inside the circular lens (with anti-aliased edge).
     if(edge_alpha <= 0.0) discard;
 
-    float zoom = max(magnification, 1e-6);
-    vec2 magnified_uv = center_uv + (uv - center_uv) / zoom;
+    // Rasterized mode (legacy): sample from a captured scene texture.
+    if(rasterize > 0.5){
+        float zoom = max(magnification, 1e-6);
+        vec2 magnified_uv = center_uv + (uv - center_uv) / zoom;
+        frag_color = texture(Scene, magnified_uv);
+        frag_color.a *= edge_alpha;
+        return;
+    }
 
-    frag_color = texture(Scene, magnified_uv);
+    // Non-rasterized mode: sample from an offscreen re-render of the scene
+    // with modified camera uniforms (preserves vector detail).
+    frag_color = texture(Zoomed, uv);
     frag_color.a *= edge_alpha;
 }

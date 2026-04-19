@@ -7,7 +7,10 @@ import numpy as np
 from manimlib.animation.animation import Animation
 from manimlib.mobject.svg.string_mobject import StringMobject
 from manimlib.mobject.types.vectorized_mobject import VMobject
-from manimlib.utils.bezier import integer_interpolate, partial_quadratic_bezier_points
+from manimlib.utils.bezier import (
+    integer_interpolate,
+    partial_quadratic_bezier_points,
+)
 from manimlib.utils.rate_functions import linear
 from manimlib.utils.rate_functions import double_smooth
 from manimlib.utils.rate_functions import smooth
@@ -26,15 +29,18 @@ class ShowPartial(Animation, ABC):
     """
     Abstract class for ShowCreation and ShowPassingFlash
     """
-    def __init__(self, mobject: Mobject, should_match_start: bool = False, **kwargs):
+
+    def __init__(
+        self,
+        mobject: Mobject,
+        should_match_start: bool = False,
+        **kwargs,
+    ):
         self.should_match_start = should_match_start
         super().__init__(mobject, **kwargs)
 
     def interpolate_submobject(
-        self,
-        submob: Mobject,
-        start_submob: Mobject,
-        alpha: float
+        self, submob: Mobject, start_submob: Mobject, alpha: float
     ) -> None:
         submob.pointwise_become_partial(
             start_submob, *self.get_bounds(alpha)
@@ -46,7 +52,9 @@ class ShowPartial(Animation, ABC):
 
 
 class ShowCreation(ShowPartial):
-    def __init__(self, mobject: Mobject, lag_ratio: float = 1.0, **kwargs):
+    def __init__(
+        self, mobject: Mobject, lag_ratio: float = 1.0, **kwargs
+    ):
         super().__init__(mobject, lag_ratio=lag_ratio, **kwargs)
 
     def get_bounds(self, alpha: float) -> tuple[float, float]:
@@ -81,18 +89,17 @@ class DrawBorderThenFill(Animation):
         stroke_color: ManimColor = None,
         draw_border_animation_config: dict = {},
         fill_animation_config: dict = {},
-        **kwargs
+        **kwargs,
     ):
         assert isinstance(vmobject, VMobject)
         self.stroke_width = stroke_width
         self.stroke_color = stroke_color
-        self.draw_border_animation_config = draw_border_animation_config
+        self.draw_border_animation_config = (
+            draw_border_animation_config
+        )
         self.fill_animation_config = fill_animation_config
         super().__init__(
-            vmobject,
-            run_time=run_time,
-            rate_func=rate_func,
-            **kwargs
+            vmobject, run_time=run_time, rate_func=rate_func, **kwargs
         )
         self.mobject = vmobject
 
@@ -119,68 +126,18 @@ class DrawBorderThenFill(Animation):
 
     def get_all_mobjects(self) -> list[Mobject]:
         return [*super().get_all_mobjects(), self.outline]
-    
+
     def interpolate_submobject(
         self,
         submob: VMobject,
         start: VMobject,
         outline: VMobject,
-        alpha: float
+        alpha: float,
     ) -> None:
         index, subalpha = integer_interpolate(0, 2, alpha)
 
         if index == 0:
-            vm_points = outline.get_points()
-            num_curves = outline.get_num_curves()
-
-            # 1. Si está vacío o no ha empezado a dibujarse
-            if num_curves == 0 or subalpha <= 0:
-                if len(vm_points) > 0:
-                    submob.data["point"][:] = vm_points[0]
-                else:
-                    submob.data["point"][:] = 0
-                
-                # ¡NUEVO! Avisar a OpenGL del cambio
-                submob.set_points(submob.data["point"], refresh=False)
-                submob._data_has_changed = True
-                return
-
-            # 2. Si el borde ya terminó de dibujarse
-            if subalpha >= 1:
-                submob.data["point"][:] = vm_points
-                submob.data["joint_angle"][:] = outline.data["joint_angle"]
-                
-                # ¡NUEVO! Avisar a OpenGL del cambio
-                submob.set_points(submob.data["point"], refresh=False)
-                submob._data_has_changed = True
-                return
-
-            # 3. Cálculo de la curva parcial
-            upper_index, upper_residue = integer_interpolate(0, num_curves, subalpha)
-            i3 = 2 * upper_index
-            i4 = i3 + 3
-
-            points = submob.data["point"]
-            
-            points[:i3] = vm_points[:i3]
-            
-            high_tup = partial_quadratic_bezier_points(vm_points[i3:i4], 0, upper_residue)
-            points[i3:i4] = high_tup
-            
-            points[i4:] = high_tup[2]
-
-            submob.data["joint_angle"][:] = outline.data["joint_angle"]
-            submob.data["joint_angle"][i4:] = 0
-            
-            # -----------------------------------------------------------------
-            # ¡NUEVO! LA CLAVE PARA QUE RENDERICE FLUIDO:
-            # Le pasamos el mismo array para evitar copias pesadas, pero 
-            # forzamos a Manim a registrar que los vértices están "sucios" (dirty)
-            # y deben enviarse de nuevo a la GPU en este frame.
-            # -----------------------------------------------------------------
-            submob.set_points(points, refresh=False)
-            submob._data_has_changed = True
-            
+            submob.pointwise_become_partial(outline, 0, subalpha)
         else:
             # El relleno (index == 1) ya se encarga de avisar a OpenGL internamente
             submob.interpolate(outline, start, subalpha)
@@ -194,7 +151,7 @@ class Write(DrawBorderThenFill):
         lag_ratio: float = -1,  # If negative, this will be reassigned
         rate_func: Callable[[float], float] = linear,
         stroke_color: ManimColor = None,
-        **kwargs
+        **kwargs,
     ):
         if stroke_color is None:
             stroke_color = vmobject.get_color()
@@ -205,7 +162,7 @@ class Write(DrawBorderThenFill):
             lag_ratio=self.compute_lag_ratio(family_size, lag_ratio),
             rate_func=rate_func,
             stroke_color=stroke_color,
-            **kwargs
+            **kwargs,
         )
 
     def compute_run_time(self, family_size: int, run_time: float):
@@ -225,14 +182,14 @@ class ShowIncreasingSubsets(Animation):
         group: Mobject,
         int_func: Callable[[float], float] = np.round,
         suspend_mobject_updating: bool = False,
-        **kwargs
+        **kwargs,
     ):
         self.all_submobs = list(group.submobjects)
         self.int_func = int_func
         super().__init__(
             group,
             suspend_mobject_updating=suspend_mobject_updating,
-            **kwargs
+            **kwargs,
         )
 
     def interpolate_mobject(self, alpha: float) -> None:
@@ -250,7 +207,7 @@ class ShowSubmobjectsOneByOne(ShowIncreasingSubsets):
         self,
         group: Mobject,
         int_func: Callable[[float], float] = np.ceil,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(group, int_func=int_func, **kwargs)
 
@@ -259,7 +216,9 @@ class ShowSubmobjectsOneByOne(ShowIncreasingSubsets):
         if index == 0:
             self.mobject.set_submobjects([])
         else:
-            self.mobject.set_submobjects([self.all_submobs[index - 1]])
+            self.mobject.set_submobjects(
+                [self.all_submobs[index - 1]]
+            )
 
 
 class AddTextWordByWord(ShowIncreasingSubsets):
@@ -267,9 +226,9 @@ class AddTextWordByWord(ShowIncreasingSubsets):
         self,
         string_mobject: StringMobject,
         time_per_word: float = 0.2,
-        run_time: float = -1.0, # If negative, it will be recomputed with time_per_word
+        run_time: float = -1.0,  # If negative, it will be recomputed with time_per_word
         rate_func: Callable[[float], float] = linear,
-        **kwargs
+        **kwargs,
     ):
         assert isinstance(string_mobject, StringMobject)
         grouped_mobject = string_mobject.build_groups()
@@ -279,7 +238,7 @@ class AddTextWordByWord(ShowIncreasingSubsets):
             grouped_mobject,
             run_time=run_time,
             rate_func=rate_func,
-            **kwargs
+            **kwargs,
         )
         self.string_mobject = string_mobject
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import inspect
 import pyperclip
-import traceback
 import textwrap
 
 from IPython.terminal import pt_inputhooks

@@ -96,6 +96,7 @@ class CoordinateSystem(ABC):
         x_range: RangeSpecifier = DEFAULT_X_RANGE,
         y_range: RangeSpecifier = DEFAULT_Y_RANGE,
         num_sampled_graph_points_per_tick: int = 5,
+        **kwargs,
     ):
         self.x_range = full_range_specifier(x_range)
         self.y_range = full_range_specifier(y_range)
@@ -222,13 +223,15 @@ class CoordinateSystem(ABC):
         bind: bool = False,
         **kwargs,
     ) -> ParametricCurve:
-        x_range = x_range or self.x_range
+        had_x_range = x_range is not None
+        x_range = x_range if x_range is not None else self.x_range
         t_range = np.ones(3)
         t_range[: len(x_range)] = x_range
         # For axes, the third coordinate of x_range indicates
         # tick frequency.  But for functions, it indicates a
         # sample frequency
-        t_range[2] /= self.num_sampled_graph_points_per_tick
+        if not had_x_range:
+            t_range[2] /= self.num_sampled_graph_points_per_tick
 
         def parametric_function(t: float) -> Vect3:
             return self.c2p(t, function(t))

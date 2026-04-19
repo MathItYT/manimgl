@@ -8,5 +8,6 @@ out vec3 v_point;
 
 void main(){
     emit_gl_Position(point);
-    v_point = gl_Position.xyz;
+    float w = max(gl_Position.w, 1e-8);
+    v_point = gl_Position.xyz / w;
 }

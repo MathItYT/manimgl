@@ -15,6 +15,7 @@ from manimlib.constants import DEG
 from manimlib.constants import ORIGIN, OUT
 from manimlib.constants import PI
 from manimlib.constants import TAU
+import manimlib.constants
 from manimlib.mobject.mobject import Mobject
 from manimlib.mobject.mobject import Group
 from manimlib.mobject.mobject import Point

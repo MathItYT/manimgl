@@ -57,15 +57,15 @@ class Camera(object):
         self.samples = samples
 
         self.rgb_max_val: float = np.iinfo(self.pixel_array_dtype).max
-        self.background_rgba: list[float] = list(color_to_rgba(
-            background_color, background_opacity
-        ))
+        self.background_rgba: list[float] = list(
+            color_to_rgba(background_color, background_opacity)
+        )
         self.uniforms = dict()
         self.init_frame(**frame_config)
         self.init_context()
         self.init_fbo()
         self.init_light_source()
-    
+
     def hide(
         self,
         mobject: Mobject,
@@ -82,6 +82,7 @@ class Camera(object):
         """
 
         if not notify_render:
+
             def set_hide_fast(mob: Mobject) -> None:
                 mob.hide = True
                 if recursive:
@@ -109,7 +110,7 @@ class Camera(object):
                 mob.note_changed_data(recurse_up=True)
 
         return mobject
-    
+
     def show(
         self,
         mobject: Mobject,
@@ -119,6 +120,7 @@ class Camera(object):
         """Mark an mobject (and optionally its descendants) as visible."""
 
         if not notify_render:
+
             def set_show_fast(mob: Mobject) -> None:
                 mob.hide = False
                 if recursive:
@@ -152,7 +154,9 @@ class Camera(object):
 
     def init_context(self) -> None:
         if self.window is None:
-            self.ctx: moderngl.Context = moderngl.create_standalone_context()
+            self.ctx: moderngl.Context = (
+                moderngl.create_standalone_context()
+            )
         else:
             self.ctx: moderngl.Context = self.window.ctx
 
@@ -186,10 +190,7 @@ class Camera(object):
             self.fbo = self.fbo_for_files
 
     # Methods associated with the frame buffer
-    def get_fbo(
-        self,
-        samples: int = 0
-    ) -> moderngl.Framebuffer:
+    def get_fbo(self, samples: int = 0) -> moderngl.Framebuffer:
         return self.ctx.framebuffer(
             color_attachments=self.ctx.texture(
                 self.default_pixel_shape,
@@ -197,15 +198,22 @@ class Camera(object):
                 samples=samples,
             ),
             depth_attachment=self.ctx.depth_renderbuffer(
-                self.default_pixel_shape,
-                samples=samples
-            )
+                self.default_pixel_shape, samples=samples
+            ),
         )
 
-    def clear(self, clear_window: bool = True, transparent: bool = False) -> None:
-        self.fbo.clear(*self.background_rgba if not transparent else (0, 0, 0, 0))
+    def clear(
+        self, clear_window: bool = True, transparent: bool = False
+    ) -> None:
+        self.fbo.clear(
+            *self.background_rgba if not transparent else (0, 0, 0, 0)
+        )
         if self.window and clear_window:
-            self.window.clear(*self.background_rgba if not transparent else (0, 0, 0, 0))
+            self.window.clear(
+                *self.background_rgba
+                if not transparent
+                else (0, 0, 0, 0)
+            )
 
     def blit(self, src_fbo, dst_fbo):
         """
@@ -216,10 +224,13 @@ class Camera(object):
         gl.glBlitFramebuffer(
             *src_fbo.viewport,
             *dst_fbo.viewport,
-            gl.GL_COLOR_BUFFER_BIT, gl.GL_LINEAR
+            gl.GL_COLOR_BUFFER_BIT,
+            gl.GL_LINEAR,
         )
 
-    def get_raw_fbo_data(self, dtype: str = 'f1', swap: bool = True) -> bytes:
+    def get_raw_fbo_data(
+        self, dtype: str = "f1", swap: bool = True
+    ) -> bytes:
         self.blit(self.fbo, self.draw_fbo)
         result = self.draw_fbo.read(
             viewport=self.draw_fbo.viewport,
@@ -235,16 +246,23 @@ class Camera(object):
 
     def get_image(self, swap: bool = True) -> Image.Image:
         return Image.frombytes(
-            'RGBA',
+            "RGBA",
             self.get_pixel_shape(),
             self.get_raw_fbo_data(swap=swap),
-            'raw', 'RGBA', 0, -1
+            "raw",
+            "RGBA",
+            0,
+            -1,
         )
 
-    def get_pixel_array(self, swap: bool = True, reverse: bool = True) -> np.ndarray:
-        raw = self.get_raw_fbo_data(dtype='f4', swap=swap)
-        flat_arr = np.frombuffer(raw, dtype='f4')
-        arr = flat_arr.reshape([*reversed(self.draw_fbo.size), self.n_channels])
+    def get_pixel_array(
+        self, swap: bool = True, reverse: bool = True
+    ) -> np.ndarray:
+        raw = self.get_raw_fbo_data(dtype="f4", swap=swap)
+        flat_arr = np.frombuffer(raw, dtype="f4")
+        arr = flat_arr.reshape(
+            [*reversed(self.draw_fbo.size), self.n_channels]
+        )
         if reverse:
             arr = arr[::-1]
         # Convert from float
@@ -256,7 +274,7 @@ class Camera(object):
             size=self.fbo.size,
             components=4,
             data=self.get_raw_fbo_data(swap=False),
-            dtype='f4'
+            dtype="f4",
         )
         return texture
 
@@ -292,7 +310,9 @@ class Camera(object):
     def get_location(self) -> tuple[float, float, float]:
         return self.frame.get_implied_camera_location()
 
-    def resize_frame_shape(self, fixed_dimension: bool = False) -> None:
+    def resize_frame_shape(
+        self, fixed_dimension: bool = False
+    ) -> None:
         """
         Changes frame_shape to match the aspect ratio
         of the pixels, where fixed_dimension determines
@@ -310,7 +330,13 @@ class Camera(object):
         self.frame.set_width(frame_width, stretch=True)
 
     # Rendering
-    def capture(self, *mobjects: Mobject, clear_window: bool = True, transparent: bool = False, swap: bool = False) -> None:
+    def capture(
+        self,
+        *mobjects: Mobject,
+        clear_window: bool = True,
+        transparent: bool = False,
+        swap: bool = False,
+    ) -> None:
         self.clear(clear_window, transparent)
         self.refresh_uniforms()
         self.fbo.use()
@@ -337,6 +363,10 @@ class Camera(object):
                 frame.get_scale() / frame.get_focal_distance(),
             ),
             pixel_size=self.get_pixel_size(),
+            # Magnifier uniforms (inactive by default; may be overridden for a second pass)
+            magnify_active=0.0,
+            magnify_center=(0.0, 0.0),
+            magnify_zoom=1.0,
             camera_position=tuple(cam_pos),
             light_position=tuple(light_pos),
         )

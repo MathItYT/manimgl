@@ -126,7 +126,10 @@ class VideoMobject(ImageMobject):
                 # main OpenGL thread; texture writes must be scheduled
                 # on the main thread.
                 try:
-                    from manimlib.scene.scene import get_main_thread_caller
+                    from manimlib.scene.scene import (
+                        get_main_thread_caller,
+                    )
+
                     caller = get_main_thread_caller()
                 except Exception:
                     caller = None
@@ -135,7 +138,11 @@ class VideoMobject(ImageMobject):
                 else:
                     texture.write(frame)
             else:
-                mob.texture_paths["Texture"] = (frame.tobytes(), frame.shape[1], frame.shape[0])
+                mob.texture_paths["Texture"] = (
+                    frame.tobytes(),
+                    frame.shape[1],
+                    frame.shape[0],
+                )
         except StopIteration:
             mob.iterator = None
 
@@ -149,8 +156,15 @@ class VideoMobject(ImageMobject):
         cap = cv2.VideoCapture(video_path_or_camera)
         if not cap.isOpened():
             raise ValueError("Failed to open video file")
-        
-        last_frame = np.zeros((int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)), int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), 4), dtype=np.uint8)
+
+        last_frame = np.zeros(
+            (
+                int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                4,
+            ),
+            dtype=np.uint8,
+        )
         ready = threading.Event()
 
         def frame_reader():
@@ -164,13 +178,13 @@ class VideoMobject(ImageMobject):
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
                 last_frame[:] = frame
                 ready.set()
-        
+
         def iterator():
             ready.wait()
             while True:
                 yield last_frame
 
-        runner = threading.Thread(target=frame_reader)
+        runner = threading.Thread(target=frame_reader, daemon=True)
         runner.start()
 
         return cls(iterator(), **kwargs)

@@ -3,6 +3,7 @@ import os
 from pyglet.window import key
 import string
 import threading
+import numpy as np
 
 imported_transcriber: bool = False
 imported_llm_scene_controller: bool = False
@@ -11,35 +12,62 @@ imported_virtual_camera: bool = False
 imported_youtube_chat: bool = False
 
 try:
-    from manimlib.extras.transcription import ElevenLabsRealtimeTranscriber, bind_transcriber_callback, bind_transcriber_to_text
+    from manimlib.extras.transcription import (
+        ElevenLabsRealtimeTranscriber,
+        bind_transcriber_callback,
+        bind_transcriber_to_text,
+    )
+
     imported_transcriber = True
 except ImportError:
     pass
 
 
 try:
-    from manimlib.extras.llm import LLMSceneController
+    from manimlib.extras.llm import (
+        LLMSceneController,
+        init_all_animations,
+        init_all_mobjects,
+    )
+
     imported_llm_scene_controller = True
 except ImportError:
     pass
 
 
 try:
-    from manimlib.extras.vision import HandMesh, HandMotionState, HandMotionTracker, bind_hand_gesture_callback, bind_hand_mesh_to_tracker, bind_hand_position_to_mobject, bind_hand_tracker_to_video, unbind_hand_tracker_from_video
+    from manimlib.extras.vision import (
+        HandMesh,
+        HandMotionState,
+        HandMotionTracker,
+        bind_hand_gesture_callback,
+        bind_hand_mesh_to_tracker,
+        bind_hand_position_to_mobject,
+        bind_hand_tracker_to_video,
+        unbind_hand_tracker_from_video,
+    )
+
     imported_hand_tracking = True
 except ImportError:
     pass
 
 
 try:
-    from manimlib.extras.virtual_camera import bind_scene_to_virtual_camera
+    from manimlib.extras.virtual_camera import (
+        bind_scene_to_virtual_camera,
+    )
+
     imported_virtual_camera = True
 except ImportError:
     pass
 
 
 try:
-    from manimlib.extras.youtube_chat import YouTubeLiveChatClient, bind_youtube_chat_to_feed
+    from manimlib.extras.youtube_chat import (
+        YouTubeLiveChatClient,
+        bind_youtube_chat_to_feed,
+    )
+
     imported_youtube_chat = True
 except ImportError:
     pass
@@ -90,6 +118,8 @@ class Example(manimlib.InteractiveScene):
             manimlib.FadeOut(manimlib.Group(title, subtitle)),
             hold=False,
         )
+        self.title = title
+        self.subtitle = subtitle
 
     # Por defecto play no hace hold, así que lo sobreescribimos para que sí lo haga
     # como si fuera una presentación.
@@ -116,11 +146,13 @@ class TranscriptionExample(Example):
     def construct(self, callback=None) -> None:
         if not imported_transcriber:
             raise RuntimeError(
-                "ElevenLabsRealtimeTranscriber is required for TranscriptionExample. Install with: pip install \"manimgl[transcription] @ git+https://github.com/MathItYT/manimgl\""
+                'ElevenLabsRealtimeTranscriber is required for TranscriptionExample. Install with: pip install "manimgl[transcription] @ git+https://github.com/MathItYT/manimgl"'
             )
         api_key = os.getenv("ELEVENLABS_API_KEY")
         if not api_key:
-            raise RuntimeError("Set ELEVENLABS_API_KEY environment variable before running TranscriptionExample")
+            raise RuntimeError(
+                "Set ELEVENLABS_API_KEY environment variable before running TranscriptionExample"
+            )
 
         transcriber = ElevenLabsRealtimeTranscriber(
             api_key=api_key,
@@ -131,7 +163,9 @@ class TranscriptionExample(Example):
             max_audio_queue_chunks=24,
             chunks_per_enqueue=2,
         )
-        text = manimlib.Text("Habla para transcribir...", font_size=24).to_edge(manimlib.DOWN, buff=0.5)
+        text = manimlib.Text(
+            "Habla para transcribir...", font_size=24
+        ).to_edge(manimlib.DOWN, buff=0.5)
         text.fix_in_frame()
         bind_transcriber_to_text(
             self,
@@ -139,7 +173,7 @@ class TranscriptionExample(Example):
             transcriber,
             update_fps=5,
             partial_update_fps=2,
-            render_partial=False,
+            render_partial=True,
             build_text_off_main_thread=True,
             font_size=24,
         )
@@ -157,43 +191,99 @@ class LLMExample(Example):
     def construct(self) -> None:
         if not imported_llm_scene_controller:
             raise RuntimeError(
-                "LLMSceneController is required for LLMExample. Install with: pip install \"manimgl[llm] @ git+https://github.com/MathItYT/manimgl\""
+                'LLMSceneController is required for LLMExample. Install with: pip install "manimgl[llm] @ git+https://github.com/MathItYT/manimgl"'
             )
-        self.prompt_mode: bool = False
+        self.prompt_mode: str = "no_prompt"
         self.llm_controller = LLMSceneController(
             self,
             api_key=os.getenv("GROQ_API_KEY"),
             base_url="https://api.groq.com/openai/v1",
             model="openai/gpt-oss-120b",
         )
-        self.prompt = manimlib.Text("").add(manimlib.Dot()).to_edge(manimlib.DOWN, buff=0.5)
+        init_all_animations(self.llm_controller)
+        init_all_mobjects(self.llm_controller)
+        self.llm_controller.init_all_mobject_methods()
+        self.llm_controller.init_all_animation_methods()
+
+        self.prompt = (
+            manimlib.Text("")
+            .add(manimlib.Dot())
+            .to_edge(manimlib.DOWN, buff=0.5)
+        )
         self.add(self.prompt)
-        super().construct()
-    
+
     def on_key_press(self, symbol, modifiers):
-        if symbol == key.P and modifiers & key.MOD_CTRL:
-            self.prompt_mode = not self.prompt_mode
-            if self.prompt_mode:
-                self.prompt.become(manimlib.Text("Escribe un prompt para el LLM y presiona Enter", font_size=24).to_edge(manimlib.DOWN, buff=0.5))
+        if (
+            symbol == key.P
+            and modifiers & key.MOD_CTRL
+            and self.prompt_mode != "busy"
+        ):
+            self.prompt_mode = (
+                "prompt"
+                if self.prompt_mode != "prompt"
+                else "no_prompt"
+            )
+            if self.prompt_mode == "prompt":
+                self.prompt.become(
+                    manimlib.Text(
+                        "Escribe un prompt para el LLM y presiona Enter",
+                        font_size=24,
+                    ).to_edge(manimlib.DOWN, buff=0.5)
+                )
                 self.prompt.text = None
             else:
-                self.prompt.become(manimlib.Text("").add(manimlib.Dot()).to_edge(manimlib.DOWN, buff=0.5))
+                self.prompt.become(
+                    manimlib.Text("")
+                    .add(manimlib.Dot())
+                    .to_edge(manimlib.DOWN, buff=0.5)
+                )
                 self.prompt.text = None
-        elif symbol == key.ENTER and self.prompt_mode:
+        elif symbol == key.ENTER and self.prompt_mode == "prompt":
             prompt: manimlib.Text = self.prompt
             prompt_text = prompt.text
-            prompt.become(manimlib.Text("").add(manimlib.Dot()).to_edge(manimlib.DOWN, buff=0.5))
+            prompt.become(
+                manimlib.Text(
+                    "Obteniendo respuesta del LLM...", font_size=24
+                ).to_edge(manimlib.DOWN, buff=0.5)
+            )
             self.prompt.text = None
-            self.prompt_mode = False
-            threading.Thread(target=lambda: self.llm_controller.run_prompt(prompt_text, reasoning_effort="high")).start()
-        elif not self.prompt_mode:
+            self.prompt_mode = "busy"
+
+            def target():
+                self.llm_controller.run_prompt(
+                    prompt_text,
+                    response_mode="actions",
+                    additional_system_prompt="""1. When plotting 2D graphs or parametric curves, sample up to 100 points for smoothness, not more, to avoid performance issues.
+2. When plotting on top of axes, make sure to use CoordinateSystemGraph, CoordinateSystemParametricCurve, or similar methods that are aware of the axes, instead of plotting raw FunctionGraph/ParametricCurves or whatever you are using, to ensure proper scaling and alignment.
+3. Make sure objects will fit inside the frame and be visible. Center has coordinates (0, 0) and width and height of the frame are 14.22222 and 8 respectively, so don't make objects too large or too far from the center.""",
+                    actions_version=2,
+                )
+                self.prompt.become(
+                    manimlib.Text(
+                        "",
+                        font_size=24,
+                    )
+                    .add(manimlib.Dot())
+                    .to_edge(manimlib.DOWN, buff=0.5)
+                )
+                self.prompt_mode = "no_prompt"
+
+            threading.Thread(
+                target=target,
+                daemon=True,
+            ).start()
+        elif self.prompt_mode == "no_prompt":
             super().on_key_press(symbol, modifiers)
-        else:
+        elif self.prompt_mode != "busy":
             if symbol == key.BACKSPACE:
                 prompt: manimlib.Text = self.prompt
                 prompt_text = prompt.text
                 if prompt_text:
-                    prompt.become(manimlib.Text(prompt_text[:-1], font_size=24).to_edge(manimlib.DOWN, buff=0.5))
+                    prompt.become(
+                        manimlib.Text(
+                            prompt_text[:-1], font_size=24
+                        ).to_edge(manimlib.DOWN, buff=0.5)
+                    )
                     prompt.text = prompt_text[:-1]
             else:
                 char = chr(symbol)
@@ -204,7 +294,11 @@ class LLMExample(Example):
                     char = char.upper() if is_cap else char.lower()
                 prompt: manimlib.Text = self.prompt
                 prompt_text = prompt.text or ""
-                prompt.become(manimlib.Text(prompt_text + char, font_size=24).to_edge(manimlib.DOWN, buff=0.5))
+                prompt.become(
+                    manimlib.Text(
+                        prompt_text + char, font_size=24
+                    ).to_edge(manimlib.DOWN, buff=0.5)
+                )
                 prompt.text = prompt_text + char
 
 
@@ -212,7 +306,7 @@ class VirtualCameraExample(Example):
     def setup(self) -> None:
         if not imported_virtual_camera:
             raise RuntimeError(
-                "bind_scene_to_virtual_camera is required for VirtualCameraExample. Install with: pip install \"manimgl[virtual_camera] @ git+https://github.com/MathItYT/manimgl\""
+                'bind_scene_to_virtual_camera is required for VirtualCameraExample. Install with: pip install "manimgl[virtual_camera] @ git+https://github.com/MathItYT/manimgl"'
             )
         self.virtual_camera_sink = bind_scene_to_virtual_camera(
             self,
@@ -224,7 +318,9 @@ class VirtualCameraExample(Example):
 
     def construct(self) -> None:
         title = manimlib.Text("ManimGL Virtual Camera", font_size=72)
-        subtitle = manimlib.Text("Virtual camera output", font_size=28)
+        subtitle = manimlib.Text(
+            "Virtual camera output", font_size=28
+        )
         manimlib.Group(title, subtitle).arrange(manimlib.DOWN)
         self.add(title, subtitle)
         self.play(manimlib.FadeIn(title), manimlib.FadeIn(subtitle))
@@ -240,16 +336,20 @@ class YouTubeChatExample(manimlib.InteractiveScene):
     def construct(self) -> None:
         if not imported_youtube_chat:
             raise RuntimeError(
-                "YouTube chat extra is required for YouTubeChatExample. Install with: pip install \"manimgl[youtube_chat] @ git+https://github.com/MathItYT/manimgl\""
+                'YouTube chat extra is required for YouTubeChatExample. Install with: pip install "manimgl[youtube_chat] @ git+https://github.com/MathItYT/manimgl"'
             )
 
         video_id = os.getenv("YOUTUBE_LIVE_VIDEO_ID")
         if not video_id:
-            raise RuntimeError("Set YOUTUBE_LIVE_VIDEO_ID with a live video id or URL before running YouTubeChatExample")
+            raise RuntimeError(
+                "Set YOUTUBE_LIVE_VIDEO_ID with a live video id or URL before running YouTubeChatExample"
+            )
 
         self.chat_client = YouTubeLiveChatClient(video_id)
 
-        title = manimlib.TypstTextMobject("Sample text", font_size=40).to_edge(manimlib.UP, buff=0.4)
+        title = manimlib.Text("Sample text", font_size=40).to_edge(
+            manimlib.UP, buff=0.4
+        )
         title.fix_in_frame()
 
         chat_box = manimlib.Rectangle(width=11.6, height=6.0)
@@ -267,7 +367,10 @@ class YouTubeChatExample(manimlib.InteractiveScene):
             avatar_height=0.25,
             text_font_size=20,
             markdown_mobject_config={
-                "text_font": ["SF Pro Display", "Twitter Color Emoji"],
+                "text_font": [
+                    "SF Pro Display",
+                    "Twitter Color Emoji",
+                ],
             },
             line_buff=0.12,
         )
@@ -285,16 +388,18 @@ class TranscriptionLLMExample(Example):
     def construct(self) -> None:
         if not imported_transcriber:
             raise RuntimeError(
-                "ElevenLabsRealtimeTranscriber is required for TranscriptionLLMExample. Install with: pip install \"manimgl[transcription] @ git+https://github.com/MathItYT/manimgl\""
+                'ElevenLabsRealtimeTranscriber is required for TranscriptionLLMExample. Install with: pip install "manimgl[transcription] @ git+https://github.com/MathItYT/manimgl"'
             )
         if not imported_llm_scene_controller:
             raise RuntimeError(
-                "LLMSceneController is required for TranscriptionLLMExample. Install with: pip install \"manimgl[llm] @ git+https://github.com/MathItYT/manimgl\""
+                'LLMSceneController is required for TranscriptionLLMExample. Install with: pip install "manimgl[llm] @ git+https://github.com/MathItYT/manimgl"'
             )
 
         api_key = os.getenv("ELEVENLABS_API_KEY")
         if not api_key:
-            raise RuntimeError("Set ELEVENLABS_API_KEY environment variable before running TranscriptionLLMExample")
+            raise RuntimeError(
+                "Set ELEVENLABS_API_KEY environment variable before running TranscriptionLLMExample"
+            )
 
         transcriber = ElevenLabsRealtimeTranscriber(
             api_key=api_key,
@@ -306,7 +411,9 @@ class TranscriptionLLMExample(Example):
             chunks_per_enqueue=2,
         )
 
-        transcript_text = manimlib.Text("Habla para transcribir...", font_size=24).to_edge(manimlib.DOWN, buff=0.5)
+        transcript_text = manimlib.Text(
+            "Habla para transcribir...", font_size=24
+        ).to_edge(manimlib.DOWN, buff=0.5)
         transcript_text.fix_in_frame()
         bind_transcriber_to_text(
             self,
@@ -314,20 +421,22 @@ class TranscriptionLLMExample(Example):
             transcriber,
             update_fps=5,
             partial_update_fps=2,
-            render_partial=False,
+            render_partial=True,
             build_text_off_main_thread=True,
             font_size=24,
         )
 
-        llm_status = manimlib.Text("LLM listo", font_size=20).to_edge(manimlib.DOWN, buff=1.2)
+        llm_status = manimlib.Text("LLM listo", font_size=20).to_edge(
+            manimlib.DOWN, buff=1.2
+        )
         llm_status.fix_in_frame()
         self.add(transcript_text, llm_status)
 
         self.llm_controller = LLMSceneController(
             self,
-            api_key=os.getenv("GROQ_API_KEY"),
-            base_url="https://api.groq.com/openai/v1",
-            model="openai/gpt-oss-120b",
+            api_key=os.getenv("NVIDIA_API_KEY"),
+            base_url="https://integrate.api.nvidia.com/v1",
+            model="moonshotai/kimi-k2.5",
         )
         self.llm_status = llm_status
         self.prompt_on_next_commit = False
@@ -349,11 +458,19 @@ class TranscriptionLLMExample(Example):
                     llm_ready_pending = False
                     should_set_ready = True
             if should_set_error:
-                llm_status.become(manimlib.Text("Error en la interaccion previa", font_size=20).to_edge(manimlib.DOWN, buff=1.2))
+                llm_status.become(
+                    manimlib.Text(
+                        "Error en la interaccion previa", font_size=20
+                    ).to_edge(manimlib.DOWN, buff=1.2)
+                )
                 llm_status.fix_in_frame()
                 return
             if should_set_ready:
-                llm_status.become(manimlib.Text("LLM listo", font_size=20).to_edge(manimlib.DOWN, buff=1.2))
+                llm_status.become(
+                    manimlib.Text("LLM listo", font_size=20).to_edge(
+                        manimlib.DOWN, buff=1.2
+                    )
+                )
                 llm_status.fix_in_frame()
 
         self.add_updater(_flush_llm_status)
@@ -362,7 +479,9 @@ class TranscriptionLLMExample(Example):
             nonlocal llm_busy, llm_ready_pending, llm_error_pending
             had_error = False
             try:
-                self.llm_controller.run_prompt(prompt, reasoning_effort="high")
+                self.llm_controller.run_prompt(
+                    prompt, reasoning_effort="high"
+                )
             except Exception as exc:
                 had_error = True
                 print(f"LLM error: {exc}")
@@ -384,18 +503,30 @@ class TranscriptionLLMExample(Example):
 
             prompt = text.strip()
             if not prompt:
-                llm_status.become(manimlib.Text("LLM listo", font_size=20).to_edge(manimlib.DOWN, buff=1.2))
+                llm_status.become(
+                    manimlib.Text("LLM listo", font_size=20).to_edge(
+                        manimlib.DOWN, buff=1.2
+                    )
+                )
                 llm_status.fix_in_frame()
                 return
 
             with llm_lock:
                 if llm_busy:
-                    llm_status.become(manimlib.Text("LLM ocupado", font_size=20).to_edge(manimlib.DOWN, buff=1.2))
+                    llm_status.become(
+                        manimlib.Text(
+                            "LLM ocupado", font_size=20
+                        ).to_edge(manimlib.DOWN, buff=1.2)
+                    )
                     llm_status.fix_in_frame()
                     return
                 llm_busy = True
 
-            llm_status.become(manimlib.Text(f"LLM ejecutando: {prompt[:40]}", font_size=20).to_edge(manimlib.DOWN, buff=1.2))
+            llm_status.become(
+                manimlib.Text(
+                    f"LLM ejecutando: {prompt[:40]}", font_size=20
+                ).to_edge(manimlib.DOWN, buff=1.2)
+            )
             llm_status.fix_in_frame()
             threading.Thread(
                 target=_run_llm_from_transcript,
@@ -410,7 +541,10 @@ class TranscriptionLLMExample(Example):
                 llm_ready_pending = False
                 llm_error_pending = False
             self.llm_status.become(
-                manimlib.Text("Ctrl+P activo: esperando transcripcion committed", font_size=20).to_edge(manimlib.DOWN, buff=1.2)
+                manimlib.Text(
+                    "Ctrl+P activo: esperando transcripcion committed",
+                    font_size=20,
+                ).to_edge(manimlib.DOWN, buff=1.2)
             )
             self.llm_status.fix_in_frame()
 
@@ -444,7 +578,7 @@ class HandTrackingExample(manimlib.InteractiveScene):
     def construct(self) -> None:
         if not imported_hand_tracking:
             raise RuntimeError(
-                "Vision extra is required for HandTrackingExample. Install with: pip install \"manimgl[vision] @ git+https://github.com/MathItYT/manimgl\""
+                'Vision extra is required for HandTrackingExample. Install with: pip install "manimgl[vision] @ git+https://github.com/MathItYT/manimgl"'
             )
 
         video_mob = manimlib.VideoMobject.from_video(
@@ -462,9 +596,11 @@ class HandTrackingExample(manimlib.InteractiveScene):
             pinch_threshold=0.055,
             movement_threshold=0.012,
             smoothing=0.45,
-            model_cache_dir="D:\\manimgl_cache"
+            model_cache_dir="D:\\manimgl_cache",
         )
-        bind_hand_tracker_to_video(video_mob, self.tracker, enqueue_every_n_frames=2)
+        bind_hand_tracker_to_video(
+            video_mob, self.tracker, enqueue_every_n_frames=2
+        )
 
         circle = manimlib.Circle(radius=0.22)
         circle.set_fill(color=manimlib.YELLOW, opacity=0.85)
@@ -477,12 +613,18 @@ class HandTrackingExample(manimlib.InteractiveScene):
             stroke_width=3,
             z_value=0.05,
         )
-        bind_hand_mesh_to_tracker(self, hand_mesh, self.tracker, update_fps=30)
+        bind_hand_mesh_to_tracker(
+            self, hand_mesh, self.tracker, update_fps=30
+        )
 
-        status = manimlib.Text("Mueve tu mano para controlar el circulo", font_size=24)
+        status = manimlib.Text(
+            "Mueve tu mano para controlar el circulo", font_size=24
+        )
         status.to_edge(manimlib.DOWN, buff=0.3)
         status.fix_in_frame()
-        self._last_hand_status_message = "Mueve tu mano para controlar el circulo"
+        self._last_hand_status_message = (
+            "Mueve tu mano para controlar el circulo"
+        )
 
         bind_hand_position_to_mobject(
             self,
@@ -504,7 +646,11 @@ class HandTrackingExample(manimlib.InteractiveScene):
 
             # Avoid rebuilding text every callback; this removes expensive per-frame work.
             if message != self._last_hand_status_message:
-                status.become(manimlib.Text(message, font_size=24).to_edge(manimlib.DOWN, buff=0.3))
+                status.become(
+                    manimlib.Text(message, font_size=24).to_edge(
+                        manimlib.DOWN, buff=0.3
+                    )
+                )
                 status.fix_in_frame()
                 self._last_hand_status_message = message
 
@@ -513,7 +659,9 @@ class HandTrackingExample(manimlib.InteractiveScene):
             else:
                 circle.set_fill(color=manimlib.YELLOW, opacity=0.85)
 
-        bind_hand_gesture_callback(self, self.tracker, _on_gesture, update_fps=20)
+        bind_hand_gesture_callback(
+            self, self.tracker, _on_gesture, update_fps=20
+        )
 
         self.add(video_mob, hand_mesh, circle, status)
 

@@ -7,6 +7,7 @@ import numpy as np
 import random
 from matplotlib import pyplot
 
+import manimlib.constants
 from manimlib.constants import COLORMAP_3B1B
 from manimlib.constants import WHITE
 from manimlib.utils.bezier import interpolate
@@ -21,7 +22,9 @@ if TYPE_CHECKING:
 
 def color_to_rgb(color: ManimColor) -> Vect3:
     if isinstance(color, str):
-        return hex_to_rgb(color)
+        if color.startswith("#"):
+            return hex_to_rgb(color)
+        return color_to_rgb(getattr(manimlib.constants, color.upper()))
     elif isinstance(color, Color):
         return np.array(color.get_rgb())
     else:

@@ -536,6 +536,8 @@ class InteractiveScene(Scene):
             self.save_state()
 
     def on_key_release(self, symbol: int, modifiers: int) -> None:
+        if symbol < 0 or symbol > 0x10FFFF:
+            return
         super().on_key_release(symbol, modifiers)
         if chr(symbol) == SELECT_KEY:
             self.gather_new_selection()

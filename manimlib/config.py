@@ -15,6 +15,7 @@ from manimlib.logger import log
 from manimlib.utils.dict_ops import merge_dicts_recursively
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from argparse import Namespace
     from typing import Optional
@@ -31,12 +32,20 @@ def initialize_manim_config() -> Dict:
     It is further updated based on command line argument.
     """
     args = parse_cli()
-    global_defaults_file = os.path.join(get_manim_dir(), "manimlib", "default_config.yml")
-    config = Dict(merge_dicts_recursively(
-        load_yaml(global_defaults_file),
-        load_yaml("custom_config.yml"),  # From current working directory
-        load_yaml(args.config_file) if args.config_file else dict(),
-    ))
+    global_defaults_file = os.path.join(
+        get_manim_dir(), "manimlib", "default_config.yml"
+    )
+    config = Dict(
+        merge_dicts_recursively(
+            load_yaml(global_defaults_file),
+            load_yaml(
+                "custom_config.yml"
+            ),  # From current working directory
+            load_yaml(args.config_file)
+            if args.config_file
+            else dict(),
+        )
+    )
 
     log.setLevel(args.log_level or config["log_level"])
 
@@ -66,22 +75,26 @@ def parse_cli():
             help="Name of the Scene class you want to see",
         )
         parser.add_argument(
-            "-w", "--write_file",
+            "-w",
+            "--write_file",
             action="store_true",
             help="Render the scene as a movie file",
         )
         parser.add_argument(
-            "-s", "--skip_animations",
+            "-s",
+            "--skip_animations",
             action="store_true",
             help="Save the last frame",
         )
         parser.add_argument(
-            "-l", "--low_quality",
+            "-l",
+            "--low_quality",
             action="store_true",
             help="Render at 480p",
         )
         parser.add_argument(
-            "-m", "--medium_quality",
+            "-m",
+            "--medium_quality",
             action="store_true",
             help="Render at 720p",
         )
@@ -96,23 +109,27 @@ def parse_cli():
             help="Render at a 4k",
         )
         parser.add_argument(
-            "-f", "--full_screen",
+            "-f",
+            "--full_screen",
             action="store_true",
             help="Show window in full screen",
         )
         parser.add_argument(
-            "-p", "--presenter_mode",
+            "-p",
+            "--presenter_mode",
             action="store_true",
-            help="Scene will stay paused during wait calls until " + \
-                 "space bar or right arrow is hit, like a slide show"
+            help="Scene will stay paused during wait calls until "
+            + "space bar or right arrow is hit, like a slide show",
         )
         parser.add_argument(
-            "-i", "--gif",
+            "-i",
+            "--gif",
             action="store_true",
             help="Save the video as gif",
         )
         parser.add_argument(
-            "-t", "--transparent",
+            "-t",
+            "--transparent",
             action="store_true",
             help="Render to a movie file with an alpha channel",
         )
@@ -125,17 +142,20 @@ def parse_cli():
             help="Pixel format to use for the output of ffmpeg, defaults to `yuv420p`",
         )
         parser.add_argument(
-            "-q", "--quiet",
+            "-q",
+            "--quiet",
             action="store_true",
             help="",
         )
         parser.add_argument(
-            "-a", "--write_all",
+            "-a",
+            "--write_all",
             action="store_true",
             help="Write all the scenes from a file",
         )
         parser.add_argument(
-            "-o", "--open",
+            "-o",
+            "--open",
             action="store_true",
             help="Automatically open the saved file once its done",
         )
@@ -147,29 +167,32 @@ def parse_cli():
         parser.add_argument(
             "--subdivide",
             action="store_true",
-            help="Divide the output animation into individual movie files " +
-                 "for each animation",
+            help="Divide the output animation into individual movie files "
+            + "for each animation",
         )
         parser.add_argument(
             "--file_name",
             help="Name for the movie or image file",
         )
         parser.add_argument(
-            "-n", "--start_at_animation_number",
-            help="Start rendering not from the first animation, but " + \
-                 "from another, specified by its index.  If you pass " + \
-                 "in two comma separated values, e.g. \"3,6\", it will end " + \
-                 "the rendering at the second value",
+            "-n",
+            "--start_at_animation_number",
+            help="Start rendering not from the first animation, but "
+            + "from another, specified by its index.  If you pass "
+            + 'in two comma separated values, e.g. "3,6", it will end '
+            + "the rendering at the second value",
         )
         parser.add_argument(
-            "-e", "--embed",
+            "-e",
+            "--embed",
             metavar="LINE_NUMBER",
-            help="Adds a breakpoint at the inputted file dropping into an " + \
-                 "interactive iPython session at that point of the code."
+            help="Adds a breakpoint at the inputted file dropping into an "
+            + "interactive iPython session at that point of the code.",
         )
         parser.add_argument(
-            "-r", "--resolution",
-            help="Resolution, passed as \"WxH\", e.g. \"1920x1080\"",
+            "-r",
+            "--resolution",
+            help='Resolution, passed as "WxH", e.g. "1920x1080"',
         )
         parser.add_argument(
             "--fps",
@@ -177,7 +200,8 @@ def parse_cli():
             type=int,
         )
         parser.add_argument(
-            "-c", "--color",
+            "-c",
+            "--color",
             help="Background color",
         )
         parser.add_argument(
@@ -193,8 +217,8 @@ def parse_cli():
         parser.add_argument(
             "--prerun",
             action="store_true",
-            help="Calculate total framecount, to display in a progress bar, by doing " + \
-                 "an initial run of the scene which skips animations."
+            help="Calculate total framecount, to display in a progress bar, by doing "
+            + "an initial run of the scene which skips animations.",
         )
         parser.add_argument(
             "--video_dir",
@@ -205,37 +229,30 @@ def parse_cli():
             help="Path to the custom configuration file",
         )
         parser.add_argument(
-            "-v", "--version",
+            "-v",
+            "--version",
             action="store_true",
-            help="Display the version of manimgl"
+            help="Display the version of manimgl",
         )
         parser.add_argument(
             "--log-level",
-            help="Level of messages to Display, can be DEBUG / INFO / WARNING / ERROR / CRITICAL"
+            help="Level of messages to Display, can be DEBUG / INFO / WARNING / ERROR / CRITICAL",
         )
         parser.add_argument(
             "--clear-cache",
             action="store_true",
-            help="Erase the cache used for Tex and Text Mobjects"
+            help="Erase the cache used for Tex and Text Mobjects",
         )
         parser.add_argument(
             "--autoreload",
             action="store_true",
-            help="Automatically reload Python modules to pick up code changes " +
-                 "across different files",
-        )
-        parser.add_argument(
-            "--threaded",
-            action="store_true",
-            help="Run scene logic on a worker thread while keeping window + OpenGL on the main thread",
-        )
-        parser.add_argument(
-            "--parallel_animations",
-            action="store_true",
-            help="Update disjoint animations in parallel using threads (experimental)",
+            help="Automatically reload Python modules to pick up code changes "
+            + "across different files",
         )
         args = parser.parse_args()
-        args.write_file = any([args.write_file, args.open, args.finder])
+        args.write_file = any(
+            [args.write_file, args.open, args.finder]
+        )
         return args
     except argparse.ArgumentError as err:
         log.error(str(err))
@@ -260,8 +277,12 @@ def update_window_config(config: Dict, args: Namespace):
 
 def update_camera_config(config: Dict, args: Namespace):
     camera_config = config.camera
-    arg_resolution = get_resolution_from_args(args, config.resolution_options)
-    camera_config.resolution = arg_resolution or literal_eval(camera_config.resolution)
+    arg_resolution = get_resolution_from_args(
+        args, config.resolution_options
+    )
+    camera_config.resolution = arg_resolution or literal_eval(
+        camera_config.resolution
+    )
     if args.fps:
         camera_config.fps = args.fps
     if args.color:
@@ -293,10 +314,10 @@ def update_file_writer_config(config: Dict, args: Namespace):
     if args.vcodec:
         file_writer_config.video_codec = args.vcodec
     elif args.transparent:
-        file_writer_config.video_codec = 'prores_ks'
-        file_writer_config.pixel_format = ''
+        file_writer_config.video_codec = "prores_ks"
+        file_writer_config.pixel_format = ""
     elif args.gif:
-        file_writer_config.video_codec = ''
+        file_writer_config.video_codec = ""
 
     if args.pix_fmt:
         file_writer_config.pixel_format = args.pix_fmt
@@ -306,13 +327,6 @@ def update_scene_config(config: Dict, args: Namespace):
     scene_config = config.scene
     start, end = get_animations_numbers(args)
 
-    threaded = bool(scene_config.get("threaded", False))
-    if getattr(args, "threaded", False):
-        threaded = True
-
-    parallel_animations = bool(scene_config.get("parallel_animations", False))
-    if getattr(args, "parallel_animations", False):
-        parallel_animations = True
     scene_config.update(
         # Note, Scene.__init__ makes use of both manimlib.camera and
         # manimlib.file_writer below, so the arguments here are just for
@@ -323,8 +337,6 @@ def update_scene_config(config: Dict, args: Namespace):
         start_at_animation_number=start,
         end_at_animation_number=end,
         presenter_mode=args.presenter_mode,
-        threaded=threaded,
-        parallel_animations=parallel_animations,
     )
     if args.leave_progress_bars:
         scene_config.leave_progress_bars = True
@@ -335,13 +347,15 @@ def update_scene_config(config: Dict, args: Namespace):
 def update_run_config(config: Dict, args: Namespace):
     config.run = Dict(
         file_name=args.file,
-        embed_line=(int(args.embed) if args.embed is not None else None),
+        embed_line=(
+            int(args.embed) if args.embed is not None else None
+        ),
         is_reload=False,
         prerun=args.prerun,
         scene_names=args.scene_names,
         quiet=args.quiet or args.write_all,
         write_all=args.write_all,
-        show_in_window=True
+        show_in_window=True,
     )
 
 
@@ -363,11 +377,15 @@ def load_yaml(file_path: str):
 
 def get_manim_dir():
     manimlib_module = importlib.import_module("manimlib")
-    manimlib_dir = os.path.dirname(inspect.getabsfile(manimlib_module))
+    manimlib_dir = os.path.dirname(
+        inspect.getabsfile(manimlib_module)
+    )
     return os.path.abspath(os.path.join(manimlib_dir, ".."))
 
 
-def get_resolution_from_args(args: Optional[Namespace], resolution_options: dict) -> Optional[tuple[int, int]]:
+def get_resolution_from_args(
+    args: Optional[Namespace], resolution_options: dict
+) -> Optional[tuple[int, int]]:
     if args.resolution:
         return tuple(map(int, args.resolution.split("x")))
     if args.low_quality:
@@ -391,7 +409,9 @@ def get_file_ext(args: Namespace) -> str:
     return file_ext
 
 
-def get_animations_numbers(args: Namespace) -> tuple[int | None, int | None]:
+def get_animations_numbers(
+    args: Namespace,
+) -> tuple[int | None, int | None]:
     stan = args.start_at_animation_number
     if stan is None:
         return (None, None)
@@ -406,8 +426,12 @@ def get_output_directory(args: Namespace, config: Dict) -> str:
     out_dir = args.video_dir or dir_config.output
     if dir_config.mirror_module_path and args.file:
         file_path = Path(args.file).absolute()
-        if str(file_path).startswith(dir_config.removed_mirror_prefix):
-            rel_path = file_path.relative_to(dir_config.removed_mirror_prefix)
+        if str(file_path).startswith(
+            dir_config.removed_mirror_prefix
+        ):
+            rel_path = file_path.relative_to(
+                dir_config.removed_mirror_prefix
+            )
             rel_path = Path(str(rel_path).lstrip("_"))
         else:
             rel_path = file_path.stem

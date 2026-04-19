@@ -67,12 +67,6 @@ file_writer:
 scene:
   show_animation_progress: False
   leave_progress_bars: False
-  # If True, run scene logic on a worker thread while the main thread
-  # stays dedicated to pyglet events + OpenGL rendering.
-  threaded: False
-  # If True (and threaded mode is active), update disjoint animations in parallel
-  # using threads. Experimental and may be non-deterministic for shared mobjects.
-  parallel_animations: False
   # When skipping animations, should a single frame be rendered
   # at the end of each play call?
   preview_while_skipping: True
