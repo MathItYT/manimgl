@@ -366,7 +366,8 @@ class CoordinateSystem(ABC):
     def get_scatterplot(
         self, x_values: Vect3Array, y_values: Vect3Array, **dot_config
     ):
-        return DotCloud(self.c2p(x_values, y_values), **dot_config)
+        min_length = min(len(x_values), len(y_values))
+        return DotCloud(self.c2p(x_values[:min_length], y_values[:min_length]), **dot_config)
 
     # For calculus
     def angle_of_tangent(

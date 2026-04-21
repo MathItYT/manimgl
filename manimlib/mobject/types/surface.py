@@ -461,13 +461,16 @@ class TexturedGeometry(TexturedSurface):
 
 
 class ThreeDModel(Group):
-    def __init__(self, obj_file: str, height=3):
+    def __init__(self, obj_file: str, height=3, texture_file: str | None = None):
         super().__init__()
         obj_file = get_full_three_d_model_path(obj_file)
 
-        default_texture = Path(Path(obj_file).parent, "texture.png")
-        if not default_texture.exists():
-            default_texture = get_full_raster_image_path("White.png")
+        if texture_file is not None:
+            default_texture = get_full_raster_image_path(texture_file)
+        else:
+            default_texture = Path(Path(obj_file).parent, "texture.png")
+            if not default_texture.exists():
+                default_texture = get_full_raster_image_path("White.png")
 
         texture_files = self.get_textures_from_mtl(obj_file)
         mesh = trimesh.load(obj_file)

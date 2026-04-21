@@ -845,7 +845,7 @@ class VMobjectFromSVGPath(VMobject):
                 func(*points)
 
         # Get rid of the side effect of trailing 'Z M' commands.
-        if self.has_new_path_started():
+        if self.has_new_path_started() and self.get_num_points() >= 2:
             self.resize_points(self.get_num_points() - 2)
 
         self._normalize_subpath_orientations()
