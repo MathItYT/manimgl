@@ -33,8 +33,6 @@ except ImportError:
 try:
     from manimlib.extras.llm import (
         LLMSceneController,
-        init_all_animations,
-        init_all_mobjects,
     )
 
     imported_llm_scene_controller = True
