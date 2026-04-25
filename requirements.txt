@@ -3,7 +3,7 @@ appdirs
 audioop-lts; python_version >= "3.13"
 colour
 diskcache
-ipython>=8.18.0
+ipython
 isosurfaces
 fontTools
 manimpango>=0.6.0
