@@ -7,7 +7,6 @@ import subprocess as sp
 import sys
 import threading
 import queue
-import pyaudio
 
 import numpy as np
 from pydub import AudioSegment
@@ -100,6 +99,8 @@ class SceneFileWriter(object):
         chunk: int = 1024,
         callback: Callable[[bytes, int, dict, int], None] | None = None,
     ) -> None:
+        import pyaudio
+        
         """Inicia la grabación de audio desde el micrófono de forma asíncrona."""
         if self.pyaudio_instance is None:
             self.pyaudio_instance = pyaudio.PyAudio()
