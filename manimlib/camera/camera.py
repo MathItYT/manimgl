@@ -65,6 +65,7 @@ class Camera(object):
         self.init_context()
         self.init_fbo()
         self.init_light_source()
+        self.original_frame_shape = self.get_frame_shape()
 
     def hide(
         self,
@@ -358,8 +359,8 @@ class Camera(object):
             view=tuple(view_matrix.T.flatten()),
             frame_scale=frame.get_scale(),
             frame_rescale_factors=(
-                2.0 / FRAME_WIDTH,
-                2.0 / FRAME_HEIGHT,
+                2.0 / self.original_frame_shape[0],
+                2.0 / self.original_frame_shape[1],
                 frame.get_scale() / frame.get_focal_distance(),
             ),
             pixel_size=self.get_pixel_size(),

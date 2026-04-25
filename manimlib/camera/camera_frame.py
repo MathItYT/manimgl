@@ -33,6 +33,7 @@ class CameraFrame(Mobject):
         **kwargs,
     ):
         super().__init__(z_index=z_index, **kwargs)
+        self.original_frame_shape = frame_shape
 
         self.uniforms["orientation"] = Rotation.identity().as_quat()
         self.uniforms["fovy"] = fovy
@@ -92,7 +93,7 @@ class CameraFrame(Mobject):
         return self.get_euler_angles()[2]
 
     def get_scale(self):
-        return self.get_height() / FRAME_SHAPE[1]
+        return self.get_height() / self.original_frame_shape[1]
 
     def get_inverse_camera_rotation_matrix(self):
         return self.get_orientation().as_matrix().T
