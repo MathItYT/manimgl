@@ -6,6 +6,7 @@ import moderngl
 from PIL import Image
 import pathlib
 import threading
+import time
 
 from manimlib.constants import DL, DR, UL, UR
 from manimlib.mobject.mobject import Mobject
@@ -32,7 +33,7 @@ class ImageMobject(Mobject):
 
     def __init__(
         self,
-        filename: str | pathlib.Path | np.ndarray,
+        filename: str | pathlib.Path | np.ndarray | Tuple[bytes, int, int],
         height: float = 4.0,
         **kwargs,
     ):
@@ -44,12 +45,12 @@ class ImageMobject(Mobject):
                 filename.tobytes(),
                 filename.shape[1],
                 filename.shape[0],
-            )
+            ) if isinstance(filename, np.ndarray) else filename
         )
         self.image = (
             Image.open(self.image_path)
             if isinstance(filename, str)
-            else Image.fromarray(filename)
+            else Image.fromarray(filename) if isinstance(filename, np.ndarray) else Image.frombytes("RGBA", (filename[1], filename[2]), filename[0])
         )
         super().__init__(
             texture_paths={"Texture": self.image_path}, **kwargs
@@ -107,7 +108,7 @@ class ImageMobject(Mobject):
 class VideoMobject(ImageMobject):
     def __init__(
         self,
-        iterator: Iterator[np.ndarray],
+        iterator: Iterator[np.ndarray | Tuple[bytes, int, int]],
         **kwargs,
     ):
         self.iterator = iterator
@@ -136,13 +137,18 @@ class VideoMobject(ImageMobject):
                 if caller is not None and not caller.is_main_thread():
                     caller.call(texture.write, frame)
                 else:
+                    if isinstance(frame, tuple):
+                        frame = frame[0]
                     texture.write(frame)
             else:
-                mob.texture_paths["Texture"] = (
-                    frame.tobytes(),
-                    frame.shape[1],
-                    frame.shape[0],
-                )
+                if isinstance(frame, tuple):
+                    mob.texture_paths["Texture"] = frame
+                else:
+                    mob.texture_paths["Texture"] = (
+                        frame.tobytes(),
+                        frame.shape[1],
+                        frame.shape[0],
+                    )
         except StopIteration:
             mob.iterator = None
 
@@ -151,43 +157,73 @@ class VideoMobject(ImageMobject):
         cls,
         video_path_or_camera: str | int,
         flip_horizontal: bool = False,
+        loop: bool = False,
+        has_window: bool = True,
+        scene_fps: float = 60.0,
         **kwargs,
     ):
         cap = cv2.VideoCapture(video_path_or_camera)
         if not cap.isOpened():
             raise ValueError("Failed to open video file")
 
-        last_frame = np.zeros(
-            (
-                int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-                4,
-            ),
-            dtype=np.uint8,
-        )
         ready = threading.Event()
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
 
-        def frame_reader():
-            nonlocal last_frame
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                if flip_horizontal:
-                    frame = cv2.flip(frame, 1)
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
-                last_frame[:] = frame
-                ready.set()
+        if has_window:
+            last_frame = np.zeros(
+                (
+                    int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
+                    int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                    4,
+                ),
+                dtype=np.uint8,
+            )
+            def frame_reader():
+                nonlocal last_frame
+                while True:
+                    t = time.time()
+                    ret, frame = cap.read()
+                    if not ret and not loop:
+                        break
+                    if not ret and loop:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        continue
+                    if flip_horizontal:
+                        frame = cv2.flip(frame, 1)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+                    diff = time.time() - t
+                    if diff < 1 / fps:
+                        time.sleep(1 / fps - diff)
+                    last_frame[:] = frame
+                    ready.set()
 
-        def iterator():
-            ready.wait()
-            while True:
-                yield last_frame
+            def iterator():
+                ready.wait()
+                while True:
+                    yield last_frame
 
-        runner = threading.Thread(target=frame_reader, daemon=True)
-        runner.start()
+            runner = threading.Thread(target=frame_reader, daemon=True)
+            runner.start()
 
-        return cls(iterator(), **kwargs)
+            return cls(iterator(), **kwargs)
+        else:
+            def iterator():
+                frame_n = 0
+                while True:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_n)
+                    ret, frame = cap.read()
+                    if not ret and not loop:
+                        break
+                    if not ret and loop:
+                        frame_n = 0
+                        continue
+                    if flip_horizontal:
+                        frame = cv2.flip(frame, 1)
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA)
+                    yield frame
+                    frame_n = int(round(frame_n + fps / scene_fps, 5))
+
+            return cls(iterator(), **kwargs)
 
     def play(self):
         self.add_updater(self.updater)

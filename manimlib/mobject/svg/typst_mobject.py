@@ -50,8 +50,8 @@ def _typst_document_prefix(font_size_pt: int, *, text_font: str = "", math_font:
     return "\n".join(lines) + "\n"
 
 
-@lru_cache(maxsize=128)
-@cache_on_disk
+# @lru_cache(maxsize=128)
+# @cache_on_disk
 def typst_to_svg(document: str) -> str:
     typst = _typst_executable()
     temp_dir = Path(tempfile.gettempdir()) / f"manimgl_typst_{hash_string(document)}"

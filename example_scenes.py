@@ -8,9 +8,10 @@ import threading
 from openai import OpenAI
 import json
 import random
+from OpenGL import GL as gl
 import heapq
 
-from manimlib.extras.llm.scene_agent import DynNum, VMobjectParams
+from manimlib.extras.llm.scene_agent import VMobjectParams
 
 imported_transcriber: bool = False
 imported_llm_scene_controller: bool = False
@@ -134,7 +135,7 @@ class Example(manimlib.InteractiveScene):
         run_time=None,
         rate_func=None,
         lag_ratio=None,
-        hold=True,
+        hold=False,
     ) -> None:
         super().play(
             *proto_animations,
@@ -382,8 +383,8 @@ class LLMExample(Example):
             )
         self.prompt_mode: str = "no_prompt"
         self.client = OpenAI(
-            api_key=os.getenv("GROQ_API_KEY"),
-            base_url="https://api.groq.com/openai/v1",
+            api_key=os.getenv("CEREBRAS_API_KEY"),
+            base_url="https://api.cerebras.ai/v1",
         )
         self.llm_controller = LLMSceneController(
             self,
@@ -391,7 +392,7 @@ class LLMExample(Example):
             # base_url="https://api.groq.com/openai/v1",
             # model="openai/gpt-oss-120b",
             client=self.client,
-            model="openai/gpt-oss-120b",
+            model="gpt-oss-120b",
         )
         def _build_astar_grid(scene, kwargs: dict):
             return AStarGrid(**kwargs)
@@ -401,10 +402,10 @@ class LLMExample(Example):
             name="AStarGrid",
             base_model=VMobjectParams, 
             fields={
-                "rows": (Optional[DynNum], ...),
-                "cols": (Optional[DynNum], ...),
-                "obstacle_density": (Optional[DynNum], ...),
-                "cell_size": (Optional[DynNum], ...)
+                "rows": (Optional[str], ...),
+                "cols": (Optional[str], ...),
+                "obstacle_density": (Optional[str], ...),
+                "cell_size": (Optional[str], ...)
             },
             builder=_build_astar_grid
         )
@@ -422,9 +423,9 @@ class LLMExample(Example):
             .to_edge(manimlib.DOWN, buff=0.5)
         )
         self.add(self.prompt)
-    
+
     def prompt_pipeline(self, prompt: str) -> bool:
-        new_prompt = prompt + "\n\nRemember that when creating an object you must display it on the scene using `add` or `play`. Also don't use SVGMobject as there're no SVG files in this environment."
+        new_prompt = prompt + "\n\nRemember that when creating an object you must display it on the scene using `add` or `play`. Also don't use SVGMobject as there're no SVG files in this environment. Furthermore, when you need to set a parameter with a literal string value, wrap it in a valid Python string to avoid evaluation issues. For example, if you want to set the text of a Text mobject to 'Hello World', you should write `\"Hello World\"` in your response."
         return self.llm_controller.run_prompt(
             new_prompt,
             response_mode="actions",
@@ -433,7 +434,9 @@ class LLMExample(Example):
 3. Make sure objects will fit inside the frame and be visible. Center has coordinates (0, 0) and width and height of the frame are 14.22222 and 8 respectively, so don't make objects too large or too far from the center.
 4. When plotting 3D objects use a minimum of 100, up to 200 samples in each u and v to bring a high resolution without crashing the environment.
 5. Always prefer number plane over axes.
-6. When adding a number plane all parameters should be null even if prompt specifies a color or x/y range to avoid performance issues.""",
+6. When adding a number plane all parameters should be null even if prompt specifies a color or x/y range to avoid performance issues.
+7. Only add number plane if you need to plot something on top of it.
+8. If user wants an explanation of a math concept, provide a visual explanation by controlling the scene with your commands instead of just giving a textual explanation. You can use the whole range of Manim's features to create engaging and informative visualizations that complement your explanation.""",
             reasoning_effort="medium",
         )
 
@@ -466,16 +469,14 @@ class LLMExample(Example):
         elif symbol == key.ENTER and self.prompt_mode == "prompt":
             prompt: manimlib.Text = self.prompt
             prompt_text = prompt.text
-            prompt.become(
-                manimlib.Text(
-                    "Obteniendo respuesta del LLM...", font_size=24
-                ).to_edge(manimlib.DOWN, buff=0.5)
-            )
             self.prompt.text = None
             self.prompt_mode = "busy"
-
             def target():
-                self.save_state()
+                prompt.become(
+                    manimlib.Text(
+                        "Obteniendo respuesta del LLM...", font_size=24
+                    ).to_edge(manimlib.DOWN, buff=0.5)
+                )
                 success = self.prompt_pipeline(prompt_text)
                 self.prompt.become(
                     manimlib.Text(
@@ -487,15 +488,13 @@ class LLMExample(Example):
                 )
                 self.prompt_mode = "no_prompt"
                 if not success:
-                    self.undo()
+                    print("Error al procesar el prompt. Revisa la consola para más detalles.")
 
             threading.Thread(
                 target=target,
                 daemon=True,
             ).start()
-        elif self.prompt_mode == "no_prompt":
-            super().on_key_press(symbol, modifiers)
-        elif self.prompt_mode != "busy":
+        elif self.prompt_mode == "prompt":
             if symbol == key.BACKSPACE:
                 prompt: manimlib.Text = self.prompt
                 prompt_text = prompt.text
@@ -521,118 +520,14 @@ class LLMExample(Example):
                     ).to_edge(manimlib.DOWN, buff=0.5)
                 )
                 prompt.text = prompt_text + char
+        elif not (symbol == key.R and self.prompt_mode == "prompt"):
+            super().on_key_press(symbol, modifiers)
     
     def get_state(self):
         return manimlib.SceneState(
             self,
             dont_modify=[self.prompt],
         )
-
-
-class ExplanationLLMExample(LLMExample):
-    def setup(self):
-        super().setup()
-        self.conversation = None
-
-    def prompt_pipeline(self, prompt: str) -> bool:
-        instructions = self.generate_instructions(prompt)
-        if instructions is None:
-            print("Failed to generate instructions from LLM")
-            return False
-        for instruction in instructions:
-            success = super().prompt_pipeline(instruction)
-            if not success:
-                print(f"Failed to execute instruction: {instruction}")
-                return False
-        return True
-
-    def generate_instructions(self, prompt: str) -> list[str] | None:
-        attempts = 3
-        json_schema = {
-            "type": "object",
-            "properties": {
-                "steps": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                },
-            },
-            "required": ["steps"],
-            "additionalProperties": False,
-        }
-        if self.conversation is None:
-            self.init_conversation()
-        self.conversation.append({
-            "role": "user",
-            "content": prompt
-        })
-
-        for attempt in range(attempts):
-            try:
-                response = self.client.chat.completions.create(
-                    model="openai/gpt-oss-120b",
-                    messages=self.conversation,
-                    response_format={"type": "json_schema", "json_schema": {"name": "Instructions", "strict": True, "schema": json_schema}},
-                    reasoning_effort="medium"
-                )
-                response_text = response.choices[0].message.content or ""
-                data = json.loads(response_text)
-                self.conversation.append({
-                    "role": "assistant",
-                    "content": response_text
-                })
-                return data["steps"]
-            except Exception as exc:
-                print(f"Error generating instructions (attempt {attempt+1}/{attempts}): {exc}")
-        return None
-    
-    def init_conversation(self) -> None:
-        self.conversation = [
-            {
-                "role": "system",
-                "content": f"""
-You are an expert Manim Scene Architect. Your sole purpose is to translate mathematical prompts into a precise, step-by-step blueprint for a Manim coding agent. 
-
-You must strictly adhere to the following directives:
-
-### 1. Core Principles
-* **Show, Don't Tell:** Never explain the math in text. Your output must consist entirely of instructions to create the visual scene.
-* **Zero Commentary:** Do not include greetings, explanations, or conversational filler. Output only the requested JSON.
-* **Atomic Actions:** Each instruction must contain exactly ONE action. If you want to create a red circle and write text, that must be two completely separate instructions.
-
-### 2. Animation & Object Rules
-* **Direct Animation:** If an object is going to be animated into the scene, use `animated_add` or `animated_remove` directly with the animation details. 
-* **Static Rendering:** Only use `add_no_animation` or `remove_no_animation` if the object must appear or disappear instantly without any transition. Never use a static add/remove immediately followed by an animation of that same object appearing/disappearing.
-* **Explicit Variables:** Always assign clear, logical variable names to objects (e.g., `circle_1`, `text_eq_1`) so the agent can reference them accurately in subsequent steps.
-
-### 3. Granularity Guideline (Strict)
-Never write complex, multi-step instructions. Break everything down into the smallest possible logical units. 
-* *Bad Example:* "Add three clusters of four points each."
-* *Good Example:* 1. "Create four points assigned to variable `points1`."
-    2. "Arrange `points1`."
-    3. "Surround `points1` with a circle named `circle1`."
-    4. "Group `points1` and `circle1` into a variable named `cluster1`."
-    5. [Repeat for other clusters]
-    6. "Arrange `cluster1`, `cluster2`, `cluster3`."
-    7. "Group all clusters into `all_clusters`."
-    8. "Animate creation of `all_clusters`."
-
-### 4. Output Specification
-* You must return a valid JSON object strictly adhering to the provided schema.
-* Do not invent parameters. Do not omit required parameters.
-* The `details` field must be exhaustive: specify object types, colors, positions, sizes, and animation styles so the agent has zero ambiguity when coding.
-
-### 5. Follow-up Protocol
-* Treat all subsequent user questions or clarifications as requests to modify the Manim scene. 
-* Never answer directly. Translate the answer into scene modification instructions (e.g., adding text to the screen, highlighting a part of the equation). 
-* If a question cannot be visually answered, output instructions to render the question as a Text object on the screen.
-
-### 6. Mobject organization
-* Always put title at the top of the scene and subtitle right below it, both centered horizontally.
-* Main visual content should be centered in the remaining space between subtitle and bottom of the screen, but can be shifted or rearranged as needed to fit the content and make it visually appealing.
-* Make sure to not overlap the title and subtitle with the main visual content, and to keep enough space between them for clarity.
-""".strip()
-            }
-        ]
 
 
 class VirtualCameraExample(Example):

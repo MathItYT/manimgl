@@ -274,6 +274,12 @@ class Scene(object):
         self, callback: Callable[[], None]
     ) -> None:
         self.main_loop_callbacks.append(callback)
+    
+    def remove_main_loop_callback(
+        self, callback: Callable[[], None]
+    ) -> None:
+        if callback in self.main_loop_callbacks:
+            self.main_loop_callbacks.remove(callback)
 
     def run_main_loop_callbacks(self) -> None:
         callbacks = list(self.main_loop_callbacks)
@@ -291,7 +297,6 @@ class Scene(object):
         self.increment_time(dt)
         self.update_self(dt)
         self.update_mobjects(dt)
-        self.emit_frame()
         if self.skip_animations and not force_draw:
             return
 
@@ -314,6 +319,7 @@ class Scene(object):
             and len(self.frame_sinks) == 0
         )
         self.camera.capture(*self.render_groups, swap=capture_swap)
+        self.emit_frame()
         self._emit_frame_sinks()
 
         # When frame sinks are active, we render without swapping so sinks can

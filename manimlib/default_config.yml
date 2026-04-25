@@ -39,6 +39,7 @@ directories:
   # but here a user can specify a different cache location
   cache: ""
 window:
+  enabled: True
   # The position of window on screen. UR -> Upper Right, and likewise DL -> Down and Left,
   # UO would be upper middle, etc.
   position_string: UR
@@ -113,6 +114,23 @@ obs:
   extra_args: []
   # Optional delay (seconds) after launching OBS before starting the scene.
   startup_wait_seconds: 0.0
+
+# Optional browser dashboard for presenter controls and notes.
+presenter_view:
+  # Enable this by default for every scene run.
+  enabled: False
+  # Host/interface used by the local HTTP server.
+  host: "127.0.0.1"
+  # Port for the local HTTP server. Use 0 to auto-pick one.
+  port: 8765
+  # Open the presenter dashboard in the default browser when the scene starts.
+  open_browser: False
+  # Title displayed in the presenter dashboard page.
+  title: "ManimGL Presenter View"
+  # Maximum in-memory notes retained by the dashboard.
+  max_notes: 200
+  # Optional path to persist notes as JSON lines; empty disables persistence.
+  notes_file: ""
 embed:
   exception_mode: "Verbose"
   autoreload: False

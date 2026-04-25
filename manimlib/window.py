@@ -154,6 +154,7 @@ class Window(PygletWindow):
 
     def swap_buffers(self):
         super().swap_buffers()
+        self._window.dispatch_events()
         self._has_undrawn_event = False
 
     @staticmethod

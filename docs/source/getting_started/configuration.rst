@@ -45,6 +45,10 @@ flag                                                       abbr   function
 ``--uhd``                                                         Render at a 4k quality
 ``--full_screen``                                          ``-f`` Show window in full screen
 ``--presenter_mode``                                       ``-p`` Scene will stay paused during wait calls until space bar or right arrow is hit, like a slide show
+``--presenter-view``                                             Enable browser presenter controls and note capture
+``--presenter-view-host PRESENTER_VIEW_HOST``                    Host interface for presenter view server
+``--presenter-view-port PRESENTER_VIEW_PORT``                    Port for presenter view server
+``--presenter-view-open-browser``                                Open presenter view in default browser
 ``--save_pngs``                                            ``-g`` Save each frame as a png
 ``--gif``                                                  ``-i`` Save the video as gif
 ``--transparent``                                          ``-t`` Render to a movie file with an alpha channel

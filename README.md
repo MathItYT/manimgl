@@ -37,6 +37,12 @@ If you want to render YouTube live chat messages inside your scene, install with
 pip install "manimgl[youtube_chat] @ git+https://github.com/MathItYT/manimgl"
 ```
 
+If you want browser controls for presenter mode and shared speaking notes, install with the `presenter_view` extra:
+
+```bash
+pip install "manimgl[presenter_view] @ git+https://github.com/MathItYT/manimgl"
+```
+
 ## How to run?
 Create an `manimlib.InteractiveScene` subclass in a `main.py` (or any other filename else) module.
 
@@ -379,6 +385,70 @@ manimgl main.py VirtualCameraMinimal
 ```
 
 Then in your video app (OBS, Zoom, Teams, Meet, etc.) choose the virtual camera exposed by `pyvirtualcam` as the camera source.
+
+## Presenter View Extra
+
+The `presenter_view` extra serves a browser dashboard that can control scene flow and capture presenter notes.
+
+### Install
+
+```bash
+pip install "manimgl[presenter_view] @ git+https://github.com/MathItYT/manimgl"
+```
+
+### What it provides
+
+- `PresenterViewController`: manages a local HTTP server and browser dashboard.
+- `bind_scene_to_presenter_view`: attaches presenter controls to a `Scene`.
+- `unbind_scene_from_presenter_view`: detaches and closes the presenter dashboard.
+
+Import path:
+
+```python
+from manimlib.extras.presenter_view import bind_scene_to_presenter_view
+```
+
+### Run from CLI
+
+Use `--presenter-view` to enable it for any scene run:
+
+```bash
+manimgl main.py MyScene -p --presenter-view --presenter-view-open-browser
+```
+
+Optional flags:
+
+- `--presenter-view-host 127.0.0.1`
+- `--presenter-view-port 8765`
+- `--presenter-view-open-browser`
+
+The dashboard exposes: next/previous controls, hold toggle, pause/resume, quit, and note capture.
+
+### Minimal scene-level example
+
+```python
+import manimlib
+
+from manimlib.extras.presenter_view import bind_scene_to_presenter_view
+
+
+class PresenterViewMinimal(manimlib.InteractiveScene):
+    def setup(self) -> None:
+        bind_scene_to_presenter_view(
+            self,
+            host="127.0.0.1",
+            port=8765,
+            open_browser=True,
+            title="Talk Controls",
+            max_notes=300,
+            notes_file="videos/presenter_notes.jsonl",
+        )
+
+    def construct(self) -> None:
+        title = manimlib.Text("Browser Presenter View", font_size=72)
+        self.add(title)
+        self.wait(30)
+```
 
 ## YouTube Chat Extra
 

@@ -75,6 +75,11 @@ def parse_cli():
             help="Name of the Scene class you want to see",
         )
         parser.add_argument(
+            "--headless",
+            action="store_true",
+            help="Run without displaying the window",
+        )
+        parser.add_argument(
             "-w",
             "--write_file",
             action="store_true",
@@ -120,6 +125,33 @@ def parse_cli():
             action="store_true",
             help="Scene will stay paused during wait calls until "
             + "space bar or right arrow is hit, like a slide show",
+        )
+        parser.add_argument(
+            "--presenter-view",
+            "--presenter_view",
+            dest="presenter_view",
+            action="store_true",
+            help="Enable browser presenter controls and note capture",
+        )
+        parser.add_argument(
+            "--presenter-view-host",
+            "--presenter_view_host",
+            dest="presenter_view_host",
+            help="Host interface for presenter view server",
+        )
+        parser.add_argument(
+            "--presenter-view-port",
+            "--presenter_view_port",
+            dest="presenter_view_port",
+            type=int,
+            help="Port for presenter view server",
+        )
+        parser.add_argument(
+            "--presenter-view-open-browser",
+            "--presenter_view_open_browser",
+            dest="presenter_view_open_browser",
+            action="store_true",
+            help="Open presenter view in default browser",
         )
         parser.add_argument(
             "-i",
@@ -271,6 +303,8 @@ def update_window_config(config: Dict, args: Namespace):
     for key in "position", "size":
         if window_config.get(key):
             window_config[key] = literal_eval(window_config[key])
+    if args.headless:
+        window_config.enabled = False
     if args.full_screen:
         window_config.full_screen = True
 
@@ -356,6 +390,10 @@ def update_run_config(config: Dict, args: Namespace):
         quiet=args.quiet or args.write_all,
         write_all=args.write_all,
         show_in_window=True,
+        presenter_view=args.presenter_view,
+        presenter_view_host=args.presenter_view_host,
+        presenter_view_port=args.presenter_view_port,
+        presenter_view_open_browser=args.presenter_view_open_browser,
     )
 
 

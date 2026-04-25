@@ -8,6 +8,7 @@ import traceback
 import json
 import typing
 from typing import Any, Dict, List, Literal, Optional, Union
+import threading
 
 import numpy as np
 import manimlib
@@ -19,241 +20,98 @@ from pydantic import BaseModel, Field, create_model, ConfigDict, ValidationError
 # Modelos Pydantic Estrictos (Base Global)
 # ==============================================================================
 
-class Ref(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    ref: str
-
-class EvalStr(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    eval: str = Field(description="Consider that if it's a function you must put lambda in front of it, for example: lambda x: x**2")
-
-class Vector3(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    x: float
-    y: float
-    z: float
-
-RefOrVect = Union[Ref, Vector3, EvalStr]
-DynNum = Union[float, EvalStr]
-DynStr = Union[str, EvalStr]
-
-class Kwarg(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    key: str
-    value: DynStr
-
-# Configuración Base estricta: NO se permiten parámetros inventados
 class BaseParams(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 class MobjectParams(BaseParams):
-    color: Optional[DynStr] 
-    opacity: Optional[DynNum] 
-    z_index: Optional[DynNum] 
-    # Shading separado
-    reflectiveness: Optional[DynNum] 
-    gloss: Optional[DynNum] 
-    shadow: Optional[DynNum] 
+    color: Optional[str] 
+    opacity: Optional[str] 
     
 class VMobjectParams(MobjectParams):
-    fill_color: Optional[DynStr] 
-    fill_opacity: Optional[DynNum] 
-    stroke_color: Optional[DynStr] 
-    stroke_opacity: Optional[DynNum] 
-    stroke_width: Optional[DynNum] 
-    
+    fill_color: Optional[str] 
+    fill_opacity: Optional[str] 
+    stroke_color: Optional[str] 
+    stroke_width: Optional[str]
+
 class SurfaceParams(MobjectParams):
-    # Superficies separadas (u_range, v_range y resolution)
-    u_min: Optional[DynNum] 
-    u_max: Optional[DynNum] 
-    u_samples: Optional[DynNum] 
-    v_min: Optional[DynNum] 
-    v_max: Optional[DynNum] 
-    v_samples: Optional[DynNum] 
+    u_min: str
+    u_max: str
+    u_samples: str
+    v_min: str
+    v_max: str
+    v_samples: str
     
 class AnimParams(BaseParams):
-    run_time: Optional[DynNum] 
-    lag_ratio: Optional[DynNum] 
-    rate_func: Optional[DynStr] 
+    run_time: Optional[str] 
+    lag_ratio: Optional[str] 
+    rate_func: Optional[str]
 
 # ------------------------------------------------------------------------------
 # Definición Estricta de Parámetros por Clase (Diccionarios Globales)
 # ------------------------------------------------------------------------------
 
 MOBJECT_DEFS = {
-    "Mobject": (MobjectParams, {}),
-    "Group": (MobjectParams, {"mobjects": (Optional[List[Union[Ref, EvalStr]]], ...)}),
-    "Point": (MobjectParams, {"location": (Optional[RefOrVect], ...)}),
-    "VMobject": (VMobjectParams, {}),
-    "VGroup": (VMobjectParams, {"vmobjects": (Optional[List[Union[Ref, EvalStr]]], ...)}),
-    "Circle": (VMobjectParams, {"radius": (Optional[DynNum], ...), "arc_center": (Optional[RefOrVect], ...)}),
-    "Dot": (VMobjectParams, {"point": (Optional[RefOrVect], ...), "radius": (Optional[DynNum], ...)}),
-    "Line": (VMobjectParams, {"start": (Optional[RefOrVect], ...), "end": (Optional[RefOrVect], ...)}),
-    "DashedLine": (VMobjectParams, {"start": (Optional[RefOrVect], ...), "end": (Optional[RefOrVect], ...), "dash_length": (Optional[DynNum], ...)}),
-    "Arrow": (VMobjectParams, {"start": (Optional[RefOrVect], ...), "end": (Optional[RefOrVect], ...)}),
-    "Vector": (VMobjectParams, {"direction": (Optional[RefOrVect], ...)}),
-    "Rectangle": (VMobjectParams, {"width": (Optional[DynNum], ...), "height": (Optional[DynNum], ...)}),
-    "Square": (VMobjectParams, {"side_length": (Optional[DynNum], ...)}),
-    "Polygon": (VMobjectParams, {"vertices": (Optional[List[RefOrVect]], ...)}),
-    "RegularPolygon": (VMobjectParams, {"n": (Optional[DynNum], ...), "radius": (Optional[DynNum], ...)}),
-    "Text": (VMobjectParams, {"text": (DynStr, ...), "font_size": (Optional[DynNum], ...)}),
-    "MarkupText": (VMobjectParams, {"text": (DynStr, ...)}),
-    "MarkdownMobject": (VMobjectParams, {"markdown": (DynStr, ...), "font_size": (Optional[DynNum], ...)}),
-    "Brace": (VMobjectParams, {"mobject": (Ref, ...), "direction": (Optional[RefOrVect], ...)}),
-    "Axes": (VMobjectParams, {
-        "x_min": (Optional[DynNum], ...), "x_max": (Optional[DynNum], ...), "x_samples": (Optional[DynNum], ...),
-        "y_min": (Optional[DynNum], ...), "y_max": (Optional[DynNum], ...), "y_samples": (Optional[DynNum], ...)
+    "Group": (MobjectParams, {"mobjects": (Optional[List[Union[str, str]]], ...)}),
+    "VGroup": (VMobjectParams, {"vmobjects": (Optional[List[Union[str, str]]], ...)}),
+    "Circle": (VMobjectParams, {"radius": (Optional[str], ...), "arc_center": (Optional[str], ...)}),
+    "Line": (VMobjectParams, {"start": (Optional[str], ...), "end": (Optional[str], ...)}),
+    "Arrow": (VMobjectParams, {"start": (Optional[str], ...), "end": (Optional[str], ...)}),
+    "Rectangle": (VMobjectParams, {"width": (Optional[str], ...), "height": (Optional[str], ...)}),
+    "Polygon": (VMobjectParams, {"vertices": (Optional[List[str]], ...)}),
+    "MarkdownMobject": (VMobjectParams, {"markdown": (str, ...), "font_size": (Optional[str], ...)}),
+    "Brace": (VMobjectParams, {"mobject": (str, ...), "direction": (Optional[str], ...)}),
+    "NumberPlane": (VMobjectParams, {
+        "x_min": (Optional[str], ...), "x_max": (Optional[str], ...),
+        "y_min": (Optional[str], ...), "y_max": (Optional[str], ...)
     }),
     "ThreeDAxes": (VMobjectParams, {
-        "x_min": (Optional[DynNum], ...), "x_max": (Optional[DynNum], ...), "x_samples": (Optional[DynNum], ...),
-        "y_min": (Optional[DynNum], ...), "y_max": (Optional[DynNum], ...), "y_samples": (Optional[DynNum], ...),
-        "z_min": (Optional[DynNum], ...), "z_max": (Optional[DynNum], ...), "z_samples": (Optional[DynNum], ...)
-    }),
-    "NumberPlane": (VMobjectParams, {
-        "x_min": (Optional[DynNum], ...), "x_max": (Optional[DynNum], ...), "x_samples": (Optional[DynNum], ...),
-        "y_min": (Optional[DynNum], ...), "y_max": (Optional[DynNum], ...), "y_samples": (Optional[DynNum], ...)
-    }),
-    "FunctionGraph": (VMobjectParams, {
-        "function": (EvalStr, ...), 
-        "x_min": (Optional[DynNum], ...), "x_max": (Optional[DynNum], ...), "x_samples": (Optional[DynNum], ...)
+        "x_min": (Optional[str], ...), "x_max": (Optional[str], ...),
+        "y_min": (Optional[str], ...), "y_max": (Optional[str], ...),
+        "z_min": (Optional[str], ...), "z_max": (Optional[str], ...)
     }),
     "ParametricCurve": (VMobjectParams, {
-        "t_func": (EvalStr, ...), 
-        "t_min": (Optional[DynNum], ...), "t_max": (Optional[DynNum], ...), "t_samples": (Optional[DynNum], ...)
+        "t_func": (str, ...), 
+        "t_min": (str, ...), "t_max": (str, ...), "t_samples": (str, ...)
     }),
-    "Sphere": (SurfaceParams, {"radius": (Optional[DynNum], ...)}),
-    "Cube": (SurfaceParams, {"side_length": (Optional[DynNum], ...)}),
-    "Cylinder": (SurfaceParams, {"height": (Optional[DynNum], ...), "radius": (Optional[DynNum], ...)}),
-    "Cone": (SurfaceParams, {"height": (Optional[DynNum], ...), "radius": (Optional[DynNum], ...)}),
-    "Torus": (SurfaceParams, {"r1": (Optional[DynNum], ...), "r2": (Optional[DynNum], ...)}),
-    "ParametricSurface": (SurfaceParams, {"uv_func": (EvalStr, ...)}),
-    "VectorField": (VMobjectParams, {"func": (EvalStr, ...), "coordinate_system": (Optional[Union[Ref, EvalStr]], ...)}),
-    "StreamLines": (VMobjectParams, {"func": (EvalStr, ...), "coordinate_system": (Optional[Union[Ref, EvalStr]], ...)}),
+    "ParametricSurface": (SurfaceParams, {"uv_func": (str, ...)}),
+    "Sphere": (SurfaceParams, {"radius": (Optional[str], ...)}),
+    "Cube": (SurfaceParams, {"side_length": (Optional[str], ...)}),
+    "Cylinder": (SurfaceParams, {"height": (Optional[str], ...), "radius": (Optional[str], ...)}),
+    "Cone": (SurfaceParams, {"height": (Optional[str], ...), "radius": (Optional[str], ...)}),
+    "Torus": (SurfaceParams, {"r1": (Optional[str], ...), "r2": (Optional[str], ...)}),
 }
 
 ANIMATION_DEFS = {
-    "Animation": (AnimParams, {"mobject": (Ref, ...)}),
-    "ShowCreation": (AnimParams, {"mobject": (Ref, ...)}),
-    "Uncreate": (AnimParams, {"mobject": (Ref, ...)}),
-    "Write": (AnimParams, {"vmobject": (Ref, ...)}),
-    "DrawBorderThenFill": (AnimParams, {"vmobject": (Ref, ...)}),
-    "FadeIn": (AnimParams, {"mobject": (Ref, ...), "shift": (Optional[RefOrVect], ...), "scale": (Optional[DynNum], ...)}),
-    "FadeOut": (AnimParams, {"mobject": (Ref, ...), "shift": (Optional[RefOrVect], ...), "scale": (Optional[DynNum], ...)}),
-    "FadeTransform": (AnimParams, {"mobject": (Ref, ...), "target_mobject": (Ref, ...)}),
-    "Transform": (AnimParams, {"mobject": (Ref, ...), "target_mobject": (Ref, ...)}),
-    "ReplacementTransform": (AnimParams, {"mobject": (Ref, ...), "target_mobject": (Ref, ...)}),
-    "MoveAlongPath": (AnimParams, {"mobject": (Ref, ...), "path": (Ref, ...)}),
-    "Indicate": (AnimParams, {"mobject": (Ref, ...), "scale_factor": (Optional[DynNum], ...)}),
-    "FocusOn": (AnimParams, {"focus_point": (RefOrVect, ...)}),
-    "WiggleOutThenIn": (AnimParams, {"mobject": (Ref, ...)}),
+    "ShowCreation": (AnimParams, {"mobject": (str, ...)}),
+    "Write": (AnimParams, {"vmobject": (str, ...)}),
+    "DrawBorderThenFill": (AnimParams, {"vmobject": (str, ...)}),
+    "FadeIn": (AnimParams, {"mobject": (str, ...), "shift": (Optional[str], ...), "scale": (Optional[str], ...)}),
+    "FadeOut": (AnimParams, {"mobject": (str, ...), "shift": (Optional[str], ...), "scale": (Optional[str], ...)}),
+    "Transform": (AnimParams, {"mobject": (str, ...), "target_mobject": (str, ...)}),
+    "ReplacementTransform": (AnimParams, {"mobject": (str, ...), "target_mobject": (str, ...)}),
+    "FadeTransform": (AnimParams, {"mobject": (str, ...), "target_mobject": (str, ...)}),
 }
 
 METHOD_DEFS = {
-    "center": {}, "clear": {}, "clear_updaters": {}, "fix_in_frame": {}, 
-    "generate_target": {}, "restore": {}, "save_state": {}, 
-    "resume_updating": {}, "unfix_from_frame": {}, "reverse_points": {},
-    "get_x": {}, "get_y": {}, "get_z": {}, "get_center": {}, "get_width": {}, 
-    "get_height": {}, "get_depth": {}, "get_top": {}, "get_bottom": {}, "get_left": {}, 
-    "get_right": {}, "get_bounding_box": {}, "get_continuous_bounding_box": {}, 
-    "get_value": {}, "get_family": {}, "family_members_with_points": {}, 
-    "get_axes": {}, "get_x_axis": {}, "get_y_axis": {}, "get_z_axis": {},
-    "add": {"mobjects": (List[Ref], ...)},
-    "add_to_back": {"mobjects": (List[Ref], ...)},
-    "remove": {"mobjects": (List[Ref], ...)},
-    "move_to": {"point_or_mobject": (RefOrVect, ...), "aligned_edge": (Optional[RefOrVect], ...)},
-    "next_to": {"mobject_or_point": (RefOrVect, ...), "direction": (Optional[RefOrVect], ...), "buff": (Optional[DynNum], ...), "aligned_edge": (Optional[RefOrVect], ...)},
-    "shift": {"vector": (RefOrVect, ...)},
-    "scale": {"scale_factor": (DynNum, ...), "about_point": (Optional[RefOrVect], ...), "about_edge": (Optional[RefOrVect], ...)},
-    "scale_about_point": {"scale_factor": (DynNum, ...), "point": (RefOrVect, ...)},
-    "rotate": {"angle": (DynNum, ...), "axis": (Optional[RefOrVect], ...), "about_point": (Optional[RefOrVect], ...)},
-    "rotate_about_origin": {"angle": (DynNum, ...), "axis": (Optional[RefOrVect], ...)},
-    "flip": {"axis": (Optional[RefOrVect], ...)},
-    "stretch": {"factor": (DynNum, ...), "dim": (DynNum, ...)},
-    "stretch_to_fit_width": {"width": (DynNum, ...)},
-    "stretch_to_fit_height": {"height": (DynNum, ...)},
-    "stretch_to_fit_depth": {"depth": (DynNum, ...)},
-    "set_width": {"width": (DynNum, ...), "stretch": (Optional[bool], ...)},
-    "set_height": {"height": (DynNum, ...), "stretch": (Optional[bool], ...)},
-    "set_depth": {"depth": (DynNum, ...), "stretch": (Optional[bool], ...)},
-    "set_max_width": {"max_width": (DynNum, ...)},
-    "set_max_height": {"max_height": (DynNum, ...)},
-    "set_max_depth": {"max_depth": (DynNum, ...)},
-    "align_to": {"mobject_or_point": (RefOrVect, ...), "direction": (Optional[RefOrVect], ...)},
-    "to_corner": {"corner": (RefOrVect, ...), "buff": (Optional[DynNum], ...)},
-    "to_edge": {"edge": (RefOrVect, ...), "buff": (Optional[DynNum], ...)},
-    "align_on_border": {"direction": (RefOrVect, ...), "buff": (Optional[DynNum], ...)},
-    "set_x": {"x": (DynNum, ...), "direction": (Optional[RefOrVect], ...)},
-    "set_y": {"y": (DynNum, ...), "direction": (Optional[RefOrVect], ...)},
-    "set_z": {"z": (DynNum, ...), "direction": (Optional[RefOrVect], ...)},
-    "set_color": {"color": (DynStr, ...)},
-    "set_opacity": {"opacity": (DynNum, ...)},
-    "set_fill": {"color": (Optional[DynStr], ...), "opacity": (Optional[DynNum], ...)},
-    "set_stroke": {"color": (Optional[DynStr], ...), "width": (Optional[DynNum], ...), "opacity": (Optional[DynNum], ...)},
-    "set_style": {"fill_color": (Optional[DynStr], ...), "fill_opacity": (Optional[DynNum], ...), "stroke_color": (Optional[DynStr], ...), "stroke_width": (Optional[DynNum], ...), "stroke_opacity": (Optional[DynNum], ...)},
-    "fade": {"darkness": (Optional[DynNum], ...)},
-    "become": {"mobject": (Ref, ...)},
-    "replace": {"mobject": (Ref, ...)},
-    "replace_submobject": {"old_submob": (Ref, ...), "new_submob": (Ref, ...)},
-    "match_color": {"mobject": (Ref, ...)},
-    "match_style": {"mobject": (Ref, ...)},
-    "match_width": {"mobject": (Ref, ...)},
-    "match_height": {"mobject": (Ref, ...)},
-    "match_depth": {"mobject": (Ref, ...)},
-    "match_x": {"mobject": (Ref, ...)},
-    "match_y": {"mobject": (Ref, ...)},
-    "match_z": {"mobject": (Ref, ...)},
-    "set_value": {"value": (DynNum, ...)},
-    "increment_value": {"d_value": (DynNum, ...)},
-    "set_theta": {"theta": (DynNum, ...)},
-    "set_phi": {"phi": (DynNum, ...)},
-    "set_gamma": {"gamma": (DynNum, ...)},
-    "increment_theta": {"d_theta": (DynNum, ...)},
-    "increment_phi": {"d_phi": (DynNum, ...)},
-    "increment_gamma": {"d_gamma": (DynNum, ...)},
-    "set_euler_angles": {"theta": (Optional[DynNum], ...), "phi": (Optional[DynNum], ...), "gamma": (Optional[DynNum], ...)},
-    "set_field_of_view": {"fov": (DynNum, ...)},
-    "set_points": {"points": (List[RefOrVect], ...)},
-    "set_points_as_corners": {"points": (List[RefOrVect], ...)},
-    "set_points_smoothly": {"points": (List[RefOrVect], ...)},
-    "add_line_to": {"point": (RefOrVect, ...)},
-    "add_smooth_curve_to": {"point": (RefOrVect, ...)},
-    "add_quadratic_bezier_curve_to": {"handle": (RefOrVect, ...), "point": (RefOrVect, ...)},
-    "add_cubic_bezier_curve_to": {"handle1": (RefOrVect, ...), "handle2": (RefOrVect, ...), "point": (RefOrVect, ...)},
-    "put_start_and_end_on": {"start": (RefOrVect, ...), "end": (RefOrVect, ...)},
-    "get_corner": {"direction": (RefOrVect, ...)},
-    "get_edge_center": {"direction": (RefOrVect, ...)},
-    "get_boundary_point": {"direction": (RefOrVect, ...)},
-    "add_coordinate_labels": {"font_size": (Optional[DynNum], ...)},
-    "add_x_labels": {"font_size": (Optional[DynNum], ...)},
-    "add_y_labels": {"font_size": (Optional[DynNum], ...)},
-    "c2p": {"x": (DynNum, ...), "y": (DynNum, ...), "z": (Optional[DynNum], ...)},
-    "coords_to_point": {"x": (DynNum, ...), "y": (DynNum, ...), "z": (Optional[DynNum], ...)},
-    "p2c": {"point": (RefOrVect, ...)},
-    "point_to_coords": {"point": (RefOrVect, ...)},
-    "get_implicit_curve": {"function": (EvalStr, ...), "color": (Optional[DynStr], ...)},
-    "get_graph": {"function": (EvalStr, ...), "x_min": (Optional[DynNum], ...), "x_max": (Optional[DynNum], ...), "color": (Optional[DynStr], ...)},
-    "get_parametric_curve": {"function": (EvalStr, ...), "t_min": (Optional[DynNum], ...), "t_max": (Optional[DynNum], ...), "color": (Optional[DynStr], ...)},
-    "get_area_under_graph": {"graph": (Ref, ...), "x_min": (DynNum, ...), "x_max": (DynNum, ...), "color": (Optional[DynStr], ...)},
-    "get_riemann_rectangles": {"graph": (Ref, ...), "x_min": (DynNum, ...), "x_max": (DynNum, ...), "dx": (Optional[DynNum], ...)},
-    "get_scatterplot": {"x_values": (List[DynNum], ...), "y_values": (List[DynNum], ...), "color": (Optional[DynStr], ...)},
-    "apply_matrix": {"matrix": (List[List[DynNum]], ...)},
-    "apply_function": {"function": (EvalStr, ...)},
-    "apply_complex_function": {"function": (EvalStr, ...)},
-    "apply_function_to_position": {"function": (EvalStr, ...)},
-    "apply_function_to_submobject_positions": {"function": (EvalStr, ...)},
-    "arrange": {"direction": (Optional[RefOrVect], ...), "buff": (Optional[DynNum], ...), "center": (Optional[bool], ...)},
-    "arrange_in_grid": {"n_rows": (Optional[DynNum], ...), "n_cols": (Optional[DynNum], ...), "buff": (Optional[DynNum], ...)},
-    "surround": {"mobject": (Ref, ...), "dim_to_match": (Optional[DynNum], ...), "stretch": (Optional[bool], ...), "buff": (Optional[DynNum], ...)},
-    "interpolate": {"mobject1": (Ref, ...), "mobject2": (Ref, ...), "alpha": (DynNum, ...)},
-    "pointwise_become_partial": {"mobject": (Ref, ...), "a": (DynNum, ...), "b": (DynNum, ...)},
-    "point_from_proportion": {"alpha": (DynNum, ...)},
-    "proportion_from_point": {"point": (RefOrVect, ...)},
-    "insert_n_curves": {"n": (DynNum, ...)},
-    "reorient": {"vector": (RefOrVect, ...)},
-    "space_out_submobjects": {"factor": (DynNum, ...)},
-    "waggle": {"direction": (Optional[RefOrVect], ...), "max_theta": (Optional[DynNum], ...)},
-    "add_updater": {"update_function": (EvalStr, ...)},
-    "remove_updater": {"update_function": (EvalStr, ...)}
+    "add": {"mobjects": (List[str], ...)},
+    "remove": {"mobjects": (List[str], ...)},
+    "move_to": {"point_or_mobject": (str, ...), "aligned_edge": (Optional[str], ...)},
+    "next_to": {"mobject_or_point": (str, ...), "direction": (Optional[str], ...), "buff": (Optional[str], ...)},
+    "shift": {"vector": (str, ...)},
+    "scale": {"scale_factor": (str, ...), "about_point": (Optional[str], ...)},
+    "rotate": {"angle": (str, ...), "axis": (Optional[str], ...), "about_point": (Optional[str], ...)},
+    "stretch": {"factor": (str, ...), "dim": (str, ...)},
+    "set_width": {"width": (str, ...), "stretch": (Optional[bool], ...)},
+    "set_height": {"height": (str, ...), "stretch": (Optional[bool], ...)},
+    "set_color": {"color": (str, ...)},
+    "set_fill": {"color": (Optional[str], ...), "opacity": (Optional[str], ...)},
+    "set_stroke": {"color": (Optional[str], ...), "width": (Optional[str], ...), "opacity": (Optional[str], ...)},
+    "set_style": {"fill_color": (Optional[str], ...), "fill_opacity": (Optional[str], ...), "stroke_color": (Optional[str], ...), "stroke_width": (Optional[str], ...)},
+    "become": {"mobject": (str, ...)},
+    "apply_function": {"function": (str, ...)},
+    "arrange": {"direction": (Optional[str], ...), "buff": (Optional[str], ...), "center": (Optional[bool], ...)},
+    "add_updater": {"update_function": (str, ...)},
+    "remove_updater": {"update_function": (str, ...)}
 }
 
 # ==============================================================================
@@ -261,13 +119,13 @@ METHOD_DEFS = {
 # ==============================================================================
 
 class PlayKwargs(BaseParams):
-    run_time: Optional[DynNum] 
-    lag_ratio: Optional[DynNum] 
-    rate_func: Optional[EvalStr] 
+    run_time: Optional[str] 
+    lag_ratio: Optional[str] 
+    rate_func: Optional[str] 
 
 class WaitAction(BaseParams):
     type: Literal["wait"]
-    duration: DynNum
+    duration: str
 
 class AddAction(BaseParams):
     type: Literal["add"]
@@ -276,6 +134,7 @@ class AddAction(BaseParams):
 class RemoveAction(BaseParams):
     type: Literal["remove"]
     targets: List[str]
+    unregister: bool
 
 
 # ==============================================================================
@@ -303,10 +162,11 @@ class LLMSceneController:
         self.max_history_messages: int = 40
         
         self.execution_queue = queue.Queue()
+        self.result_queue = queue.Queue()
         self._is_processing_queue_item: bool = False
         self.execution_result_timeout_seconds: float = 90.0
 
-        self._install_main_loop_queue_hook()
+        self._install_thread()
 
         # Copias locales de las definiciones para permitir extensiones sin mutar globales
         self.mobject_defs = dict(MOBJECT_DEFS)
@@ -339,7 +199,7 @@ class LLMSceneController:
     # ==========================================================================
 
     def _rebuild_schemas(self):
-        """Reconstruye todos los modelos Pydantic dinámicos basados en los diccionarios actuales."""
+        """Reconstruye todos los modelos Pydantic dinámicos sin recursividad."""
         
         def to_pascal(snake: str) -> str:
             return "".join(x.title() for x in snake.split("_"))
@@ -377,23 +237,7 @@ class LLMSceneController:
             )
             play_anim_models.append(PlayAnimModel)
 
-        AnyPlayAnimBase = typing.Union[tuple(play_anim_models)]
-        GroupParamsModel = create_model(
-            "GroupParams", 
-            animations=(List[AnyPlayAnimBase], ...), 
-            __base__=AnimParams, 
-            __config__=ConfigDict(extra='forbid')
-        )
-
-        for name in ["AnimationGroup", "Succession", "LaggedStart"]:
-            PlayGroupModel = create_model(
-                f"Play{name}Anim",
-                class_name=(Literal[name], ...),
-                params=(GroupParamsModel, ...),
-                __config__=ConfigDict(extra='forbid')
-            )
-            play_anim_models.append(PlayGroupModel)
-
+        # Eliminados los grupos recursivos. ManimGL puede encadenar nativamente en kwargs.
         AnyPlayAnim = typing.Union[tuple(play_anim_models)]
         self.PlayAction = create_model(
             "PlayAction", 
@@ -432,7 +276,7 @@ class LLMSceneController:
             self.PlayAction, 
             WaitAction, 
             AddAction, 
-            RemoveAction
+            RemoveAction,
         ]
         self.ActionResponse = create_model(
             "ActionResponse", 
@@ -460,11 +304,8 @@ class LLMSceneController:
         self.method_defs[name] = fields
         self._rebuild_schemas()
 
-    def _install_main_loop_queue_hook(self) -> None:
-        add_callback = getattr(self.scene, "add_main_loop_callback", None)
-        if not callable(add_callback):
-            raise RuntimeError("La escena no expone add_main_loop_callback")
-        add_callback(self._process_queue)
+    def _install_thread(self) -> None:
+        threading.Thread(target=self._process_queue, daemon=True).start()
 
     def register_object(self, name: str, obj: Any) -> None:
         self.registered_objects[name] = obj
@@ -532,7 +373,7 @@ class LLMSceneController:
                     color_map[k] = v
             kwargs["texs_to_color_map"] = color_map
 
-        return kwargs
+        return {k: v for k, v in kwargs.items() if v is not None}
 
     # --------------------------------------------------------------------------
     # Builders Personalizados (Parseo seguro)
@@ -618,7 +459,7 @@ class LLMSceneController:
         self, 
         prompt: str, 
         additional_system_prompt: str | None , 
-        response_mode: str = "code", 
+        response_mode: str = "code",
         **kwargs
     ) -> bool:
         context_lines = [f"- {name} ({type(obj).__name__})" for name, obj in self.registered_objects.items()]
@@ -641,16 +482,14 @@ Return a valid JSON strictly following this schema.
 DO NOT INVENT PARAMETERS OR CLASSES. The schema enforces strict validation!
 
 Important Guidelines:
-- ALL parameters defined in the schema are absolutely REQUIRED. You MUST include every key in the `params` object, even if you leave the value as `null`.
-- To reference an existing object, use `{{"ref": "object_name"}}`.
-- To evaluate dynamic mathematical expressions, constants or methods, use `{{"eval": "expression"}}` (e.g., `{{"eval": "np.pi / 2"}}`, `{{"eval": "obj1.get_center() + UP"}}`).
-- For creating Mobjects (`CreateAction`), the configuration is nested under `target`: `{{"type": "create", "name": "obj_name", "target": {{"class_name": "...", "params": {{...}}}}}}`.
-- For method calls (`CallAction`), the configuration is nested under `execute`: `{{"type": "call", "target": "obj_name", "execute": {{"method": "...", "params": {{...}}}}}}`.
-- For 3D points/vectors, use `{{"x": 1.0, "y": 2.0, "z": 3.0}}`.
-- For `play` action `kwargs`, use an object like `{{"run_time": 1.0, "lag_ratio": null, "rate_func": null}}`.
-- For shading, use `reflectiveness`, `gloss`, and `shadow` separately.
-- For ranges (like x, y, t), use `x_min`, `x_max`, and `x_samples` (not `x_range`).
+- All parameters (numbers, positions, colors, references) MUST be provided as strings.
+- To reference an existing object, just write its name (e.g., `"my_circle"`).
+- To evaluate math expressions or positions, write the code inside the string (e.g., `"np.pi / 2"`, `"obj1.get_center() + UP"`, `"np.array([1, 2, 0])"`). DO NOT output nested dictionaries like `{{"x": 1}}`.
+- For literal text or color names, just write them normally (e.g., `"Hello World"`, `"RED"`).
 - Adjust positions after creation so they don't overlap!
+- If you need to remove a list of objects, but you will reuse them later, use the "remove" action with "unregister": false. If you won't reuse them, use "unregister": true to free up memory and unregister them from available objects.
+- Don't create or save objects with the name of an existing object as it will cause conflicts. If a name already is taken, choose a different one or remove the old one first with unregistering being true. 
+- All strings will be evaluated with a Python eval, so if you need to provide a literal string as a parameter, wrap it in a valid Python string (e.g., `"This is a literal string with special characters like \\"quotes\\" and newlines\\nThis is the second line"`).
 """
             kwargs["response_format"] = {"type": "json_schema", "json_schema": {"name": "ManimJSON", "strict": True, "schema": schema}}
         else:
@@ -687,6 +526,9 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
                         raise ValueError("No valid Python code block found.")
                     self.execution_queue.put((code_to_execute, "code"))
 
+                result = self.result_queue.get()
+                if not result.get("success", False):
+                    raise RuntimeError("Execution failed")
                 history.append({"role": "user", "content": prompt})
                 history.append({"role": "assistant", "content": response_text})
                 if len(history) > self.max_history_messages * 2:
@@ -700,7 +542,7 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
                     messages.append({"role": "assistant", "content": response_text})
                     messages.append({
                         "role": "user", 
-                        "content": f"El JSON generado no cumple el esquema estricto. Error de validación:\n{e}\nPor favor, corrige tu error y genera un JSON válido que cumpla estrictamente las reglas (incluyendo TODAS las llaves listadas, dejándolas en null si no las usas)."
+                        "content": f"El JSON generado no cumple el esquema estricto. Error de validación:\n{e}\nPor favor, corrige tu error y genera un JSON válido que cumpla estrictamente las reglas (incluyendo TODAS las llaves listadas, dejándolas en None si no las usas)."
                     })
                 else:
                     return False
@@ -729,29 +571,31 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
         return False
 
     def _process_queue(self) -> None:
-        if self._is_processing_queue_item:
-            return
-
-        try:
-            self._is_processing_queue_item = True
-            item = self.execution_queue.get_nowait()
-            payload, mode = item
-            
-            snapshot = self._capture_execution_snapshot()
-            
+        while True:
             try:
+                self._is_processing_queue_item = True
+                item = self.execution_queue.get()
+                payload, mode = item
+                
+                snapshot = self._capture_execution_snapshot()
+                def get_callback(func, param) -> None:
+                    def callback():
+                        self.scene.remove_main_loop_callback(callback)
+                        traceback_str = None
+                        try:
+                            func(param)
+                        except Exception:
+                            self._restore_execution_snapshot(snapshot)
+                            traceback.print_exc()
+                            traceback_str = traceback.format_exc()
+                        self.result_queue.put({"success": traceback_str is None, "traceback": traceback_str})
+                    self.scene.add_main_loop_callback(callback)
                 if mode == "actions":
-                    self._execute_actions_v2(payload.actions)
+                    get_callback(self._execute_actions_v2, payload.actions)
                 else:
-                    self._execute_code(payload)
-            except Exception:
-                self._restore_execution_snapshot(snapshot)
-                traceback.print_exc()
-
-        except queue.Empty:
-            pass
-        finally:
-            self._is_processing_queue_item = False
+                    get_callback(self._execute_code, payload)
+            finally:
+                self._is_processing_queue_item = False
 
     def _execute_actions_v2(self, actions: List[Any]):
         for action in actions:
@@ -766,26 +610,28 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
                 else:
                     ctor = getattr(manimlib, cls_name)
                     obj = ctor(**coerced_params)
+                if action.name in self.registered_objects:
+                    raise ValueError(f"Object name '{action.name}' already exists. Don't use '{action.name}' and choose a different name")
                 self.registered_objects[action.name] = obj
 
             elif hasattr(action, "type") and action.type == "play":
                 anims = []
                 for a in action.animations:
-                    anim_dict = self._coerce_refs(a)
+                    anim_dict = {"class_name": a.class_name, "params": self._coerce_refs(a.params)}
                     anims.append(self._resolve_anim(anim_dict))
                 
                 play_kwargs = self._coerce_refs(action.kwargs)
                 self.scene.play(*anims, **play_kwargs)
 
             elif hasattr(action, "type") and action.type == "call":
-                target = self.registered_objects[action.target]
+                target = self._safe_eval_callable_expression(action.target)
                 method = getattr(target, action.execute.method)
                 
                 coerced_params = self._coerce_refs(action.execute.params)
                 coerced_params = self._format_kwargs(coerced_params)
                 
                 if action.execute.method in ("add", "add_to_back", "remove"):
-                    result = method(*coerced_params.pop("mobjects", []))
+                    result = method(*(mob for mob in coerced_params.pop("mobjects", []) if mob is not target))
                 else:
                     result = method(**coerced_params)
                 
@@ -795,6 +641,8 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
                     self.scene.play(result)
                     
                 if getattr(action, "save_as", None):
+                    if action.save_as in self.registered_objects:
+                        raise ValueError(f"Object name '{action.save_as}' already exists. Don't use '{action.save_as}' and choose a different name")
                     self.registered_objects[action.save_as] = result
 
             elif hasattr(action, "type") and action.type == "wait":
@@ -807,6 +655,9 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
             elif hasattr(action, "type") and action.type == "remove":
                 targets = [self.registered_objects[t] for t in action.targets]
                 self.scene.remove(*targets)
+                if action.unregister:
+                    for t in action.targets:
+                        self.registered_objects.pop(t, None)
 
     # --------------------------------------------------------------------------
     # Utilidades Seguras y Manejo de Entorno
@@ -819,35 +670,33 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
         match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
         return match.group(1).strip() if match else text.strip() if "scene." in text else None
 
-    def _coerce_refs(self, value: Any) -> Any:
+    def _coerce_refs(self, value: Any, dynamic: bool = True) -> Any:
+        if isinstance(value, str) and dynamic:
+            # 1. Si es el nombre de un objeto registrado, devuélvelo
+            if value in self.registered_objects:
+                return self.registered_objects[value]
+            try:
+                evaluated = self._safe_eval_callable_expression(value)
+                return evaluated
+            except Exception:
+                return value
+
         if isinstance(value, float):
             if value.is_integer():
                 return int(value)
             return value
             
         if isinstance(value, BaseModel):
-            if isinstance(value, Ref):
-                if value.ref not in self.registered_objects:
-                    raise KeyError(f"Reference not found: {value.ref}")
-                return self.registered_objects[value.ref]
-            if isinstance(value, EvalStr):
-                return self._safe_eval_callable_expression(value.eval)
-            if isinstance(value, Vector3):
-                return np.array([value.x, value.y, value.z])
-            
             return {k: self._coerce_refs(v) for k, v in value.model_dump(exclude_none=True).items()}
             
         if isinstance(value, dict):
-            if "ref" in value and len(value) == 1:
-                if value["ref"] not in self.registered_objects:
-                    raise KeyError(f"Reference not found: {value['ref']}")
-                return self.registered_objects[value["ref"]]
-            if "eval" in value and len(value) == 1:
-                return self._safe_eval_callable_expression(value["eval"])
-            if {"x", "y", "z"}.issubset(value.keys()) and len(value) == 3:
-                return np.array([value["x"], value["y"], value["z"]])
-                
-            return {k: self._coerce_refs(v) for k, v in value.items()}
+            result = {}
+            for k, v in value.items():
+                coerced_key = self._coerce_refs(k, dynamic=False)
+                if coerced_key is None:
+                    continue
+                result[coerced_key] = self._coerce_refs(v)
+            return result
             
         if isinstance(value, list):
             return [self._coerce_refs(v) for v in value]
@@ -865,12 +714,13 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
             "float": float, "int": int, "complex": complex, "round": round,
         }
         allowed_globals.update({k: v for k, v in self.registered_objects.items() if not k.startswith("_")})
+        allowed_globals.update({k: v for k, v in manimlib.__dict__.items() if not k.startswith("_")})
         
         tree = ast.parse(expression, mode="eval")
         for node in ast.walk(tree):
             if isinstance(node, (ast.Attribute, ast.Name)) and getattr(node, "attr", getattr(node, "id", "")).startswith("__"):
                 raise ValueError("Dunder methods or attributes are not allowed.")
-                
+
         return eval(compile(tree, "<llm_expr>", "eval"), allowed_globals)
 
     def _execute_code(self, code: str) -> None:
@@ -879,6 +729,7 @@ Use `scene.play()`. Do NOT use `print()` or `import`.
             "print": lambda *args, **kwargs: None
         }
         exec_globals.update(self.registered_objects)
+        exec_globals.update({k: v for k, v in manimlib.constants.__dict__.items() if not k.startswith("_")})
         with contextlib.redirect_stdout(io.StringIO()):
             exec(code, exec_globals, exec_globals)
 
