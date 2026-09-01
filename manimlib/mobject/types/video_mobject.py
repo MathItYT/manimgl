@@ -260,12 +260,8 @@ class VideoMobject(ImageMobject):
     A video showing whichever frame set_time was last given, and otherwise an ImageMobject
     in every respect.
 
-    Two of these drawn from one file may sit on different frames of it, sharing the decoding
-    and, where the clip is small enough to be preloaded, the frames on the gpu too, see
-    VideoFrames.
-
-    A time past the end holds on the last frame, or comes round to the beginning again where
-    it loops.
+    A time past the end either holds on the last frame, or comes round to the beginning
+    if loop is set to True
     """
 
     shader_file: str = "video.wgsl"
@@ -323,15 +319,7 @@ class VideoMobject(ImageMobject):
 
     @property
     def frame_index(self) -> int:
-        """
-        Which frame of the video is showing, which the uniform alone decides. Holding it
-        there and nowhere else is what lets it be interpolated, so that animating between
-        two frames scrubs through the ones between.
-
-        A blend landing between two frames shows the nearer, and a number past the end of
-        the clip comes round again where it loops and holds at the last frame where it does
-        not, both as the shader reads it too, see video.wgsl.
-        """
+        """ Which frame of the video is showing, which the uniform alone decides. """
         index = round(float(self.uniforms["frame"]))
         if self.loop:
             return index % self.source.num_frames
@@ -343,26 +331,15 @@ class VideoMobject(ImageMobject):
     # Which frame is showing
 
     def set_time(self, time: float):
-        """
-        Show the frame at a given time in seconds, the nearest one to it rather than a blend
-        of the two either side. A time past the end shows the last frame, or where the clip
-        loops the one that far into it again.
-        """
+        """ Show the frame at a given time in seconds. """
         return self.set_frame(time * float(self.source.frame_rate))
 
     def increment_time(self, dt: float):
-        """
-        Move on by a length of time, which where it is shorter than a frame shows the same
-        frame again: it is where the video has got to that is kept, not where it last
-        landed, so steps too small to reach the next frame still add up.
-        """
+        """ Move on by a length of time. """
         return self.set_time(self.get_time() + dt)
 
     def play_from(self, time: float = 0.0):
-        """
-        Play on from a given time, a frame of video to a frame of animation, for as long as
-        the mobject is in the scene.
-        """
+        """ Play on from a given time. """
         self.set_time(time)
         return self.add_updater(lambda mob, dt: mob.increment_time(dt))
 
@@ -373,14 +350,7 @@ class VideoMobject(ImageMobject):
         return self.animate(run_time=run_time, rate_func=rate_func).set_time(time)
 
     def set_frame(self, index: float):
-        """
-        Show a frame by its number rather than its time, the nearest one where it falls
-        between two, see frame_index.
-
-        A clip which loops keeps the number it was given, however far past the end it runs,
-        and comes round to a frame of the clip only in the reading: so playing on through a
-        loop, or animating across one, goes forwards rather than back to where it began.
-        """
+        """ Show a frame by its number rather than its time. """
         if not self.loop:
             index = np.clip(index, 0, self.source.num_frames - 1)
         self.uniforms["frame"] = index
@@ -421,10 +391,7 @@ class VideoMobject(ImageMobject):
 
     @property
     def image(self) -> Image.Image:
-        """
-        The frame now showing, as an image, which is what ImageMobject reads pixels from.
-        Made when asked for rather than held, no drawing having any use for it.
-        """
+        """ The frame now showing, as an image, which is what ImageMobject reads pixels from. """
         return Image.fromarray(self.get_pixels(), mode="RGBA")
 
 
@@ -432,8 +399,5 @@ class Sprite(VideoMobject):
     """
     A VideoMobject read nearest pixel rather than blended, keeping pixel art crisp however
     far it is scaled up.
-
-    Scaled well down it will shimmer instead, there being no mipmaps to fall back on, so
-    linear is kinder there.
     """
     texture_filter: str = "nearest"
