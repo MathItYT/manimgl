@@ -5,6 +5,7 @@ from PIL import Image
 
 from manimlib.constants import DL, DR, UL, UR
 from manimlib.mobject.mobject import Mobject
+from manimlib.renderer.texture import ImageFile
 from manimlib.utils.bezier import inverse_interpolate
 from manimlib.utils.images import get_full_raster_image_path
 from manimlib.utils.iterables import listify
@@ -14,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Sequence, Tuple
+    from manimlib.renderer.texture import TextureSource
     from manimlib.typing import Vect3
 
 
@@ -35,9 +37,17 @@ class ImageMobject(Mobject):
         **kwargs
     ):
         self.height = height
+        super().__init__(textures={"Texture": self.init_texture(filename)}, **kwargs)
+
+    def init_texture(self, filename: str) -> TextureSource:
+        """
+        Where the pixels drawn over the four corners come from, which for an image is the
+        file itself. Overridden by anything drawing the same quad from somewhere else, a
+        frame of a video say, see VideoMobject.
+        """
         self.image_path = get_full_raster_image_path(filename)
         self.image = Image.open(self.image_path)
-        super().__init__(texture_paths={"Texture": self.image_path}, **kwargs)
+        return ImageFile(self.image_path)
 
     def init_data(self) -> None:
         super().init_data(length=4)
@@ -45,9 +55,13 @@ class ImageMobject(Mobject):
         self.data["im_coords"] = [(0, 0), (0, 1), (1, 0), (1, 1)]
         self.data["opacity"] = self.opacity
 
+    def get_source_size(self) -> Tuple[int, int]:
+        """The pixel size of what is drawn, which is what fixes the aspect ratio"""
+        return self.image.size
+
     def init_points(self) -> None:
-        size = self.image.size
-        self.set_width(2 * size[0] / size[1], stretch=True)
+        width, height = self.get_source_size()
+        self.set_width(2 * width / height, stretch=True)
         self.set_height(self.height)
 
     def set_opacity(self, opacity: float, recurse: bool = True):

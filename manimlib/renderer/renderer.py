@@ -103,6 +103,7 @@ class Renderer(object):
         for drawing in drawings:
             if drawing.write_uniforms():
                 regroup = True
+            drawing.realize_textures()
             if drawing.invalidated:
                 self.bundling.invalidate()
         # A frame where nothing which decides the runs moved keeps last frame's

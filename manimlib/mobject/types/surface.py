@@ -9,6 +9,7 @@ from pathlib import Path
 from manimlib.constants import GREY
 from manimlib.constants import OUT
 from manimlib.mobject.mobject import Mobject
+from manimlib.renderer.texture import ImageFile
 from manimlib.renderer.drawing import SurfaceDrawing
 from manimlib.mobject.mobject import Group
 from manimlib.utils.bezier import integer_interpolate
@@ -412,9 +413,9 @@ class TexturedSurface(Surface):
         else:
             self.num_textures = 2
 
-        texture_paths = {
-            "LightTexture": get_full_raster_image_path(image_file),
-            "DarkTexture": get_full_raster_image_path(dark_image_file),
+        textures = {
+            "LightTexture": ImageFile(get_full_raster_image_path(image_file)),
+            "DarkTexture": ImageFile(get_full_raster_image_path(dark_image_file)),
         }
 
         self.uv_surface = uv_surface
@@ -423,7 +424,7 @@ class TexturedSurface(Surface):
         self.v_range: Tuple[float, float] = uv_surface.v_range
         self.initial_resolution: Tuple[int, int] = uv_surface.get_resolution()
         super().__init__(
-            texture_paths=texture_paths,
+            textures=textures,
             shading=tuple(uv_surface.shading),
             **kwargs
         )
@@ -517,7 +518,7 @@ class TexturedGeometry(TexturedSurface):
         self.initial_resolution = (0, 0)
         Mobject.__init__(
             self,
-            texture_paths={"LightTexture": get_full_raster_image_path(texture_file)}
+            textures={"LightTexture": ImageFile(get_full_raster_image_path(texture_file))}
         )
 
     def init_points(self):

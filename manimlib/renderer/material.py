@@ -35,15 +35,16 @@ class Material(object):
         self.gpu = gpu
         self.verts_per_record = mobject.verts_per_record
         self.record_size = mobject.data.dtype.itemsize
-        self.texture_paths = dict(mobject.texture_paths)
+        # In binding order, and so the order the shader declares them. The images themselves
+        # belong to each drawing, see Drawing.realize_textures
+        self.texture_names = tuple(mobject.textures)
 
-        self.resource_layout, self.pipeline_layout = gpu.bind_layouts(len(self.texture_paths))
+        self.resource_layout, self.pipeline_layout = gpu.bind_layouts(len(self.texture_names))
         # Where these mobjects' values go each frame, see SharedBuffer
         self.uniform_buffer = gpu.uniform_buffer(mobject.uniforms.array.nbytes)
         self.data_buffer = gpu.data_buffer(self.record_size)
 
-        self.textures = [gpu.texture(path) for path in self.texture_paths.values()]
-        self.sampler = gpu.sampler() if self.texture_paths else None
+        self.sampler = gpu.sampler() if self.texture_names else None
         self.modules = {
             name: gpu.module(self.get_code(mobject, filename, replacements))
             for name, filename, replacements in specs
@@ -55,7 +56,7 @@ class Material(object):
         it holds for the whole of itself, which is all the source depends on.
         """
         code = get_shader_code(
-            filename, mobject.data.dtype, mobject.uniforms.dtype, tuple(self.texture_paths),
+            filename, mobject.data.dtype, mobject.uniforms.dtype, self.texture_names,
         )
         for old, new in replacements.items():
             code = re.sub(old, new, code)
@@ -65,11 +66,13 @@ class Material(object):
         """The pipeline for one pass, naming the module by what the drawing asked for it as"""
         return self.gpu.pipeline(self.pipeline_layout, self.modules[module], state)
 
-    def make_resource_bind_group(self) -> Any:
+    def make_resource_bind_group(self, views: Sequence[Any]) -> Any:
         """
-        A group through which one mobject reads its records and its own images. Only a mobject
-        with images needs one; the rest read the shared group of the buffer they sit in, which
-        serves every mobject of their size, see Drawing.resource_bind_group.
+        A group through which one mobject reads its records and the images handed in, which
+        are that mobject's own however many of them stand for a file every mobject naming it
+        reads alike. Only a mobject with images needs one; the rest read the shared group of
+        the buffer they sit in, which serves every mobject of their size, see
+        Drawing.resource_bind_group.
         """
         shared = self.data_buffer
         entries = [{"binding": DATA_BINDING, "resource": {
@@ -77,7 +80,7 @@ class Material(object):
         }}]
         entries.append({"binding": SAMPLER_BINDING, "resource": self.sampler})
         entries += [
-            {"binding": FIRST_TEXTURE_BINDING + index, "resource": texture.create_view()}
-            for index, texture in enumerate(self.textures)
+            {"binding": FIRST_TEXTURE_BINDING + index, "resource": view}
+            for index, view in enumerate(views)
         ]
         return self.gpu.device.create_bind_group(layout=self.resource_layout, entries=entries)

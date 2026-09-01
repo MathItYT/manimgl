@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from manimlib.mobject.mobject import Mobject
     from manimlib.renderer.gpu import RenderPass
     from manimlib.renderer.material import Material, ModuleSpec
+    from manimlib.renderer.texture import Texture
 
 
 class Drawing(object):
@@ -50,7 +51,7 @@ class Drawing(object):
             mobject.shader_file,
             mobject.data.dtype,
             mobject.uniforms.dtype,
-            tuple(mobject.texture_paths.items()),
+            tuple(mobject.textures),
             tuple(mobject.shader_code_replacements.items()),
             mobject.verts_per_record,
         )
@@ -88,6 +89,9 @@ class Drawing(object):
         # Made only for a mobject with images of its own, the rest reading the shared one's
         self.own_bind_group: Any = None
         self.shared_bind_group: Any = None
+        # This mobject's images, in binding order, made on first draw, see realize_textures
+        self.textures: dict[str, Texture] = dict()
+        self.texture_views: list[Any] = []
         # Whether the writing found anything a bundled draw would have baked in to have moved,
         # which for a drawing nothing has drawn yet is everything, see Renderer.draw
         self.invalidated = True
@@ -221,18 +225,46 @@ class Drawing(object):
         )
         self.draw_passes(render_pass)
 
+    def realize_textures(self) -> None:
+        """
+        Make this mobject's images on the gpu and upload whatever has changed, before the
+        frame's pass opens so that a replayed bundle draws what went up.
+
+        Rewriting a texture's contents leaves the bind group valid, its views being the same
+        objects. Only a texture made afresh needs a new group.
+        """
+        names = self.material.texture_names
+        if not names:
+            return
+        gpu = self.material.gpu
+        sources = self.mobject.textures
+        remade = False
+        for name in names:
+            source = sources[name]
+            texture = self.textures.get(name)
+            if texture is None or not texture.accepts(source):
+                texture = source.realize(gpu)
+                self.textures[name] = texture
+                remade = True
+            texture.refresh()
+        if remade:
+            self.texture_views = [self.textures[name].view for name in names]
+            self.own_bind_group = None
+            # A bundle baked in the old group, so it has to be built again
+            self.invalidated = True
+
     def resource_bind_group(self) -> Any:
         """
-        What this mobject's records and images are read through. Without images of its own it
-        reads the shared group, which serves every mobject of its size; with them it needs one
-        of its own, made again whenever the shared one is.
+        What this mobject's records and images are read through. Without images it reads the
+        shared group, which serves every mobject of its size; with them it needs one of its
+        own, made again whenever the shared one is.
         """
         shared = self.material.data_buffer
-        if not self.material.textures:
+        if not self.texture_views:
             return shared.bind_group
-        if self.shared_bind_group is not shared.bind_group:
+        if self.shared_bind_group is not shared.bind_group or self.own_bind_group is None:
             self.shared_bind_group = shared.bind_group
-            self.own_bind_group = self.material.make_resource_bind_group()
+            self.own_bind_group = self.material.make_resource_bind_group(self.texture_views)
         return self.own_bind_group
 
     def draw_passes(self, render_pass: RenderPass) -> None:

@@ -24,6 +24,7 @@ from manimlib.event_handler.event_listner import EventListener
 from manimlib.event_handler.event_type import EventType
 from manimlib.logger import log
 from manimlib.renderer.drawing import Drawing
+from manimlib.renderer.texture import TextureSource
 from manimlib.renderer.uniform_block import COMMON_UNIFORMS
 from manimlib.renderer.uniform_block import Uniforms
 from manimlib.renderer.uniform_block import uniform_block_dtype
@@ -96,8 +97,7 @@ class Mobject(object):
         color: ManimColor = DEFAULT_MOBJECT_COLOR,
         opacity: float = 1.0,
         shading: Tuple[float, float, float] = (0.0, 0.0, 0.0),
-        # For shaders
-        texture_paths: dict[str, str] | None = None,
+        textures: dict[str, TextureSource] | None = None,
         # If true, the mobject will not get rotated according to camera position
         is_fixed_in_frame: bool = False,
         depth_test: bool = False,
@@ -106,7 +106,7 @@ class Mobject(object):
         self.color = color
         self.opacity = opacity
         self.shading = shading
-        self.texture_paths = texture_paths or dict()
+        self.textures = textures or dict()
         self.depth_test = depth_test
         self.z_index = z_index
 
@@ -651,6 +651,7 @@ class Mobject(object):
         # need to be further copied.
         result.data = self.data.copy()
         result.uniforms = self.uniforms.copy()
+        result.textures = {name: src.copy() for name, src in self.textures.items()}
 
         # Instead of adding using result.add, which does some checks for updating
         # updater statues and bounding box, just directly modify the family-related
@@ -703,7 +704,7 @@ class Mobject(object):
             sm1.bounding_box[:] = sm2.bounding_box
             sm1.pointlike_uniform_keys = sm2.pointlike_uniform_keys
             sm1.shader_file = sm2.shader_file
-            sm1.texture_paths = sm2.texture_paths
+            sm1.textures = {name: src.copy() for name, src in sm2.textures.items()}
             sm1.depth_test = sm2.depth_test
             sm1._needs_new_bounding_box = sm2._needs_new_bounding_box
         # Make sure named family members carry over
