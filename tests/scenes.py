@@ -8,7 +8,9 @@ renderer makes, and every uniform a shader reads.
 """
 from __future__ import annotations
 
+import av
 import itertools as it
+import shutil
 import numpy as np
 from pathlib import Path
 from PIL import Image
@@ -35,6 +37,42 @@ def checker_image(size: int = 64) -> str:
             (255 * cols / size).astype(np.uint8),
         ], axis=2)).save(path)
     return str(path)
+
+
+def checker_video(size: int = 48, frames: int = 12) -> str:
+    """
+    A short clip whose every frame differs and which carries an alpha channel, made here
+    rather than committed, as the checker image is. Written losslessly, so that what a
+    VideoMobject shows is what was put in rather than what a codec made of it.
+    """
+    ASSETS.mkdir(exist_ok=True)
+    path = ASSETS / f"checker{size}x{frames}.mov"
+    if not path.exists():
+        rows, cols = np.indices((size, size))
+        radius = np.hypot(rows - size / 2, cols - size / 2)
+        with av.open(str(path), mode="w") as container:
+            stream = container.add_stream("qtrle", rate=12)
+            stream.width, stream.height = size, size
+            stream.pix_fmt = "argb"
+            for index in range(frames):
+                pixels = np.zeros((size, size, 4), dtype=np.uint8)
+                pixels[..., 0] = 255 * (index + 1) // frames
+                pixels[..., 1] = (255 * rows / size).astype(np.uint8)
+                pixels[..., 2] = (255 * cols / size).astype(np.uint8)
+                # A disc which grows frame by frame, so the alpha differs frame by frame too
+                pixels[..., 3] = 255 * (radius < size / 12 + size * index / (2 * frames))
+                frame = av.VideoFrame.from_ndarray(pixels, format="rgba")
+                container.mux(stream.encode(frame))
+            container.mux(stream.encode())
+    return str(path)
+
+
+def copy_of(path: str) -> str:
+    """The same file under another name, so that it is read as a file of its own"""
+    other = Path(path).with_stem(Path(path).stem + "_again")
+    if not other.exists():
+        shutil.copyfile(path, other)
+    return str(other)
 
 
 def star_points(n: int = 5, turns: int = 2, radius: float = 1.0) -> np.ndarray:
@@ -257,19 +295,53 @@ class TexturedAndImages(ThreeDScene):
         self.frame.reorient(10, 70)
 
 
+class Videos(Scene):
+    """
+    Several video mobjects drawn from one clip, each sitting on a frame of its own. The
+    clip carries an alpha channel, so what is behind each of them shows through.
+    """
+
+    def construct(self):
+        # The same clip under two names, a file being read one way or the other for the
+        # whole of it, see VideoSource.get
+        paths = [checker_video(), copy_of(checker_video())]
+        behind = VGroup(*(
+            Line(2 * DOWN, 2 * UP).set_stroke(YELLOW, 3).shift(x * RIGHT)
+            for x in np.linspace(-3, 3, 7)
+        ))
+        # Both ways a video's frames are held: preloaded whole and shared by everything
+        # naming the file, and a frame at a time as a clip too big for that is, which look
+        # the same on screen
+        rows = Group(*(
+            Group(*(VideoMobject(path, height=1.2, preload=preload) for _ in range(4)))
+            for path, preload in zip(paths, [True, False])
+        ))
+        for row in rows:
+            row.arrange(RIGHT, buff=0.4)
+            for index, video in enumerate(row):
+                video.set_frame(3 * index)
+        rows.arrange(DOWN, buff=0.3)
+        self.add(behind, rows)
+
+
 class Filtering(Scene):
     """
     The two ways an image is read between its pixels, both scaled far past their own size:
-    blended on the left, nearest pixel on the right. The same file behind both, so what
-    differs is the sampler and nothing else.
+    blended on the left, nearest pixel on the right, which is what a Sprite takes. The
+    same file behind all four, so what differs is the sampler and nothing else.
     """
 
     def construct(self):
         image = checker_image(size=8)
+        video = checker_video(size=8, frames=4)
         row = Group(
             ImageMobject(image, height=2.4),
             ImageMobject(image, height=2.4, texture_filter="nearest"),
+            VideoMobject(video, height=2.4),
+            Sprite(video, height=2.4),
         )
+        for mob in row[2:]:
+            mob.set_frame(2)
         row.arrange(RIGHT, buff=0.3)
         self.add(row)
 

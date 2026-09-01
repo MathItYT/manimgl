@@ -22,6 +22,14 @@ def get_full_raster_image_path(image_file_name: str) -> str:
     )
 
 
+def get_full_video_path(video_file_name: str) -> str:
+    return find_file(
+        video_file_name,
+        directories=[get_raster_image_dir()],
+        extensions=[".mp4", ".mov", ".webm", ".gif", ".mkv", ".avi", ""]
+    )
+
+
 def get_full_vector_image_path(image_file_name: str) -> str:
     return find_file(
         image_file_name,
