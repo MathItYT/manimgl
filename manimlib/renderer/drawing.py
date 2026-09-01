@@ -92,6 +92,8 @@ class Drawing(object):
         # This mobject's images, in binding order, made on first draw, see realize_textures
         self.textures: dict[str, Texture] = dict()
         self.texture_views: list[Any] = []
+        # The sampler this mobject asked for, see Mobject.set_texture_filter
+        self.sampler: Any = None
         # Whether the writing found anything a bundled draw would have baked in to have moved,
         # which for a drawing nothing has drawn yet is everything, see Renderer.draw
         self.invalidated = True
@@ -231,7 +233,7 @@ class Drawing(object):
         frame's pass opens so that a replayed bundle draws what went up.
 
         Rewriting a texture's contents leaves the bind group valid, its views being the same
-        objects. Only a texture made afresh needs a new group.
+        objects. Only a texture or sampler made afresh needs a new group.
         """
         names = self.material.texture_names
         if not names:
@@ -247,8 +249,10 @@ class Drawing(object):
                 self.textures[name] = texture
                 remade = True
             texture.refresh()
-        if remade:
+        sampler = gpu.sampler(self.mobject.texture_filter)
+        if remade or sampler is not self.sampler:
             self.texture_views = [self.textures[name].view for name in names]
+            self.sampler = sampler
             self.own_bind_group = None
             # A bundle baked in the old group, so it has to be built again
             self.invalidated = True
@@ -264,7 +268,9 @@ class Drawing(object):
             return shared.bind_group
         if self.shared_bind_group is not shared.bind_group or self.own_bind_group is None:
             self.shared_bind_group = shared.bind_group
-            self.own_bind_group = self.material.make_resource_bind_group(self.texture_views)
+            self.own_bind_group = self.material.make_resource_bind_group(
+                self.texture_views, self.sampler,
+            )
         return self.own_bind_group
 
     def draw_passes(self, render_pass: RenderPass) -> None:

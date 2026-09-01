@@ -14,6 +14,8 @@ from manimlib.renderer.shader_source import FIRST_TEXTURE_BINDING
 from manimlib.renderer.shader_source import FRAME_GROUP
 from manimlib.renderer.shader_source import SAMPLER_BINDING
 from manimlib.renderer.shared_buffer import SharedBuffer
+from manimlib.renderer.texture import FILTER_MODES
+from manimlib.renderer.texture import check_texture_filter
 from manimlib.renderer.uniform_block import Uniforms
 from manimlib.renderer.uniform_block import uniform_block_dtype
 
@@ -150,7 +152,7 @@ class Gpu(object):
         self.layouts: dict[int, tuple[Any, Any]] = dict()
         self.pipelines: dict[tuple, Any] = dict()
         self.shared_buffers: dict[tuple, SharedBuffer] = dict()
-        self.image_sampler = None
+        self.samplers: dict[str, Any] = dict()
 
     # What a shader is compiled to, and what it may read
 
@@ -180,13 +182,17 @@ class Gpu(object):
             self.textures[path] = texture
         return self.textures[path]
 
-    def sampler(self) -> Any:
-        """The one sampler every image is read through"""
-        if self.image_sampler is None:
-            self.image_sampler = self.device.create_sampler(
-                mag_filter=wgpu.FilterMode.linear, min_filter=wgpu.FilterMode.linear,
+    def sampler(self, texture_filter: str = "linear") -> Any:
+        """
+        How an image is read between its pixels: "linear" blends, "nearest" takes the nearest
+        pixel, keeping pixel art crisp when scaled up. One sampler per mode.
+        """
+        if texture_filter not in self.samplers:
+            mode = FILTER_MODES[check_texture_filter(texture_filter)]
+            self.samplers[texture_filter] = self.device.create_sampler(
+                mag_filter=mode, min_filter=mode,
             )
-        return self.image_sampler
+        return self.samplers[texture_filter]
 
     def bind_layouts(self, texture_count: int) -> tuple[Any, Any]:
         """

@@ -1,10 +1,29 @@
 from __future__ import annotations
 
+import wgpu
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Any
     from manimlib.renderer.gpu import Gpu
+
+
+# How an image is read between its pixels, and what wgpu calls each, see Gpu.sampler
+FILTER_MODES = {
+    "linear": wgpu.FilterMode.linear,
+    "nearest": wgpu.FilterMode.nearest,
+}
+
+
+def check_texture_filter(texture_filter: str) -> str:
+    """The filter back again, where it is one there is, and otherwise an error saying so."""
+    if texture_filter not in FILTER_MODES:
+        raise ValueError(
+            f"No such texture filter {texture_filter!r}, "
+            f"expected one of {', '.join(map(repr, FILTER_MODES))}"
+        )
+    return texture_filter
 
 
 class TextureSource(object):

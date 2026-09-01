@@ -44,7 +44,6 @@ class Material(object):
         self.uniform_buffer = gpu.uniform_buffer(mobject.uniforms.array.nbytes)
         self.data_buffer = gpu.data_buffer(self.record_size)
 
-        self.sampler = gpu.sampler() if self.texture_names else None
         self.modules = {
             name: gpu.module(self.get_code(mobject, filename, replacements))
             for name, filename, replacements in specs
@@ -66,19 +65,19 @@ class Material(object):
         """The pipeline for one pass, naming the module by what the drawing asked for it as"""
         return self.gpu.pipeline(self.pipeline_layout, self.modules[module], state)
 
-    def make_resource_bind_group(self, views: Sequence[Any]) -> Any:
+    def make_resource_bind_group(self, views: Sequence[Any], sampler: Any) -> Any:
         """
         A group through which one mobject reads its records and the images handed in, which
         are that mobject's own however many of them stand for a file every mobject naming it
-        reads alike. Only a mobject with images needs one; the rest read the shared group of
-        the buffer they sit in, which serves every mobject of their size, see
-        Drawing.resource_bind_group.
+        reads alike, read through the sampler that mobject asked for. Only a mobject with
+        images needs one; the rest read the shared group of the buffer they sit in, which
+        serves every mobject of their size, see Drawing.resource_bind_group.
         """
         shared = self.data_buffer
         entries = [{"binding": DATA_BINDING, "resource": {
             "buffer": shared.buffer, "offset": 0, "size": shared.window,
         }}]
-        entries.append({"binding": SAMPLER_BINDING, "resource": self.sampler})
+        entries.append({"binding": SAMPLER_BINDING, "resource": sampler})
         entries += [
             {"binding": FIRST_TEXTURE_BINDING + index, "resource": view}
             for index, view in enumerate(views)

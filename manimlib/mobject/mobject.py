@@ -25,6 +25,7 @@ from manimlib.event_handler.event_type import EventType
 from manimlib.logger import log
 from manimlib.renderer.drawing import Drawing
 from manimlib.renderer.texture import TextureSource
+from manimlib.renderer.texture import check_texture_filter
 from manimlib.renderer.uniform_block import COMMON_UNIFORMS
 from manimlib.renderer.uniform_block import Uniforms
 from manimlib.renderer.uniform_block import uniform_block_dtype
@@ -81,6 +82,8 @@ class Mobject(object):
         ('point', np.float32, (3,)),
         ('rgba', np.float32, (4,)),
     ])
+    # How its images are read between their pixels, see renderer.gpu.Gpu.sampler
+    texture_filter: str = "linear"
     # One value each for the whole mobject, as opposed to one per point
     uniform_dtype: np.dtype = uniform_block_dtype(*COMMON_UNIFORMS)
     # Data holding a point, which transforms act on, and which a blend of two mobjects
@@ -98,6 +101,7 @@ class Mobject(object):
         opacity: float = 1.0,
         shading: Tuple[float, float, float] = (0.0, 0.0, 0.0),
         textures: dict[str, TextureSource] | None = None,
+        texture_filter: str | None = None,
         # If true, the mobject will not get rotated according to camera position
         is_fixed_in_frame: bool = False,
         depth_test: bool = False,
@@ -107,6 +111,8 @@ class Mobject(object):
         self.opacity = opacity
         self.shading = shading
         self.textures = textures or dict()
+        if texture_filter is not None:
+            self.set_texture_filter(texture_filter, recurse=False)
         self.depth_test = depth_test
         self.z_index = z_index
 
@@ -705,6 +711,7 @@ class Mobject(object):
             sm1.pointlike_uniform_keys = sm2.pointlike_uniform_keys
             sm1.shader_file = sm2.shader_file
             sm1.textures = {name: src.copy() for name, src in sm2.textures.items()}
+            sm1.texture_filter = sm2.texture_filter
             sm1.depth_test = sm2.depth_test
             sm1._needs_new_bounding_box = sm2._needs_new_bounding_box
         # Make sure named family members carry over
@@ -1386,6 +1393,17 @@ class Mobject(object):
         if recurse:
             for submob in self.submobjects:
                 submob.set_opacity(opacity, recurse=True)
+        return self
+
+    def set_texture_filter(self, texture_filter: str, recurse: bool = True) -> Self:
+        """
+        How the images this is drawn with are read between their pixels. The default is
+        "linear", but "nearest" can be used to take the nearest pixel, e.g. for scaled
+        up pixel art.
+        """
+        check_texture_filter(texture_filter)
+        for mob in self.get_family(recurse):
+            mob.texture_filter = texture_filter
         return self
 
     def get_color(self) -> str:

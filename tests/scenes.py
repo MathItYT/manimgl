@@ -19,16 +19,16 @@ from manimlib import *
 ASSETS = Path(__file__).parent / "assets"
 
 
-def checker_image(name: str = "checker.png", size: int = 64) -> str:
+def checker_image(size: int = 64) -> str:
     """
     An image to hang on things which take a texture, made here rather than committed, so
     that it is the same every time without a binary living in the repository.
     """
     ASSETS.mkdir(exist_ok=True)
-    path = ASSETS / name
+    path = ASSETS / f"checker{size}.png"
     if not path.exists():
         rows, cols = np.indices((size, size))
-        squares = ((rows // 8 + cols // 8) % 2).astype(np.uint8)
+        squares = ((rows // max(1, size // 8) + cols // max(1, size // 8)) % 2).astype(np.uint8)
         Image.fromarray(np.stack([
             255 * squares,
             (255 * rows / size).astype(np.uint8),
@@ -255,6 +255,23 @@ class TexturedAndImages(ThreeDScene):
         group = Group(surface, image).arrange(RIGHT, buff=0.8)
         self.add(group)
         self.frame.reorient(10, 70)
+
+
+class Filtering(Scene):
+    """
+    The two ways an image is read between its pixels, both scaled far past their own size:
+    blended on the left, nearest pixel on the right. The same file behind both, so what
+    differs is the sampler and nothing else.
+    """
+
+    def construct(self):
+        image = checker_image(size=8)
+        row = Group(
+            ImageMobject(image, height=2.4),
+            ImageMobject(image, height=2.4, texture_filter="nearest"),
+        )
+        row.arrange(RIGHT, buff=0.3)
+        self.add(row)
 
 
 class DotsAndVectors(Scene):
