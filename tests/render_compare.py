@@ -64,6 +64,7 @@ CASES = [
     (SCENES, "TransparentSurfaces", "still"),
     (SCENES, "TexturedAndImages", "still"),
     (SCENES, "Videos", "still"),
+    (SCENES, "VideoPlayback", "video"),
     (SCENES, "Filtering", "still"),
     (SCENES, "DotsAndVectors", "still"),
     (SCENES, "FixedInFrame", "still"),

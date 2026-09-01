@@ -132,13 +132,6 @@ class VideoSource(object):
         """One decoded frame as straight rgba bytes."""
         return frame.to_ndarray(format="rgba")
 
-    def index_at_time(self, time: float) -> int:
-        """
-        Which frame shows at a given time: the nearest one, clamped at both ends.
-        """
-        index = round(time * float(self.frame_rate))
-        return int(np.clip(index, 0, self.num_frames - 1))
-
     def seek(self, index: int) -> None:
         """Put the read at the last keyframe at or before this frame."""
         time_base = self.stream.time_base or Fraction(1, int(self.frame_rate))
@@ -345,7 +338,23 @@ class VideoMobject(ImageMobject):
         Show the frame at a given time in seconds, the nearest one to it rather than a blend
         of the two either side, and the last frame for any time past the end.
         """
-        return self.set_frame(self.source.index_at_time(time))
+        return self.set_frame(time * float(self.source.frame_rate))
+
+    def increment_time(self, dt: float):
+        """
+        Move on by a length of time, which where it is shorter than a frame shows the same
+        frame again: it is where the video has got to that is kept, not where it last
+        landed, so steps too small to reach the next frame still add up.
+        """
+        return self.set_time(self.get_time() + dt)
+
+    def play_from(self, time: float = 0.0):
+        """
+        Play on from a given time, a frame of video to a frame of animation, for as long as
+        the mobject is in the scene.
+        """
+        self.set_time(time)
+        return self.add_updater(lambda mob, dt: mob.increment_time(dt))
 
     def animate_set_time(self, time: float, run_time=None, rate_func=linear, **kwargs):
         """Play up to a given time, by default taking as long as the clip it covers."""
@@ -353,16 +362,21 @@ class VideoMobject(ImageMobject):
             run_time = abs(time - self.get_time())
         return self.animate(run_time=run_time, rate_func=rate_func).set_time(time)
 
-    def set_frame(self, index: int):
-        """Show a frame by its number rather than its time."""
-        index = int(np.clip(index, 0, self.source.num_frames - 1))
-        self.uniforms["frame"] = index
-        self.frames.load(index)
+    def set_frame(self, index: float):
+        """
+        Show a frame by its number rather than its time, the nearest one where it falls
+        between two, see frame_index.
+        """
+        self.uniforms["frame"] = np.clip(index, 0, self.source.num_frames - 1)
+        self.frames.load(self.frame_index)
         return self
 
     def get_time(self) -> float:
-        """The time at which the frame now showing appears."""
-        return float(self.frame_index / self.source.frame_rate)
+        """
+        Where the video has got to, in seconds, which is not quite the time of the frame
+        showing: a time between two frames is kept as it was given, see increment_time.
+        """
+        return float(self.uniforms["frame"] / self.source.frame_rate)
 
     def get_duration(self) -> float:
         return self.source.duration

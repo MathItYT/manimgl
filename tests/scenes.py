@@ -324,6 +324,21 @@ class Videos(Scene):
         self.add(behind, rows)
 
 
+class VideoPlayback(Scene):
+    """
+    A clip playing on as the scene runs, beside one scrubbed through by animating the time
+    it shows. The playing one is read a frame at a time, so every frame of it is an upload.
+    """
+
+    def construct(self):
+        playing = VideoMobject(copy_of(checker_video()), height=2, preload=False)
+        scrubbed = VideoMobject(checker_video(), height=2)
+        Group(playing, scrubbed).arrange(RIGHT, buff=0.5)
+        self.add(playing, scrubbed)
+        playing.play_from(0)
+        self.play(scrubbed.animate_set_time(scrubbed.get_duration()))
+
+
 class Filtering(Scene):
     """
     The two ways an image is read between its pixels, both scaled far past their own size:
