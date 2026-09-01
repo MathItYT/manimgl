@@ -51,7 +51,10 @@ class Drawing(object):
             mobject.shader_file,
             mobject.data.dtype,
             mobject.uniforms.dtype,
-            tuple(mobject.textures),
+            # What the shader declares and the layout binds. Two mobjects agreeing about
+            # that share a material whatever their images are of, those belonging to the
+            # drawing rather than the material, see realize_textures
+            tuple((name, source.kind()) for name, source in mobject.textures.items()),
             tuple(mobject.shader_code_replacements.items()),
             mobject.verts_per_record,
         )

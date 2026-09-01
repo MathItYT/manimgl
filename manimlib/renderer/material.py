@@ -38,8 +38,9 @@ class Material(object):
         # In binding order, and so the order the shader declares them. The images themselves
         # belong to each drawing, see Drawing.realize_textures
         self.texture_names = tuple(mobject.textures)
+        self.texture_kinds = tuple(src.kind() for src in mobject.textures.values())
 
-        self.resource_layout, self.pipeline_layout = gpu.bind_layouts(len(self.texture_names))
+        self.resource_layout, self.pipeline_layout = gpu.bind_layouts(self.texture_kinds)
         # Where these mobjects' values go each frame, see SharedBuffer
         self.uniform_buffer = gpu.uniform_buffer(mobject.uniforms.array.nbytes)
         self.data_buffer = gpu.data_buffer(self.record_size)
@@ -55,7 +56,8 @@ class Material(object):
         it holds for the whole of itself, which is all the source depends on.
         """
         code = get_shader_code(
-            filename, mobject.data.dtype, mobject.uniforms.dtype, self.texture_names,
+            filename, mobject.data.dtype, mobject.uniforms.dtype,
+            self.texture_names, self.texture_kinds,
         )
         for old, new in replacements.items():
             code = re.sub(old, new, code)

@@ -35,6 +35,7 @@ def get_shader_code(
     data_dtype: np.dtype,
     uniform_dtype: np.dtype,
     texture_names: tuple[str, ...] = (),
+    texture_kinds: tuple[str, ...] = (),
 ) -> str | None:
     """
     Reads a shader from file, filling in what its source depends on about the mobject it will
@@ -51,7 +52,7 @@ def get_shader_code(
         code
         .replace("// DATA_LAYOUT", data_layout_code(data_dtype))
         .replace("// MOBJECT_UNIFORMS", uniform_block_code(uniform_dtype))
-        .replace("// TEXTURES", texture_binding_code(texture_names))
+        .replace("// TEXTURES", texture_binding_code(texture_names, texture_kinds))
     )
 
 
@@ -70,19 +71,31 @@ def data_layout_code(dtype: np.dtype) -> str:
     ])
 
 
-def texture_binding_code(texture_names: tuple[str, ...]) -> str:
+# What an image is declared as in a shader, and how its view is bound, see
+# renderer.texture.TextureSource.kind
+TEXTURE_KINDS = {
+    "2d": ("texture_2d<f32>", "2d"),
+    "2d-array": ("texture_2d_array<f32>", "2d-array"),
+}
+
+
+def texture_binding_code(
+    texture_names: tuple[str, ...], texture_kinds: tuple[str, ...] = (),
+) -> str:
     """
     How a shader declares the images its kind of mobject named, and the sampler they share,
-    each from the binding it was actually put in.
+    each from the binding it was actually put in and as whatever its kind says: one image, or
+    a stack the shader picks from.
     """
     if not texture_names:
         return ""
+    kinds = texture_kinds or ("2d",) * len(texture_names)
     lines = [f"@group({RESOURCE_GROUP}) @binding({SAMPLER_BINDING}) "
              f"var image_sampler: sampler;"]
     lines += [
         f"@group({RESOURCE_GROUP}) @binding({FIRST_TEXTURE_BINDING + index}) "
-        f"var {name}: texture_2d<f32>;"
-        for index, name in enumerate(texture_names)
+        f"var {name}: {TEXTURE_KINDS[kind][0]};"
+        for index, (name, kind) in enumerate(zip(texture_names, kinds))
     ]
     return "\n".join(lines)
 

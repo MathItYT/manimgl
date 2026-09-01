@@ -13,9 +13,11 @@ from manimlib.renderer.shader_source import DATA_BINDING
 from manimlib.renderer.shader_source import FIRST_TEXTURE_BINDING
 from manimlib.renderer.shader_source import FRAME_GROUP
 from manimlib.renderer.shader_source import SAMPLER_BINDING
+from manimlib.renderer.shader_source import TEXTURE_KINDS
 from manimlib.renderer.shared_buffer import SharedBuffer
 from manimlib.renderer.texture import FILTER_MODES
 from manimlib.renderer.texture import check_texture_filter
+from manimlib.renderer.texture import stack_view
 from manimlib.renderer.uniform_block import Uniforms
 from manimlib.renderer.uniform_block import uniform_block_dtype
 
@@ -148,8 +150,10 @@ class Gpu(object):
         # references to, see Renderer.draw
         self.rebinds = 0
         self.modules: dict[str, Any] = dict()
-        self.textures: dict[str, Any] = dict()
-        self.layouts: dict[int, tuple[Any, Any]] = dict()
+        self.textures: dict[Any, Any] = dict()
+        # Views onto stacks of images, one per key, see texture_stack
+        self.stacks: dict[Any, Any] = dict()
+        self.layouts: dict[tuple[str, ...], tuple[Any, Any]] = dict()
         self.pipelines: dict[tuple, Any] = dict()
         self.shared_buffers: dict[tuple, SharedBuffer] = dict()
         self.samplers: dict[str, Any] = dict()
@@ -182,6 +186,38 @@ class Gpu(object):
             self.textures[path] = texture
         return self.textures[path]
 
+    def layer_texture(self, layers: np.ndarray) -> Any:
+        """A texture holding a stack of images the shape of these, with nothing in it yet"""
+        count, height, width = layers.shape[:3]
+        return self.device.create_texture(
+            size=(width, height, count),
+            dimension=wgpu.TextureDimension.d2,
+            format=wgpu.TextureFormat.rgba8unorm,
+            usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST,
+        )
+
+    def write_layers(self, texture: Any, layers: np.ndarray) -> None:
+        """Every layer of a stack into the texture it was made for"""
+        count, height, width = layers.shape[:3]
+        self.queue.write_texture(
+            {"texture": texture, "mip_level": 0, "origin": (0, 0, 0)},
+            np.ascontiguousarray(layers),
+            {"offset": 0, "bytes_per_row": 4 * width, "rows_per_image": height},
+            (width, height, count),
+        )
+
+    def texture_stack(self, key: Any, layers: np.ndarray) -> Any:
+        """
+        A 2d-array view of the layers uploaded under this key. Built once, so mobjects
+        reading the same frames share one copy, see texture.LayeredPixels.
+        """
+        if key not in self.stacks:
+            texture = self.layer_texture(layers)
+            self.write_layers(texture, layers)
+            # The view is cached too, so every reader shares one
+            self.stacks[key] = stack_view(texture)
+        return self.stacks[key]
+
     def sampler(self, texture_filter: str = "linear") -> Any:
         """
         How an image is read between its pixels: "linear" blends, "nearest" takes the nearest
@@ -194,16 +230,16 @@ class Gpu(object):
             )
         return self.samplers[texture_filter]
 
-    def bind_layouts(self, texture_count: int) -> tuple[Any, Any]:
+    def bind_layouts(self, texture_kinds: tuple[str, ...] = ()) -> tuple[Any, Any]:
         """
         What a shader may bind: the frame's values, the mobject's values, and its records along
-        with a texture for each image it names.
+        with a texture for each image it names, each held as whatever its kind says.
 
-        Made once for each number of textures rather than once per mobject: a pipeline is built
+        Made once for each run of kinds rather than once per mobject: a pipeline is built
         against these, so per mobject layouts would mean per mobject pipelines.
         """
-        if texture_count in self.layouts:
-            return self.layouts[texture_count]
+        if texture_kinds in self.layouts:
+            return self.layouts[texture_kinds]
 
         entries = [{
             "binding": DATA_BINDING,
@@ -214,7 +250,7 @@ class Gpu(object):
                 "has_dynamic_offset": True,
             },
         }]
-        if texture_count:
+        if texture_kinds:
             entries.append({
                 "binding": SAMPLER_BINDING,
                 "visibility": wgpu.ShaderStage.FRAGMENT,
@@ -223,15 +259,18 @@ class Gpu(object):
             entries += [{
                 "binding": FIRST_TEXTURE_BINDING + index,
                 "visibility": wgpu.ShaderStage.FRAGMENT,
-                "texture": {"sample_type": wgpu.TextureSampleType.float},
-            } for index in range(texture_count)]
+                "texture": {
+                    "sample_type": wgpu.TextureSampleType.float,
+                    "view_dimension": TEXTURE_KINDS[kind][1],
+                },
+            } for index, kind in enumerate(texture_kinds)]
 
         resource_layout = self.device.create_bind_group_layout(entries=entries)
         pipeline_layout = self.device.create_pipeline_layout(bind_group_layouts=[
             self.frame_layout, self.mobject_layout, resource_layout,
         ])
-        self.layouts[texture_count] = (resource_layout, pipeline_layout)
-        return self.layouts[texture_count]
+        self.layouts[texture_kinds] = (resource_layout, pipeline_layout)
+        return self.layouts[texture_kinds]
 
     def pipeline(self, layout: Any, module: Any, state: PipelineState) -> Any:
         """
@@ -257,7 +296,7 @@ class Gpu(object):
     def data_buffer(self, record_size: int) -> SharedBuffer:
         """Where the records of a mobject whose records are this size are gathered"""
         # A mobject with no images of its own reads through the layout with none
-        layout, _ = self.bind_layouts(0)
+        layout, _ = self.bind_layouts()
         return self.shared_buffer(
             ("records", record_size), layout, wgpu.BufferUsage.STORAGE,
             "min-storage-buffer-offset-alignment", RECORDS * record_size,
