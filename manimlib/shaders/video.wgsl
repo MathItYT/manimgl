@@ -19,8 +19,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     clip_test(in.clip_distances);
     // A preloaded clip has a layer per frame; one read a frame at a time has just the one,
     // whatever frame the mobject says it is showing. A blend landing between two frames
-    // shows the nearer, as VideoMobject.frame_index reads it too
-    let layer = min(u32(max(round(mob.frame), 0.0)), textureNumLayers(Texture) - 1u);
+    // shows the nearer, and one past either end comes round again, which is how a clip set
+    // to loop reads its first frame back, all as VideoMobject.frame_index reads it too
+    let count = f32(textureNumLayers(Texture));
+    var index = round(mob.frame) % count;
+    if (index < 0.0) {
+        index = index + count;
+    }
+    let layer = u32(index);
     var color = textureSample(Texture, image_sampler, in.im_coords, layer);
     color.a *= in.opacity;
     return color;

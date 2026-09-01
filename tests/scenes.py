@@ -326,16 +326,19 @@ class Videos(Scene):
 
 class VideoPlayback(Scene):
     """
-    A clip playing on as the scene runs, beside one scrubbed through by animating the time
-    it shows. The playing one is read a frame at a time, so every frame of it is an upload.
+    A clip playing on as the scene runs, beside one scrubbed through by animating the time it
+    shows. The playing one is read a frame at a time, so every frame of it is an upload, and
+    it loops, so it runs past the end of the clip and round to the beginning again.
     """
 
     def construct(self):
-        playing = VideoMobject(copy_of(checker_video()), height=2, preload=False)
+        playing = VideoMobject(
+            copy_of(checker_video()), height=2, loop=True, preload=False,
+        )
         scrubbed = VideoMobject(checker_video(), height=2)
         Group(playing, scrubbed).arrange(RIGHT, buff=0.5)
         self.add(playing, scrubbed)
-        playing.play_from(0)
+        playing.play_from(0.5)
         self.play(scrubbed.animate_set_time(scrubbed.get_duration()))
 
 

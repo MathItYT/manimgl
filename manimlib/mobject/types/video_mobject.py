@@ -263,6 +263,9 @@ class VideoMobject(ImageMobject):
     Two of these drawn from one file may sit on different frames of it, sharing the decoding
     and, where the clip is small enough to be preloaded, the frames on the gpu too, see
     VideoFrames.
+
+    A time past the end holds on the last frame, or comes round to the beginning again where
+    it loops.
     """
 
     shader_file: str = "video.wgsl"
@@ -273,9 +276,11 @@ class VideoMobject(ImageMobject):
         filename: str,
         height: float = 4.0,
         time: float = 0.0,
+        loop: bool = False,
         preload: bool | None = None,
         **kwargs
     ):
+        self.loop = loop
         # Read by init_texture, which the constructor below reaches
         self._preload = preload
         super().__init__(filename, height=height, **kwargs)
@@ -323,10 +328,14 @@ class VideoMobject(ImageMobject):
         there and nowhere else is what lets it be interpolated, so that animating between
         two frames scrubs through the ones between.
 
-        A blend landing between two frames shows the nearer, as the shader reads it, see
-        video.wgsl.
+        A blend landing between two frames shows the nearer, and a number past the end of
+        the clip comes round again where it loops and holds at the last frame where it does
+        not, both as the shader reads it too, see video.wgsl.
         """
-        return int(round(float(self.uniforms["frame"])))
+        index = round(float(self.uniforms["frame"]))
+        if self.loop:
+            return index % self.source.num_frames
+        return int(np.clip(index, 0, self.source.num_frames - 1))
 
     def get_source_size(self) -> Tuple[int, int]:
         return (self.source.width, self.source.height)
@@ -336,7 +345,8 @@ class VideoMobject(ImageMobject):
     def set_time(self, time: float):
         """
         Show the frame at a given time in seconds, the nearest one to it rather than a blend
-        of the two either side, and the last frame for any time past the end.
+        of the two either side. A time past the end shows the last frame, or where the clip
+        loops the one that far into it again.
         """
         return self.set_frame(time * float(self.source.frame_rate))
 
@@ -366,15 +376,22 @@ class VideoMobject(ImageMobject):
         """
         Show a frame by its number rather than its time, the nearest one where it falls
         between two, see frame_index.
+
+        A clip which loops keeps the number it was given, however far past the end it runs,
+        and comes round to a frame of the clip only in the reading: so playing on through a
+        loop, or animating across one, goes forwards rather than back to where it began.
         """
-        self.uniforms["frame"] = np.clip(index, 0, self.source.num_frames - 1)
+        if not self.loop:
+            index = np.clip(index, 0, self.source.num_frames - 1)
+        self.uniforms["frame"] = index
         self.frames.load(self.frame_index)
         return self
 
     def get_time(self) -> float:
         """
         Where the video has got to, in seconds, which is not quite the time of the frame
-        showing: a time between two frames is kept as it was given, see increment_time.
+        showing: a time between two frames is kept as it was given, see increment_time, and
+        a clip which loops goes on counting past its own end rather than beginning again.
         """
         return float(self.uniforms["frame"] / self.source.frame_rate)
 
