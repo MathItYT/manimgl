@@ -704,6 +704,18 @@ class Scene(object):
                 cursor = segment_end
                 continue
             segment_end = min(end_time, event.t_end)
+
+            # Timeline events are separated by arbitrary scene mutations
+            # (add/remove mobjects, installing updaters, etc.) that happen
+            # between play()/wait() calls.  Those mutations are represented by
+            # the event's start_state, not by the previous event.  Restore it
+            # before replaying every event so a replay follows the same scene
+            # graph as the original construct().
+            if event.start_state is not None:
+                self.restore_state(event.start_state)
+                self.time = event.t_start
+                cursor = event.t_start
+
             local_start = max(0.0, cursor - event.t_start)
             local_end = max(0.0, segment_end - event.t_start)
             if event.kind == "wait":
