@@ -241,10 +241,18 @@ class Scene(object):
             "Press `command + q` or `esc` to quit"
         )
         self.skip_animations = False
+
+        if self._replay_after_seek:
+            timeline_end = max(
+                (event.t_end for event in self.timeline),
+                default=self.time,
+            )
+            if timeline_end > self.time + 1e-9:
+                self._replay_timeline_after_seek(timeline_end)
+            self._replay_after_seek = False
+
         frame_dt = 1 / self.camera.fps
         while not self.is_window_closing():
-            if self._replay_after_seek and self._replay_timeline_frame(frame_dt):
-                continue
             self.update_frame(frame_dt)
 
     def embed(
