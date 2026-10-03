@@ -25,6 +25,23 @@ class FrameSink(ABC):
         pass
 
 
+class StreamSink(FrameSink):
+    """Adapt any binary file-like object into a frame sink."""
+
+    def __init__(self, stream: BinaryIO):
+        self.stream = stream
+
+    def write(self, frame, *, width, height, timestamp):
+        self.stream.write(frame)
+
+    def flush(self):
+        self.stream.flush()
+
+    def close(self):
+        # The owner of the stream is responsible for closing it.
+        pass
+
+
 class FileSink(FrameSink):
     """Write raw RGBA frames to a file."""
 

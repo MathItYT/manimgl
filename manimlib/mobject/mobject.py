@@ -116,6 +116,11 @@ class Mobject(object):
         self.depth_test = depth_test
         self.z_index = z_index
 
+        # Optional construction metadata used by SceneGraphSerializer.
+        self._serialization_name = None
+        self._serialization_constructor = self.__class__.__qualname__
+        self._serialization_parameters = {}
+
         # Internal state
         self.submobjects: list[Mobject] = []
         self.parents: list[Mobject] = []
@@ -144,6 +149,22 @@ class Mobject(object):
 
     def __str__(self):
         return self.__class__.__name__
+
+    def set_serialization_metadata(
+        self,
+        *,
+        name: str | None = None,
+        constructor: str | None = None,
+        parameters: dict | None = None,
+    ) -> Self:
+        """Attach explicit constructor metadata for graph serialization."""
+        if name is not None:
+            self._serialization_name = name
+        if constructor is not None:
+            self._serialization_constructor = constructor
+        if parameters is not None:
+            self._serialization_parameters = dict(parameters)
+        return self
 
     def __add__(self, other: Mobject) -> Mobject:
         assert isinstance(other, Mobject)

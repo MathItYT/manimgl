@@ -6,6 +6,8 @@ import random
 import time
 from functools import wraps
 from contextlib import contextmanager
+from copy import copy as shallow_copy
+from dataclasses import dataclass
 from contextlib import ExitStack
 
 import numpy as np
@@ -47,6 +49,21 @@ if TYPE_CHECKING:
     from PIL.Image import Image
 
     from manimlib.animation.animation import Animation
+
+
+@dataclass
+class TimelineEvent:
+    """A deterministic interval in the scene timeline."""
+    name: str
+    kind: str
+    t_start: float
+    t_end: float
+    animations: tuple
+    metadata: dict | None = None
+
+    @property
+    def animation(self):
+        return self.animations[0] if self.animations else None
 
 
 class Scene(object):
@@ -121,6 +138,9 @@ class Scene(object):
         self.num_plays: int = 0
         self.time: float = 0
         self.skip_time: float = 0
+        self.timeline: list[TimelineEvent] = []
+        self._timeline_base_state = None
+        self._seeking = False
         self.original_skipping_status: bool = self.skip_animations
         self.undo_stack = []
         self.redo_stack = []
@@ -233,10 +253,37 @@ class Scene(object):
         self.update_frame(force_draw=True)
         self.get_image().show()
 
-    def update_frame(self, dt: float = 0, force_draw: bool = False) -> None:
+    def advance_time(self, dt: float) -> None:
+        """Advance simulation time without rendering or wall-clock sleeping."""
+        if dt < 0:
+            raise ValueError("advance_time() does not accept negative dt")
+        if dt == 0:
+            self.update_mobjects(0)
+            return
         self.increment_time(dt)
         self.update_mobjects(dt)
-        self.draw_frame(dt, force_draw)
+
+    def render_frame(self, force_draw: bool = False) -> None:
+        """Render the current state without changing logical time."""
+        if self.skip_animations and not force_draw:
+            return
+        if self.is_window_closing():
+            raise EndScene()
+        if self.window and not force_draw and not self.window.has_undrawn_event():
+            self.window.poll_events()
+            return
+        self.camera.renderer.post_processor.time = self.time
+        self.camera.capture(*self.mobjects)
+
+    def render_frame_to_buffer(self) -> memoryview:
+        """Render and synchronously return the current RGBA frame."""
+        self.camera.renderer.post_processor.time = self.time
+        self.camera.capture(*self.mobjects)
+        return self.camera.get_frame_bytes()
+
+    def update_frame(self, dt: float = 0, force_draw: bool = False) -> None:
+        self.advance_time(dt)
+        self.render_frame(force_draw=force_draw)
 
     def draw_frame(self, dt: float = 0, force_draw: bool = False) -> None:
         if self.skip_animations and not force_draw:
@@ -254,10 +301,6 @@ class Scene(object):
         self.camera.renderer.post_processor.time = self.time
         self.camera.capture(*self.mobjects)
 
-        if self.window and not self.skip_animations:
-            vt = self.time - self.virtual_animation_start_time
-            rt = time.time() - self.real_animation_start_time
-            time.sleep(max(vt - rt, 0))
 
     def emit_frame(self) -> None:
         if not self.skip_animations:
@@ -550,17 +593,13 @@ class Scene(object):
         for t in self.get_animation_time_progression(animations):
             dt = t - last_t
             last_t = t
-            # The clock moves before anything else in the frame, so that time
-            # based updaters are evaluated at the moment the frame stands for.
             self.increment_time(dt)
             for animation in animations:
                 animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
                 alpha = t / animation.run_time
                 animation.interpolate(alpha)
-            # Updaters on the mobjects themselves have the last word, applied
-            # on top of whatever the animations just interpolated
             self.update_mobjects(dt)
-            self.draw_frame(dt)
+            self.render_frame()
             self.emit_frame()
 
     def finish_animations(self, animations: Iterable[Animation]) -> None:
@@ -586,11 +625,28 @@ class Scene(object):
         animations = list(map(prepare_animation, proto_animations))
         for anim in animations:
             anim.update_rate_info(run_time, rate_func, lag_ratio)
+
+        if self._timeline_base_state is None:
+            self._timeline_base_state = self.get_state()
+
+        prototypes = tuple(shallow_copy(anim) for anim in animations)
+        t_start = self.time
+
         self.pre_play()
         self.begin_animations(animations)
         self.progress_through_animations(animations)
         self.finish_animations(animations)
         self.post_play()
+
+        self.timeline.append(
+            TimelineEvent(
+                name=str(animations[0]),
+                kind="animation",
+                t_start=t_start,
+                t_end=self.time,
+                animations=prototypes,
+            )
+        )
 
     def wait(
         self,
@@ -601,6 +657,10 @@ class Scene(object):
     ):
         if duration is None:
             duration = self.default_wait_time
+        if self._timeline_base_state is None:
+            self._timeline_base_state = self.get_state()
+        t_start = self.time
+
         self.pre_play()
         self.update_mobjects(dt=0)  # Any problems with this?
         if self.presenter_mode and not self.skip_animations and not ignore_presenter_mode:
@@ -652,6 +712,64 @@ class Scene(object):
             return
         time = self.get_time() + time_offset
         self.file_writer.add_sound(sound_file, time, gain, gain_to_background)
+
+    def add_frame_sink(self, sink):
+        return self.file_writer.frames.add_sink(sink)
+
+    def remove_frame_sink(self, sink):
+        return self.file_writer.frames.remove_sink(sink)
+
+    def clear_frame_sinks(self):
+        self.file_writer.frames.clear_sinks()
+
+    def _seek_event(self, event: TimelineEvent, target_time: float) -> None:
+        if event.kind == "wait":
+            dt = target_time - event.t_start
+            if dt > 0:
+                self.advance_time(dt)
+            return
+
+        local_time = max(0.0, min(target_time - event.t_start, event.t_end - event.t_start))
+        active = [shallow_copy(anim) for anim in event.animations]
+        self.begin_animations(active)
+        for animation in active:
+            animation.update_reference_mobjects(local_time, frame_rate=self.camera.fps)
+            alpha = 1.0 if animation.run_time == 0 else local_time / animation.run_time
+            animation.interpolate(alpha)
+        self.time = event.t_start + local_time
+        self.update_mobjects(local_time)
+        if target_time >= event.t_end:
+            self.finish_animations(active)
+
+    def seek_to(self, target_time: float) -> None:
+        """Restore and evaluate the timeline at an absolute time."""
+        if target_time < 0:
+            raise ValueError("target_time must be >= 0")
+        if target_time == self.time:
+            return
+        if self._timeline_base_state is None:
+            if target_time > self.time:
+                self.advance_time(target_time - self.time)
+            return
+
+        self._seeking = True
+        try:
+            self.restore_state(self._timeline_base_state)
+            self.time = self._timeline_base_state.time
+            for event in self.timeline:
+                if event.t_start >= target_time:
+                    break
+                event_target = min(target_time, event.t_end)
+                self._seek_event(event, event_target)
+                if event_target >= target_time:
+                    break
+            self.time = target_time
+        finally:
+            self._seeking = False
+
+    def serialize_timeline(self):
+        from manimlib.scene.scene_graph import SceneGraphSerializer
+        return SceneGraphSerializer(self)
 
     # Helpers for interactive development
 

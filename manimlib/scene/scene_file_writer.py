@@ -14,7 +14,7 @@ from pathlib import Path
 from manimlib.logger import log
 from manimlib.mobject.mobject import Mobject
 from manimlib.utils.file_ops import guarantee_existence
-from manimlib.camera.camera import FrameStream
+from manimlib.renderer.frame_stream import FrameStream, StreamSink
 from manimlib.utils.sounds import get_full_sound_file_path
 
 from typing import TYPE_CHECKING
@@ -240,7 +240,7 @@ class SceneFileWriter(object):
         command += [self.temp_file_path]
         self.writing_process = sp.Popen(command, stdin=sp.PIPE)
         # Frames reach the pipe a frame after they were drawn, see FrameStream
-        self.frames = FrameStream(self.scene.camera, self.writing_process.stdin)
+        self.frames = FrameStream(self.scene.camera, [StreamSink(self.writing_process.stdin)])
 
         if not self.quiet:
             self.progress_display = ProgressDisplay(
