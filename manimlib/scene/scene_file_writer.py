@@ -240,7 +240,8 @@ class SceneFileWriter(object):
         command += [self.temp_file_path]
         self.writing_process = sp.Popen(command, stdin=sp.PIPE)
         # Frames reach the pipe a frame after they were drawn, see FrameStream
-        self.frames = FrameStream(self.scene.camera, [StreamSink(self.writing_process.stdin)])
+        self.frame_sink = StreamSink(self.writing_process.stdin)
+        self.scene.add_frame_sink(self.frame_sink)
 
         if not self.quiet:
             self.progress_display = ProgressDisplay(
@@ -296,13 +297,15 @@ class SceneFileWriter(object):
 
     def write_frame(self) -> None:
         if self.write_to_movie:
-            self.frames.send()
+            self.scene.emit_frame()
             if self.progress_display is not None:
                 self.progress_display.update()
 
     def close_movie_pipe(self) -> None:
         # Whatever is still on its way off the gpu, before there is nowhere to put it
-        self.frames.drain()
+        if self.scene.frame_stream is not None:
+            self.scene.frame_stream.drain()
+        self.scene.remove_frame_sink(self.frame_sink)
         self.writing_process.stdin.close()
         self.writing_process.wait()
         self.writing_process.terminate()

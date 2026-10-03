@@ -764,6 +764,10 @@ class Scene(object):
                 if event_target >= target_time:
                     break
             self.time = target_time
+            self.num_plays = sum(
+                event.kind == "animation" and event.t_end <= target_time
+                for event in self.timeline
+            )
         finally:
             self._seeking = False
 
