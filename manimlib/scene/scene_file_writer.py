@@ -201,6 +201,13 @@ class SceneFileWriter(object):
     def finish(self) -> None:
         if not self.subdivide_output and self.write_to_movie:
             self.close_movie_pipe()
+
+            # Scene.sound_events is the authoritative audio timeline. Rebuild
+            # it immediately before muxing so seek_to() can never leave the
+            # final movie with a stale or empty audio segment.
+            if self.scene.sound_events:
+                self.rebuild_audio(self.scene.sound_events)
+
             if self.includes_sound:
                 self.add_sound_to_video()
             self.print_file_ready_message(self.get_movie_file_path())
@@ -209,7 +216,6 @@ class SceneFileWriter(object):
             self.save_final_image(self.scene.get_image())
         if self.should_open_file():
             self.open_file()
-
     def open_movie_pipe(self, file_path: str) -> None:
         stem, ext = os.path.splitext(file_path)
         self.final_file_path = file_path
