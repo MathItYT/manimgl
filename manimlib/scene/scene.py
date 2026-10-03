@@ -820,6 +820,8 @@ class Scene(object):
         for event in self.sound_events:
             if abs(event.time - target_time) <= eps:
                 self.file_writer.replay_sound_event(event, output_time)
+                if self.window:
+                    self.play_sound_event(event)
                 self.play_sound_event(event)
 
     def play_sound_event(self, event: SoundEvent) -> None:
