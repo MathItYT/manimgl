@@ -203,7 +203,7 @@ class SceneFileWriter(object):
         if self.write_to_movie:
             self.emitted_frame_count += 1
 
-    def replay_sound_event(self, event, output_time: float | None = None, source_offset: float = 0.0) -> None:
+    def replay_sound_event_from_offset(self, event, output_time: float | None = None, source_offset: float = 0.0) -> None:
         """Append a replayed sound event, starting at a source offset."""
         if output_time is None:
             output_time = self.get_output_time()
