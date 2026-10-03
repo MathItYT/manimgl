@@ -284,11 +284,14 @@ class Scene(object):
             return
         if self.is_window_closing():
             raise EndScene()
-        if self.window and not force_draw and not self.window.has_undrawn_event():
-            self.window.poll_events()
-            return
         self.camera.renderer.post_processor.time = self.time
         self.camera.capture(*self.mobjects)
+        # Window previews are real-time, unlike movie rendering. Keep the
+        # displayed frame synchronized with the scene clock.
+        if self.window and not self.skip_animations:
+            virtual_time = self.time - self.virtual_animation_start_time
+            real_time = time.time() - self.real_animation_start_time
+            time.sleep(max(virtual_time - real_time, 0))
 
     def render_frame_to_buffer(self) -> memoryview:
         """Render and synchronously return the current RGBA frame."""
@@ -822,7 +825,6 @@ class Scene(object):
                 self.file_writer.replay_sound_event(event, output_time)
                 if self.window:
                     self.play_sound_event(event)
-                self.play_sound_event(event)
 
     def play_sound_event(self, event: SoundEvent) -> None:
         """Play a recorded sound event immediately in the interactive backend."""
@@ -863,6 +865,9 @@ class Scene(object):
             self._seeking = False
 
         self._replay_audio_at(target_time)
+        if self.window:
+            self.virtual_animation_start_time = target_time
+            self.real_animation_start_time = time.time()
     def serialize_timeline(self):
         from manimlib.scene.scene_graph import SceneGraphSerializer
         return SceneGraphSerializer(self)
