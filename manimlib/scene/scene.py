@@ -31,6 +31,7 @@ from manimlib.mobject.types.vectorized_mobject import VMobject
 from manimlib.scene.scene_embed import InteractiveSceneEmbed
 from manimlib.scene.scene_embed import CheckpointManager
 from manimlib.scene.scene_file_writer import SceneFileWriter
+from manimlib.renderer.frame_stream import FrameStream
 from manimlib.utils.dict_ops import merge_dicts_recursively
 from manimlib.utils.family_ops import extract_mobject_family_members
 from manimlib.utils.family_ops import recursive_mobject_remove
@@ -115,6 +116,9 @@ class Scene(object):
             self.default_file_writer_config,
             file_writer_config,
         )
+
+        # Scene owns the frame stream; initialize it before the writer can attach sinks.
+        self.frame_stream: FrameStream | None = None
 
         self.window = window
         if self.window:
