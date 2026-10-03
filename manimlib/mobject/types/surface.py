@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 import trimesh
-import pywavefront
-import logging
 from pathlib import Path
+import hashlib
+import tempfile
+
+from PIL import Image
 
 from manimlib.constants import GREY
 from manimlib.constants import OUT
@@ -501,85 +503,298 @@ class TexturedSurface(Surface):
         return self
 
 
-class TexturedGeometry(TexturedSurface):
-    """
-    An imported mesh, which is a list of triangles rather than a grid of points, so
-    each of its faces is written out as three points of its own. A resolution of zero
-    is what tells the vertex shader to read them that way, see surface_mesh.wgsl.
-    """
-    # One vertex per record, the records being the corners of each triangle in turn
-    verts_per_record: int = 1
+class TexturedGeometry(Mobject):
+    drawing_class = SurfaceDrawing
+    shader_file = "textured_surface.wgsl"
 
-    def __init__(self, geometry: trimesh.base.Trimesh, texture_file: str, **kwargs):
-        self.num_textures = 1
+    verts_per_record = 1
+
+    data_dtype = np.dtype([
+        ("point", np.float32, (3,)),
+        ("im_coords", np.float32, (2,)),
+        ("opacity", np.float32, (1,)),
+        ("rgba", np.float32, (4,)),
+    ])
+
+    uniform_dtype = uniform_block_dtype(
+        *COMMON_UNIFORMS,
+        ("resolution", 2),
+        ("num_textures", 1),
+    )
+
+    def __init__(
+        self,
+        geometry: trimesh.Trimesh,
+        texture_file: str | Path | None = None,
+        texture_image=None,
+        color=(1.0, 1.0, 1.0, 1.0),
+        **kwargs,
+    ):
+        self.sort_to_camera = False
+        if not isinstance(geometry, trimesh.Trimesh):
+            raise TypeError(
+                "geometry must be trimesh.Trimesh"
+            )
+
         self.geometry = geometry
         self.texture_file = texture_file
-        # Not a grid, which is what the vertex shader goes by, see surface_mesh.wgsl
         self.initial_resolution = (0, 0)
-        Mobject.__init__(
-            self,
-            textures={"LightTexture": ImageFile(get_full_raster_image_path(texture_file))}
+        self.num_textures = 1
+
+        if texture_image is not None:
+            texture_file = self._save_texture_image(texture_image)
+
+        elif texture_file is None:
+            texture_file = self._make_color_texture(color)
+
+        texture_file = Path(texture_file)
+
+        self.textures = {
+            "LightTexture": ImageFile(texture_file),
+            "DarkTexture": ImageFile(texture_file),
+        }
+
+        super().__init__(
+            textures=self.textures,
+            **kwargs,
         )
 
+    def init_uniforms(self):
+        super().init_uniforms()
+        self.uniforms["resolution"] = (0, 0)
+        self.uniforms["num_textures"] = 1
+
     def init_points(self):
-        # Which point of the mesh each corner of each face is, kept for anything wanting
-        # to pick faces out again, e.g. to trim the mesh down
-        self.vertex_indices = self.geometry.faces.flatten()
-        uv = np.array(self.geometry.visual.uv)
+        geometry = self.geometry
+
+        uv = getattr(geometry.visual, "uv", None)
+
+        if uv is None or len(uv) != len(geometry.vertices):
+            uv = np.zeros(
+                (len(geometry.vertices), 2),
+                dtype=np.float32,
+            )
+
+        uv = np.asarray(uv, dtype=np.float32).copy()
+
+        # OBJ UV origin is conventionally bottom-left while the
+        # image coordinate system used by Manim is top-left.
         uv[:, 1] = 1.0 - uv[:, 1]
 
-        self.set_points(np.array(self.geometry.vertices)[self.vertex_indices])
+        self.vertex_indices = np.asarray(
+            geometry.faces,
+            dtype=np.int64,
+        ).reshape(-1)
+
+        points = np.asarray(
+            geometry.vertices,
+            dtype=np.float32,
+        )[self.vertex_indices]
+
+        self.set_points(points)
+
         self.data["im_coords"] = uv[self.vertex_indices]
-        self.data["opacity"] = self.opacity
+        self.data["rgba"][:, :] = 0.0
+        self.data["opacity"][:, 0] = self._get_material_opacity()
+
+    def is_opaque(self) -> bool:
+        return self._get_material_opacity() >= 1.0
+
+    def _get_material_opacity(self):
+        material = getattr(
+            self.geometry.visual,
+            "material",
+            None,
+        )
+
+        if material is None:
+            return 1.0
+
+        diffuse = getattr(material, "diffuse", None)
+
+        if diffuse is not None:
+            diffuse = np.asarray(diffuse)
+
+            if diffuse.size >= 4:
+                alpha = float(diffuse[3])
+
+                if diffuse.dtype == np.uint8:
+                    alpha /= 255.0
+
+                return alpha
+
+        return 1.0
+
+    @staticmethod
+    def _make_color_texture(color):
+        rgba = np.asarray(color, dtype=np.float32)
+
+        if rgba.size == 3:
+            rgba = np.append(rgba, 1.0)
+
+        rgba = np.clip(rgba[:4], 0.0, 1.0)
+        rgba8 = np.round(rgba * 255).astype(np.uint8)
+
+        return TexturedGeometry._save_texture_image(
+            Image.fromarray(
+                rgba8.reshape((1, 1, 4)),
+                "RGBA",
+            )
+        )
+
+    @staticmethod
+    def _save_texture_image(image):
+        if not isinstance(image, Image.Image):
+            raise TypeError(
+                "texture_image must be a PIL.Image.Image"
+            )
+
+        image = image.convert("RGBA")
+
+        digest = hashlib.sha1(
+            image.tobytes()
+        ).hexdigest()
+
+        directory = (
+            Path(tempfile.gettempdir())
+            / "manimgl_obj_materials"
+        )
+        directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        filename = directory / f"{digest}.png"
+
+        if not filename.exists():
+            image.save(filename, "PNG")
+
+        return filename
 
 
 class ThreeDModel(Group):
-    def __init__(self, obj_file: str, height=3):
-        super().__init__()
-        obj_file = get_full_three_d_model_path(obj_file)
+    def __init__(
+        self,
+        obj_file: str,
+        height=3,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
 
-        default_texture = Path(Path(obj_file).parent, "texture.png")
-        if not default_texture.exists():
-            default_texture = get_full_raster_image_path("White.png")
+        obj_file = Path(
+            get_full_three_d_model_path(obj_file)
+        ).resolve()
 
-        texture_files = self.get_textures_from_mtl(obj_file)
-        mesh = trimesh.load(obj_file)
+        if not obj_file.exists():
+            raise OSError(
+                f"OBJ file not found: {obj_file}"
+            )
 
-        if isinstance(mesh, trimesh.Scene):
-            self.add(*(
-                TexturedGeometry(geom, texture or default_texture)
-                for geom, texture in zip(mesh.geometry.values(), texture_files.values())
-            ))
-        elif isinstance(mesh, trimesh.Geometry):
-            # TODO
-            self.add(TexturedGeometry(mesh, default_texture))
+        scene = trimesh.load(
+            str(obj_file),
+            force="scene",
+            process=False,
+            maintain_order=True,
+        )
+
+        if not isinstance(scene, trimesh.Scene):
+            raise TypeError(
+                f"Expected trimesh.Scene, got {type(scene)!r}"
+            )
+
+        for geometry in scene.geometry.values():
+            if not isinstance(geometry, trimesh.Trimesh):
+                continue
+
+            texture_image = None
+            color = (1.0, 1.0, 1.0, 1.0)
+
+            visual = getattr(
+                geometry,
+                "visual",
+                None,
+            )
+
+            material = getattr(
+                visual,
+                "material",
+                None,
+            )
+
+            if material is not None:
+                # -------------------------------------------------
+                # map_Kd
+                # -------------------------------------------------
+                image = getattr(
+                    material,
+                    "image",
+                    None,
+                )
+
+                if image is not None:
+                    texture_image = image
+
+                # -------------------------------------------------
+                # Kd
+                # -------------------------------------------------
+                diffuse = getattr(
+                    material,
+                    "diffuse",
+                    None,
+                )
+
+                if diffuse is not None:
+                    diffuse = np.asarray(
+                        diffuse,
+                        dtype=np.float32,
+                    )
+
+                    if diffuse.max(initial=0) > 1.0:
+                        diffuse /= 255.0
+
+                    if diffuse.size == 3:
+                        diffuse = np.append(
+                            diffuse,
+                            1.0,
+                        )
+
+                    color = diffuse[:4]
+
+            # No SimpleMaterial? Try vertex/face colors.
+            if material is None and visual is not None:
+                main_color = getattr(
+                    visual,
+                    "main_color",
+                    None,
+                )
+
+                if main_color is not None:
+                    main_color = np.asarray(
+                        main_color,
+                        dtype=np.float32,
+                    )
+
+                    if main_color.max(initial=0) > 1.0:
+                        main_color /= 255.0
+
+                    if main_color.size == 3:
+                        main_color = np.append(
+                            main_color,
+                            1.0,
+                        )
+
+                    color = main_color[:4]
+
+            self.add(
+                TexturedGeometry(
+                    geometry,
+                    texture_image=texture_image,
+                    color=color,
+                    shading=(0.3, 0.2, 0.4),
+                    depth_test=True,
+                )
+            )
 
         self.apply_depth_test()
         self.set_height(height)
         self.center()
-
-    def get_textures_from_mtl(self, obj_filepath, suppress_warnings=True):
-        """
-        Load an OBJ file and extract all texture filenames from its MTL file.
-
-        Returns:
-            dict: {material_name: texture_filepath}
-        """
-
-        # Suppress pywavefront warnings if desired
-        if suppress_warnings:
-            logging.getLogger('pywavefront').setLevel(logging.ERROR)
-
-        # Load the OBJ file (automatically loads MTL)
-        obj_scene = pywavefront.Wavefront(obj_filepath, collect_faces=True)
-
-        textures = {}
-
-        # Iterate through materials
-        for material_name, material in obj_scene.materials.items():
-            if material.texture:
-                textures[material_name] = material.texture.path
-            else:
-                textures[material_name] = None
-
-        return textures

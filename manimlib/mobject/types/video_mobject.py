@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from fractions import Fraction
+import platform
+import threading
 
 import av
 import numpy as np
@@ -22,194 +24,641 @@ if TYPE_CHECKING:
 
 # How many decoded frames one source keeps, where it has not read the whole video in
 DEFAULT_CACHE_SIZE: int = 32
-# Up to how many bytes of decoded frames a video is preloaded, held whole both in memory and
-# on the gpu rather than read a frame at a time, which for the short clips this is aimed at
-# is every one of them
+
+# Up to how many bytes of decoded frames a video is preloaded, held whole both in memory
+# and on the gpu rather than read a frame at a time.
 PRELOAD_LIMIT: int = 64_000_000
+
+
+# Default FFmpeg input format for live video devices.
+DEFAULT_DEVICE_FORMATS: dict[str, str] = {
+    "Linux": "v4l2",
+    "Darwin": "avfoundation",
+    "Windows": "dshow",
+}
 
 
 class VideoSource(object):
     """
-    The frames of one video file, decoded on demand and returned as straight rgba, alpha
-    included where the video carries one.
+    One video source.
 
-    Shared by every mobject naming the file, so a grid of characters drawn from one clip
-    decodes each frame once between them.
+    A source can either represent a normal video file or a live capture
+    device.
+
+    Normal files are decoded on demand and may optionally be preloaded.
+
+    Live devices are decoded continuously on a background thread. The
+    render thread never waits for the device to produce another frame:
+    only the most recently decoded frame is exposed.
     """
-    _sources: dict[str, VideoSource] = dict()
+
+    _sources: dict[tuple, VideoSource] = {}
 
     @classmethod
-    def get(cls, path: str, preload: bool | None = None) -> VideoSource:
+    def get(
+        cls,
+        path: str,
+        preload: bool | None = None,
+        *,
+        live: bool = False,
+        device_format: str | None = None,
+        device_options: dict | None = None,
+    ) -> VideoSource:
         """
-        The source for this file, shared with everything else naming it, and so read one way
-        or the other for the whole of it: one asked for whole now is read in now, but one
-        already read in whole stays that way.
+        Get a shared source.
+
+        Multiple VideoMobjects referring to the same source share decoding.
+        This is particularly important for live devices: only one capture
+        thread is created for a given device configuration.
         """
-        source = cls._sources.get(path)
+        options = device_options or {}
+
+        try:
+            options_key = tuple(sorted(options.items()))
+            hash(options_key)
+        except (TypeError, ValueError):
+            # Device options are normally strings, but don't require every
+            # possible PyAV option value to be hashable.
+            options_key = repr(sorted(options.items(), key=lambda item: item[0]))
+
+        key = (
+            str(path),
+            bool(live),
+            device_format,
+            options_key,
+        )
+
+        source = cls._sources.get(key)
+
         if source is None:
-            source = cls._sources[path] = cls(path, preload)
-        elif preload and not source.preloaded:
+            source = cls._sources[key] = cls(
+                path,
+                preload,
+                live=live,
+                device_format=device_format,
+                device_options=device_options,
+            )
+        elif preload and not source.preloaded and not source.live:
             source.read_all()
+
         return source
 
+    @classmethod
+    def close_all(cls) -> None:
+        """
+        Stop every live source and close every underlying container.
+
+        This is mainly useful when shutting down a renderer or test process.
+        """
+        for source in list(cls._sources.values()):
+            source.close()
+
+        cls._sources.clear()
+
     def __deepcopy__(self, memo: dict) -> VideoSource:
-        """Shared rather than copied; the container behind it cannot be copied in any case."""
+        """
+        Sources are shared rather than copied.
+        """
         return self
 
-    def __init__(self, path: str, preload: bool | None = None):
-        self.path = path
-        self.container = av.open(path)
+    def __init__(
+        self,
+        path: str,
+        preload: bool | None = None,
+        *,
+        live: bool = False,
+        device_format: str | None = None,
+        device_options: dict | None = None,
+    ):
+        self.path = str(path)
+        self.live = live
+
+        self.container = None
+        self.stream = None
+
+        # ------------------------------------------------------------------
+        # Live capture state
+        # ------------------------------------------------------------------
+
+        self._capture_thread: threading.Thread | None = None
+        self._capture_stop = threading.Event()
+        self._frame_lock = threading.Lock()
+
+        # Only the newest frame is retained.
+        #
+        # This is intentionally NOT a queue. If the camera produces frames
+        # faster than Manim renders them, old frames are discarded rather
+        # than accumulating latency.
+        self._latest_frame: np.ndarray | None = None
+        self._latest_index: int = -1
+
+        self._capture_error: Exception | None = None
+        self._closed = False
+
+        # ------------------------------------------------------------------
+        # File state
+        # ------------------------------------------------------------------
+
+        self.cache: OrderedDict[int, np.ndarray] = OrderedDict()
+        self.decoder = None
+        self.next_index = 0
+
+        self.all_frames: np.ndarray | None = None
+        self.preloaded = False
+
+        if self.live:
+            self._init_live(
+                device_format=device_format,
+                device_options=device_options,
+            )
+        else:
+            self._init_file(preload)
+
+    # ======================================================================
+    # Normal video files
+    # ======================================================================
+
+    def _init_file(self, preload: bool | None) -> None:
+        self.container = av.open(self.path)
         self.stream = self.container.streams.video[0]
         self.stream.thread_type = "AUTO"
 
         self.width = self.stream.codec_context.width
         self.height = self.stream.codec_context.height
-        self.frame_rate = Fraction(self.stream.average_rate or self.stream.guessed_rate or 30)
+
+        self.frame_rate = Fraction(
+            self.stream.average_rate
+            or self.stream.guessed_rate
+            or 30
+        )
+
         self.num_frames = self.get_num_frames()
         self.duration = float(self.num_frames / self.frame_rate)
 
-        # A window of decoded frames, where the whole clip is not held, see remember
-        self.cache: OrderedDict[int, np.ndarray] = OrderedDict()
-        # Where a sequential read has got to, so that the common case of asking for one frame
-        # after another never seeks
-        self.decoder = None
-        self.next_index = 0
-
-        # Every frame as one array, held only where the whole clip was read in
-        self.all_frames: np.ndarray | None = None
+        self.all_frames = None
         self.preloaded = False
+
         if preload is None:
             preload = self.fits_at_once()
+
         if preload:
             self.read_all()
 
+    # ======================================================================
+    # Live video devices
+    # ======================================================================
+
+    def _init_live(
+        self,
+        *,
+        device_format: str | None,
+        device_options: dict | None,
+    ) -> None:
+        """
+        Initialize a live capture device.
+
+        Opening the container itself happens here, but decoding does not.
+        All blocking frame acquisition occurs exclusively on the capture
+        thread.
+        """
+        if device_format is None:
+            device_format = DEFAULT_DEVICE_FORMATS.get(
+                platform.system()
+            )
+
+        if device_format is None:
+            raise RuntimeError(
+                "Could not determine the video-device format for "
+                f"{platform.system()!r}. Specify device_format explicitly."
+            )
+
+        options = dict(device_options or {})
+
+        self.container = av.open(
+            self.path,
+            format=device_format,
+            options=options,
+        )
+
+        if not self.container.streams.video:
+            self.container.close()
+            raise RuntimeError(
+                f"No video stream was found in device {self.path!r}."
+            )
+
+        self.stream = self.container.streams.video[0]
+        self.stream.thread_type = "AUTO"
+
+        self.width = self.stream.codec_context.width
+        self.height = self.stream.codec_context.height
+
+        self.frame_rate = Fraction(
+            self.stream.average_rate
+            or self.stream.guessed_rate
+            or 30
+        )
+
+        # A live device has no meaningful finite frame count or duration.
+        self.num_frames = 1
+        self.duration = float("inf")
+
+        # Live sources are never preloaded.
+        self.all_frames = None
+        self.preloaded = False
+
+        self._capture_thread = threading.Thread(
+            target=self._capture_loop,
+            name=f"VideoSource[{self.path}]",
+            daemon=True,
+        )
+
+        self._capture_thread.start()
+
+    def _capture_loop(self) -> None:
+        """
+        Continuously decode the live source.
+
+        This is the only method allowed to consume the device decoder.
+
+        The important property is that there is no synchronization with the
+        render loop. If the camera blocks waiting for its next frame, only
+        this thread blocks.
+        """
+        index = 0
+
+        try:
+            for frame in self.container.decode(self.stream):
+                if self._capture_stop.is_set():
+                    break
+
+                pixels = self.to_rgba(frame)
+
+                # The conversion above may be relatively expensive, so the
+                # lock is deliberately acquired only after conversion.
+                with self._frame_lock:
+                    self._latest_frame = pixels
+                    self._latest_index = index
+
+                index += 1
+
+        except Exception as exc:
+            if not self._capture_stop.is_set():
+                self._capture_error = exc
+
+        finally:
+            self.decoder = None
+
+    @property
+    def latest_index(self) -> int:
+        """
+        Index of the most recently decoded live frame.
+
+        -1 means that the capture thread has not received a frame yet.
+        """
+        with self._frame_lock:
+            return self._latest_index
+
+    def get_latest_frame(self) -> np.ndarray:
+        """
+        Return the newest frame immediately.
+
+        This function NEVER waits for the capture device.
+
+        Before the first frame arrives, a transparent blank frame is returned.
+        """
+        with self._frame_lock:
+            pixels = self._latest_frame
+
+        if pixels is None:
+            return self.blank_frame()
+
+        return pixels
+
+    @property
+    def capture_error(self) -> Exception | None:
+        """
+        Exception raised by the capture thread, if any.
+        """
+        return self._capture_error
+
+    def close(self) -> None:
+        """
+        Stop capture and close the underlying PyAV container.
+
+        This method is safe to call more than once.
+        """
+        if self._closed:
+            return
+
+        self._closed = True
+        self._capture_stop.set()
+
+        thread = self._capture_thread
+
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=0.25)
+
+        if self.container is not None:
+            try:
+                self.container.close()
+            except Exception:
+                pass
+
+        self.container = None
+
+    # ======================================================================
+    # Common source API
+    # ======================================================================
+
     def get_num_frames(self) -> int:
         """
-        How many frames the video holds: what the container says, else the duration times
-        the frame rate, else a count from reading through.
+        Determine the number of frames of a normal video file.
         """
         if self.stream.frames:
             return self.stream.frames
+
         if self.stream.duration and self.stream.time_base:
-            seconds = float(self.stream.duration * self.stream.time_base)
-            return max(1, round(seconds * float(self.frame_rate)))
+            seconds = float(
+                self.stream.duration * self.stream.time_base
+            )
+
+            return max(
+                1,
+                round(seconds * float(self.frame_rate)),
+            )
+
         if self.container.duration:
             seconds = self.container.duration / av.time_base
-            return max(1, round(seconds * float(self.frame_rate)))
-        return sum(1 for _ in self.container.decode(self.stream))
+
+            return max(
+                1,
+                round(seconds * float(self.frame_rate)),
+            )
+
+        return sum(
+            1
+            for _ in self.container.decode(self.stream)
+        )
 
     def fits_at_once(self) -> bool:
-        """Whether the whole clip is small enough to hold at once, see PRELOAD_LIMIT."""
-        return self.num_frames * self.width * self.height * 4 <= PRELOAD_LIMIT
+        """
+        Whether the whole normal video can be held in memory.
+        """
+        return (
+            self.num_frames
+            * self.width
+            * self.height
+            * 4
+            <= PRELOAD_LIMIT
+        )
 
     def get_all_frames(self) -> np.ndarray:
-        """Every frame as one array of layers, decoded once and kept."""
+        """
+        Return every frame of a preloaded normal video.
+        """
+        if self.live:
+            raise RuntimeError(
+                "Live video sources cannot be preloaded."
+            )
+
         if self.all_frames is None:
             self.read_all()
+
         return self.all_frames
 
     def read_all(self) -> None:
         """
-        Decode the whole clip, after which every frame is there to be read without any
-        further decoding, see get_frame.
+        Decode an entire normal video into memory.
         """
-        self.container.seek(0, stream=self.stream)
-        frames = [self.to_rgba(frame) for frame in self.container.decode(self.stream)]
-        # What was decoded is what there is, whatever the container claimed
-        self.num_frames = max(1, len(frames))
-        self.duration = float(self.num_frames / self.frame_rate)
-        # Held as one array rather than a frame at a time: it is what an upload wants, and
-        # keeping the window as well would be keeping the clip twice over
-        self.all_frames = np.stack(frames or [self.blank_frame()])
+        if self.live:
+            raise RuntimeError(
+                "Live video sources cannot be preloaded."
+            )
+
+        self.container.seek(
+            0,
+            stream=self.stream,
+        )
+
+        frames = [
+            self.to_rgba(frame)
+            for frame in self.container.decode(self.stream)
+        ]
+
+        # What was actually decoded is authoritative.
+        self.num_frames = max(
+            1,
+            len(frames),
+        )
+
+        self.duration = float(
+            self.num_frames / self.frame_rate
+        )
+
+        self.all_frames = np.stack(
+            frames or [self.blank_frame()]
+        )
+
         self.cache.clear()
         self.preloaded = True
 
     def blank_frame(self) -> np.ndarray:
-        """A frame of nothing, the size of the video's own."""
-        return np.zeros((self.height, self.width, 4), dtype=np.uint8)
+        """
+        Transparent frame with the source dimensions.
+        """
+        return np.zeros(
+            (
+                self.height,
+                self.width,
+                4,
+            ),
+            dtype=np.uint8,
+        )
 
     def to_rgba(self, frame) -> np.ndarray:
-        """One decoded frame as straight rgba bytes."""
+        """
+        Convert a decoded PyAV frame into straight RGBA bytes.
+        """
         return frame.to_ndarray(format="rgba")
 
+    # ======================================================================
+    # Random/sequential decoding for normal files
+    # ======================================================================
+
     def seek(self, index: int) -> None:
-        """Put the read at the last keyframe at or before this frame."""
-        time_base = self.stream.time_base or Fraction(1, int(self.frame_rate))
-        offset = int(index / self.frame_rate / time_base)
-        self.container.seek(offset, stream=self.stream, backward=True, any_frame=False)
-        self.decoder = self.container.decode(self.stream)
+        """
+        Seek to the keyframe at or before a requested frame.
+
+        Not used by live sources.
+        """
+        if self.live:
+            return
+
+        time_base = (
+            self.stream.time_base
+            or Fraction(
+                1,
+                int(self.frame_rate),
+            )
+        )
+
+        offset = int(
+            index
+            / self.frame_rate
+            / time_base
+        )
+
+        self.container.seek(
+            offset,
+            stream=self.stream,
+            backward=True,
+            any_frame=False,
+        )
+
+        self.decoder = self.container.decode(
+            self.stream
+        )
+
         self.next_index = None
 
     def get_frame(self, index: int) -> np.ndarray:
         """
-        The pixels of one frame, straight out of the whole clip where that was read in, and
-        otherwise decoded up to, see read_up_to.
+        Get one frame.
 
-        Where the read runs off the end, the frame count having only been an estimate, what
-        was decodable is taken to be the whole video and its last frame stands in.
+        For live sources the requested index is intentionally ignored:
+        the newest frame is always returned.
         """
+        if self.live:
+            return self.get_latest_frame()
+
         if self.preloaded:
-            return self.get_all_frames()[int(np.clip(index, 0, self.num_frames - 1))]
+            return self.get_all_frames()[
+                int(
+                    np.clip(
+                        index,
+                        0,
+                        self.num_frames - 1,
+                    )
+                )
+            ]
+
         while True:
-            index = int(np.clip(index, 0, self.num_frames - 1))
+            index = int(
+                np.clip(
+                    index,
+                    0,
+                    self.num_frames - 1,
+                )
+            )
+
             pixels = self.cache.get(index)
+
             if pixels is not None:
                 self.cache.move_to_end(index)
                 return pixels
+
             pixels = self.read_up_to(index)
+
             if pixels is not None:
                 return pixels
+
             if index == 0:
-                # Nothing in the file decodes at all, so there is nothing to show of it
                 return self.blank_frame()
+
+            # The container claimed more frames than were actually
+            # decodable.
             self.num_frames = index
             index -= 1
 
-    def read_up_to(self, index: int) -> np.ndarray | None:
+    def read_up_to(
+        self,
+        index: int,
+    ) -> np.ndarray | None:
         """
-        Decode forward to a frame from where the last read left off, seeking first where that
-        is already past it, so a jump backwards costs a keyframe seek and a jump forwards the
-        frames between. None where the read runs off the end before reaching it.
+        Decode forward until a requested frame is reached.
+
+        For live sources this is never allowed to block.
         """
-        if self.decoder is None or self.next_index is None or index < self.next_index:
+        if self.live:
+            return self.get_latest_frame()
+
+        if (
+            self.decoder is None
+            or self.next_index is None
+            or index < self.next_index
+        ):
             self.seek(index)
+
         for frame in self.decoder:
             at = self.index_of(frame)
+
             self.next_index = at + 1
+
             if at >= index:
                 pixels = self.to_rgba(frame)
-                self.remember(at, pixels)
-                # Under what was asked for too, where the video holds no frame there, so
-                # that asking again reads from the cache rather than seeking afresh
+
+                self.remember(
+                    at,
+                    pixels,
+                )
+
                 if at != index:
-                    self.remember(index, pixels)
+                    self.remember(
+                        index,
+                        pixels,
+                    )
+
                 return pixels
+
         self.decoder = None
         return None
 
     def index_of(self, frame) -> int:
-        """Which frame of the video a decoded one is, from its timestamp."""
-        if frame.pts is None or self.stream.time_base is None:
+        """
+        Determine the frame number from its timestamp.
+        """
+        if (
+            frame.pts is None
+            or self.stream.time_base is None
+        ):
             return self.next_index or 0
-        seconds = float(frame.pts * self.stream.time_base)
-        return round(seconds * float(self.frame_rate))
 
-    def remember(self, index: int, pixels: np.ndarray) -> None:
+        seconds = float(
+            frame.pts * self.stream.time_base
+        )
+
+        return round(
+            seconds * float(self.frame_rate)
+        )
+
+    def remember(
+        self,
+        index: int,
+        pixels: np.ndarray,
+    ) -> None:
+        """
+        Put one decoded frame into the bounded cache.
+        """
         self.cache[index] = pixels
         self.cache.move_to_end(index)
+
         while len(self.cache) > DEFAULT_CACHE_SIZE:
-            self.cache.popitem(last=False)
+            self.cache.popitem(
+                last=False
+            )
 
 
 class VideoFrames(LayeredPixels):
     """
-    The frames of a video on the gpu, and which of them is showing.
+    Frames belonging to a VideoMobject.
 
-    A preloaded clip goes up once as a stack of every frame, shared by every mobject naming
-    the file, and changing frame is then just a change of layer: no decode, no upload. One
-    read a frame at a time keeps a single layer, rewritten as the frame changes.
+    A preloaded file has all frames on the GPU as layers.
 
-    The frame number is held here beside the pixels so the two survive a copy or a become.
+    A normal streaming file keeps one GPU layer and replaces it when the
+    requested frame changes.
+
+    A live device also keeps one GPU layer, but its CPU-side frame comes from
+    the latest frame published by VideoSource's capture thread.
     """
 
     def __init__(
@@ -219,53 +668,162 @@ class VideoFrames(LayeredPixels):
         layers: np.ndarray | None = None,
     ):
         self.video = video
-        # Which frame the single layer holds, where the clip is not preloaded. Only a record
-        # of what was uploaded; which frame is showing is the mobject's uniform
         self.loaded = loaded
+
         if video.preloaded:
-            super().__init__(video.get_all_frames(), key=video.path)
+            super().__init__(
+                video.get_all_frames(),
+                key=video.path,
+            )
+
         elif layers is not None:
             super().__init__(layers)
+
         else:
-            super().__init__(video.blank_frame()[np.newaxis])
+            super().__init__(
+                video.blank_frame()[
+                    np.newaxis
+                ]
+            )
 
     @property
     def preloaded(self) -> bool:
         """
-        Whether every frame is up at once, and so shared with every other mobject naming the
-        file. Settled when these were made, whatever the source reads in later.
+        Whether all frames exist simultaneously as GPU layers.
         """
         return self.key is not None
 
+    @property
+    def live(self) -> bool:
+        return self.video.live
+
     def copy(self) -> VideoFrames:
-        # A preloaded stack is read alike by everything holding it, so a copy holds that one
+        """
+        Preloaded stacks are shared.
+
+        Streaming and live sources create a VideoFrames object referencing
+        the same VideoSource but retain their own GPU layer.
+        """
         if self.preloaded:
             return self
-        return VideoFrames(self.video, self.loaded, self.layers)
+
+        return VideoFrames(
+            self.video,
+            self.loaded,
+            self.layers,
+        )
 
     def load(self, index: int) -> None:
-        """Make the pixels of a frame available to be drawn."""
-        if self.preloaded or index == self.loaded:
+        """
+        Make a frame available for drawing.
+
+        For live capture, the requested frame index is not authoritative.
+        The device has its own clock, so we only upload when the capture
+        thread has published a new frame.
+        """
+        if self.preloaded:
             return
+
+        if self.live:
+            latest_index = self.video.latest_index
+
+            # No frame has arrived yet.
+            if latest_index < 0:
+                return
+
+            # This frame is already on the GPU.
+            if latest_index == self.loaded:
+                return
+
+            pixels = self.video.get_latest_frame()
+
+            self.loaded = latest_index
+
+            self.set_layers(
+                pixels[np.newaxis]
+            )
+
+            return
+
+        # Normal file streaming.
+        if index == self.loaded:
+            return
+
         self.loaded = index
-        self.set_layers(self.video.get_frame(index)[np.newaxis])
+
+        self.set_layers(
+            self.video.get_frame(index)[
+                np.newaxis
+            ]
+        )
 
     def get_pixels(self, index: int) -> np.ndarray:
-        """The straight rgba pixels of one frame."""
-        return self.layers[index if self.preloaded else 0]
+        """
+        Return straight RGBA pixels of the requested frame.
+        """
+        return self.layers[
+            index
+            if self.preloaded
+            else 0
+        ]
 
 
 class VideoMobject(ImageMobject):
     """
-    A video showing whichever frame set_time was last given, and otherwise an ImageMobject
-    in every respect.
+    A video showing whichever frame set_time last selected.
 
-    A time past the end either holds on the last frame, or comes round to the beginning
-    if loop is set to True
+    Normal files retain the original VideoMobject behavior.
+
+    With live=True, filename identifies a capture device instead of a video
+    file. Frames are acquired on a background thread and the render loop
+    always uses the latest available frame.
+
+    A live source therefore does NOT synchronize Manim's frame rate to the
+    camera's frame rate.
+
+    Example on Linux:
+
+        VideoMobject(
+            "/dev/video0",
+            live=True,
+            device_format="v4l2",
+            device_options={
+                "video_size": "1280x720",
+                "framerate": "30",
+            },
+        )
+
+    Example on macOS:
+
+        VideoMobject(
+            "0",
+            live=True,
+            device_format="avfoundation",
+            device_options={
+                "video_size": "1280x720",
+                "framerate": "30",
+            },
+        )
+
+    Example on Windows:
+
+        VideoMobject(
+            "video=Integrated Camera",
+            live=True,
+            device_format="dshow",
+            device_options={
+                "video_size": "1280x720",
+                "framerate": "30",
+            },
+        )
     """
 
     shader_file: str = "video.wgsl"
-    uniform_dtype: np.dtype = uniform_block_dtype(*COMMON_UNIFORMS, ("frame", 1))
+
+    uniform_dtype: np.dtype = uniform_block_dtype(
+        *COMMON_UNIFORMS,
+        ("frame", 1),
+    )
 
     def __init__(
         self,
@@ -274,35 +832,73 @@ class VideoMobject(ImageMobject):
         time: float = 0.0,
         loop: bool = False,
         preload: bool | None = None,
-        **kwargs
+        *,
+        live: bool = False,
+        device_format: str | None = None,
+        device_options: dict | None = None,
+        **kwargs,
     ):
         self.loop = loop
-        # Read by init_texture, which the constructor below reaches
+
+        # Used by normal video files.
         self._preload = preload
-        super().__init__(filename, height=height, **kwargs)
+
+        # Used by live capture.
+        self.live = live
+        self.device_format = device_format
+        self.device_options = device_options
+
+        super().__init__(
+            filename,
+            height=height,
+            **kwargs,
+        )
+
         self.set_time(time)
 
-    def init_texture(self, filename: str) -> VideoFrames:
+    # ======================================================================
+    # Texture initialization
+    # ======================================================================
+
+    def init_texture(
+        self,
+        filename: str,
+    ) -> VideoFrames:
         """
-        A clip preloaded is decoded whole and goes up as one stack shared by everything
-        naming the file, moving between its frames costing no more than a uniform; one that
-        is not is read a frame at a time, which every mobject drawn from it needs its own
-        layer of. Small enough clips are preloaded by default, see PRELOAD_LIMIT.
+        Create the VideoFrames backing this mobject.
         """
-        path = str(get_full_video_path(filename))
-        return VideoFrames(VideoSource.get(path, self._preload))
+        if self.live:
+            return VideoFrames(
+                VideoSource.get(
+                    str(filename),
+                    preload=False,
+                    live=True,
+                    device_format=self.device_format,
+                    device_options=self.device_options,
+                )
+            )
+
+        path = str(
+            get_full_video_path(filename)
+        )
+
+        return VideoFrames(
+            VideoSource.get(
+                path,
+                self._preload,
+            )
+        )
+
+    # ======================================================================
+    # Source properties
+    # ======================================================================
 
     @property
     def frames(self) -> VideoFrames:
-        """
-        The frames this is drawn from, read from where the mobject holds its images rather
-        than kept alongside them, so that a copy reads its own rather than these.
-        """
         return self.textures["Texture"]
 
     @property
     def source(self) -> VideoSource:
-        """The video the frames come from, which is likewise the frames' to say."""
         return self.frames.video
 
     @property
@@ -311,93 +907,275 @@ class VideoMobject(ImageMobject):
 
     @property
     def preloaded(self) -> bool:
-        """
-        Whether the whole clip is held at once, and so shared with every other mobject
-        naming the file, rather than read a frame at a time.
-        """
         return self.frames.preloaded
+
+    # ======================================================================
+    # Current frame
+    # ======================================================================
 
     @property
     def frame_index(self) -> int:
-        """ Which frame of the video is showing, which the uniform alone decides. """
-        index = round(float(self.uniforms["frame"]))
+        """
+        Which frame is currently displayed.
+
+        For live sources this is the latest frame received from the device.
+        """
+        if self.source.live:
+            return max(
+                0,
+                self.source.latest_index,
+            )
+
+        index = round(
+            float(
+                self.uniforms["frame"]
+            )
+        )
+
         if self.loop:
-            return index % self.source.num_frames
-        return int(np.clip(index, 0, self.source.num_frames - 1))
+            return (
+                index
+                % self.source.num_frames
+            )
 
-    def get_source_size(self) -> Tuple[int, int]:
-        return (self.source.width, self.source.height)
+        return int(
+            np.clip(
+                index,
+                0,
+                self.source.num_frames - 1,
+            )
+        )
 
-    # Which frame is showing
+    def get_source_size(
+        self,
+    ) -> Tuple[int, int]:
+        return (
+            self.source.width,
+            self.source.height,
+        )
 
-    def set_time(self, time: float):
-        """ Show the frame at a given time in seconds. """
-        return self.set_frame(time * float(self.source.frame_rate))
+    # ======================================================================
+    # Time/frame control
+    # ======================================================================
 
-    def increment_time(self, dt: float):
-        """ Move on by a length of time. """
-        return self.set_time(self.get_time() + dt)
+    def set_time(
+        self,
+        time: float,
+    ):
+        """
+        Show the frame corresponding to a given time.
 
-    def play_from(self, time: float = 0.0):
-        """ Play on from a given time. """
+        For live sources, Manim's time does not control the device. Instead,
+        this method simply refreshes the texture with the latest frame.
+        """
+        if self.live:
+            self.uniforms["frame"] = max(
+                0,
+                self.source.latest_index,
+            )
+
+            self.frames.load(
+                self.source.latest_index
+            )
+
+            return self
+
+        return self.set_frame(
+            time
+            * float(
+                self.source.frame_rate
+            )
+        )
+
+    def increment_time(
+        self,
+        dt: float,
+    ):
+        """
+        Advance a normal video.
+
+        For live sources, dt is deliberately ignored because the capture
+        device has its own clock.
+        """
+        if self.live:
+            self.frames.load(
+                self.source.latest_index
+            )
+
+            return self
+
+        return self.set_time(
+            self.get_time() + dt
+        )
+
+    def play_from(
+        self,
+        time: float = 0.0,
+    ):
+        """
+        Start playback.
+
+        For live sources this simply installs a refresh updater.
+        """
+        if self.live:
+            return self.add_updater(
+                lambda mob, dt: mob.increment_time(dt)
+            )
+
         self.set_time(time)
-        return self.add_updater(lambda mob, dt: mob.increment_time(dt))
 
-    def animate_set_time(self, time: float, run_time=None, rate_func=linear, **kwargs):
-        """Play up to a given time, by default taking as long as the clip it covers."""
+        return self.add_updater(
+            lambda mob, dt: mob.increment_time(dt)
+        )
+
+    def animate_set_time(
+        self,
+        time: float,
+        run_time=None,
+        rate_func=linear,
+        **kwargs,
+    ):
+        """
+        Animate a normal video to a specified time.
+
+        A live source has no finite timeline, so animate_set_time is invalid
+        for live VideoMobjects.
+        """
+        if self.live:
+            raise ValueError(
+                "animate_set_time() cannot be used "
+                "with a live VideoMobject."
+            )
+
         if run_time is None:
-            run_time = abs(time - self.get_time())
-        return self.animate(run_time=run_time, rate_func=rate_func).set_time(time)
+            run_time = abs(
+                time - self.get_time()
+            )
 
-    def set_frame(self, index: float):
-        """ Show a frame by its number rather than its time. """
+        return self.animate(
+            run_time=run_time,
+            rate_func=rate_func,
+        ).set_time(time)
+
+    def set_frame(
+        self,
+        index: float,
+    ):
+        """
+        Show a frame by frame number.
+
+        For live sources the frame number is controlled by the capture
+        device, so this operation simply refreshes the latest frame.
+        """
+        if self.live:
+            self.frames.load(
+                self.source.latest_index
+            )
+
+            return self
+
         if not self.loop:
-            index = np.clip(index, 0, self.source.num_frames - 1)
+            index = np.clip(
+                index,
+                0,
+                self.source.num_frames - 1,
+            )
+
         self.uniforms["frame"] = index
-        self.frames.load(self.frame_index)
+
+        self.frames.load(
+            self.frame_index
+        )
+
         return self
 
     def get_time(self) -> float:
         """
-        Where the video has got to, in seconds, which is not quite the time of the frame
-        showing: a time between two frames is kept as it was given, see increment_time, and
-        a clip which loops goes on counting past its own end rather than beginning again.
+        Current video time.
+
+        A live source has no meaningful timeline controlled by Manim.
         """
-        return float(self.uniforms["frame"] / self.source.frame_rate)
+        if self.live:
+            return 0.0
+
+        return float(
+            self.uniforms["frame"]
+            / self.source.frame_rate
+        )
 
     def get_duration(self) -> float:
         return self.source.duration
 
     def get_num_frames(self) -> int:
+        if self.live:
+            return max(
+                0,
+                self.source.latest_index + 1,
+            )
+
         return self.source.num_frames
 
     def get_frame_rate(self) -> float:
-        return float(self.source.frame_rate)
+        return float(
+            self.source.frame_rate
+        )
 
-    # Reading it
+    # ======================================================================
+    # Pixel access
+    # ======================================================================
 
     def get_pixels(self) -> np.ndarray:
-        """The straight rgba pixels of the frame now showing."""
-        return self.frames.get_pixels(self.frame_index)
+        """
+        Straight RGBA pixels of the frame currently shown.
+        """
+        return self.frames.get_pixels(
+            self.frame_index
+        )
 
-    def interpolate(self, mobject1, mobject2, alpha, *args, **kwargs) -> Self:
+    def interpolate(
+        self,
+        mobject1,
+        mobject2,
+        alpha,
+        *args,
+        **kwargs,
+    ) -> Self:
         """
-        Blend as any mobject does, then make sure the pixels match the frame the blended
-        uniform now names, which for a preloaded clip is already so and otherwise is an upload.
+        Blend as any Mobject does, then ensure that the texture corresponds
+        to the resulting frame.
+
+        For live sources this also ensures that interpolation never blocks
+        waiting for the device.
         """
-        super().interpolate(mobject1, mobject2, alpha, *args, **kwargs)
-        self.frames.load(self.frame_index)
+        super().interpolate(
+            mobject1,
+            mobject2,
+            alpha,
+            *args,
+            **kwargs,
+        )
+
+        self.frames.load(
+            self.frame_index
+        )
+
         return self
 
     @property
     def image(self) -> Image.Image:
-        """ The frame now showing, as an image, which is what ImageMobject reads pixels from. """
-        return Image.fromarray(self.get_pixels(), mode="RGBA")
+        """
+        Current frame as a PIL image.
+        """
+        return Image.fromarray(
+            self.get_pixels(),
+            mode="RGBA",
+        )
 
 
 class Sprite(VideoMobject):
     """
-    A VideoMobject read nearest pixel rather than blended, keeping pixel art crisp however
-    far it is scaled up.
+    A VideoMobject read nearest pixel rather than blended, keeping pixel art
+    crisp however far it is scaled up.
     """
+
     texture_filter: str = "nearest"

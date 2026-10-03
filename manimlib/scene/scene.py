@@ -103,7 +103,7 @@ class Scene(object):
         if self.window:
             self.window.init_for_scene(self)
             # Make sure the camera and the window sync
-            self.camera_config["fps"] = 30
+            # self.camera_config["fps"] = 30
 
         # Core state of the scene
         self.camera: Camera = Camera(
@@ -251,6 +251,7 @@ class Scene(object):
             self.window.poll_events()
             return
 
+        self.camera.renderer.post_processor.time = self.time
         self.camera.capture(*self.mobjects)
 
         if self.window and not self.skip_animations:

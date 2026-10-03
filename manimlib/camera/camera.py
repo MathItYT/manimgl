@@ -156,6 +156,7 @@ class Camera(object):
         self.renderer = Renderer(
             self.gpu, bundle=self.bundle_draws, together=self.draw_together,
         )
+        self.renderer.camera = self
 
     def get_target_shape(self) -> tuple[int, int]:
         if self.draw_at_window_size and self.window is not None:

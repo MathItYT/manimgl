@@ -18,6 +18,7 @@ COLOR_FORMAT = wgpu.TextureFormat.rgba8unorm
 
 KEEP = ("keep", "keep", "keep")
 
+
 # Color channels blend in the usual way, but the alpha channel takes the source's alpha
 # whole, so that drawing something half transparent onto an opaque background leaves it
 # opaque rather than eating into its alpha.
@@ -38,38 +39,64 @@ BLEND = {
 @dataclass(frozen=True)
 class PipelineState:
     """
-    The fixed function half of a pipeline: everything about how a draw behaves beyond which
-    module runs and what it reads. There are only the few combinations named here and beside
-    VDrawing, and a pipeline is built for each.
+    The fixed function half of a pipeline.
 
-    depth_test is None where the mobject decides, which is most of them, and is settled into a
-    state of its own before any pipeline is asked for, see resolved. So a pipeline is keyed on
-    a module, one of these, and the sample count, with nothing left over.
+    depth_test:
+        Whether depth testing is enabled. None means that the mobject decides.
+
+    depth_write:
+        Whether a fragment which passes the depth/stencil tests writes its
+        depth into the depth buffer.
+
+    depth_compare:
+        Comparison used when depth testing is enabled.
     """
+
     depth_test: bool | None = None
     depth_write: bool = True
+    depth_compare: str = "less"
     color_write: bool = True
-    # What the stencil buffer is compared against, "always" leaving it out of the decision
+
+    # What the stencil buffer is compared against.
     stencil_compare: str = "always"
-    # What to leave in the stencil buffer when the test fails, when depth fails, and when
-    # the fragment is drawn: once for front facing triangles, once for back facing ones
-    stencil_ops: tuple[tuple[str, str, str], tuple[str, str, str]] = (KEEP, KEEP)
+
+    # What to leave in the stencil buffer when:
+    #
+    #   1. stencil fails
+    #   2. stencil passes but depth fails
+    #   3. both tests pass
+    #
+    # One tuple for front faces and one for back faces.
+    stencil_ops: tuple[
+        tuple[str, str, str],
+        tuple[str, str, str],
+    ] = (KEEP, KEEP)
 
     @lru_cache(maxsize=None)
-    def resolved(self, depth_test: bool) -> PipelineState:
+    def resolved(
+        self,
+        depth_test: bool,
+    ) -> PipelineState:
         """
-        This state with the mobject's own choice of depth test settled into it, or as it
-        stands where the state has already made that choice for itself. Two answers per
-        state, so they are worked out once and looked up thereafter.
+        Settle the mobject's depth-test choice into the pipeline state.
         """
+
         if self.depth_test is not None:
             return self
-        return replace(self, depth_test=depth_test)
+
+        return replace(
+            self,
+            depth_test=depth_test,
+        )
 
     def depth_stencil_descriptor(self) -> dict:
-        """This state as a pipeline descriptor wants it"""
+        """
+        Convert this state into WebGPU's depth/stencil descriptor.
+        """
+
         def face(ops):
             fail, depth_fail, passed = ops
+
             return {
                 "compare": self.stencil_compare,
                 "fail_op": fail,
@@ -78,12 +105,23 @@ class PipelineState:
             }
 
         front, back = self.stencil_ops
+
         return {
             "format": DEPTH_STENCIL_FORMAT,
+
             "depth_write_enabled": self.depth_write,
-            "depth_compare": "less" if self.depth_test else "always",
+
+            # WebGPU still requires a comparison function even when depth
+            # testing is disabled. "always" makes the depth test irrelevant.
+            "depth_compare": (
+                self.depth_compare
+                if self.depth_test
+                else "always"
+            ),
+
             "stencil_front": face(front),
             "stencil_back": face(back),
+
             "stencil_read_mask": 0xFF,
             "stencil_write_mask": 0xFF,
         }
@@ -97,17 +135,28 @@ DEFAULT = PipelineState()
 
 
 def build_pipeline(
-    device: Any, layout: Any, module: Any, state: PipelineState, samples: int,
+    device: Any,
+    layout: Any,
+    module: Any,
+    state: PipelineState,
+    samples: int,
 ) -> Any:
     """
-    One pipeline. No shader is handed vertex attributes, hence the empty list of vertex
-    buffers: each reads the records of its buffer itself, as a flat array of floats indexed by
-    the vertex being drawn, and expands every record into a fixed number of vertices, always
-    triangles, see inserts/read_data.wgsl.
+    Build one render pipeline.
+
+    The shaders obtain their data directly from the renderer's storage
+    buffers, hence the empty vertex-buffer list.
     """
+
     return device.create_render_pipeline(
         layout=layout,
-        vertex={"module": module, "entry_point": "vs_main", "buffers": []},
+
+        vertex={
+            "module": module,
+            "entry_point": "vs_main",
+            "buffers": [],
+        },
+
         fragment={
             "module": module,
             "entry_point": "fs_main",
@@ -117,7 +166,14 @@ def build_pipeline(
                 "write_mask": state.color_write_mask,
             }],
         },
-        primitive={"topology": wgpu.PrimitiveTopology.triangle_list},
+
+        primitive={
+            "topology": wgpu.PrimitiveTopology.triangle_list,
+        },
+
         depth_stencil=state.depth_stencil_descriptor(),
-        multisample={"count": samples},
+
+        multisample={
+            "count": samples,
+        },
     )
