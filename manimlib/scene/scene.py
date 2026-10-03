@@ -679,6 +679,18 @@ class Scene(object):
                     break
         self.post_play()
 
+        if self.time > t_start:
+            self.timeline.append(
+                TimelineEvent(
+                    name="wait",
+                    kind="wait",
+                    t_start=t_start,
+                    t_end=self.time,
+                    animations=(),
+                    metadata={"note": note},
+                )
+            )
+
     def hold_loop(self):
         while self.hold_on_wait:
             self.update_frame(dt=1 / self.camera.fps)
@@ -713,31 +725,64 @@ class Scene(object):
         time = self.get_time() + time_offset
         self.file_writer.add_sound(sound_file, time, gain, gain_to_background)
 
+    def _get_frame_stream(self) -> FrameStream:
+        shape = self.camera.get_pixel_shape()
+        if self.frame_stream is None:
+            self.frame_stream = FrameStream(self.camera)
+        elif (self.frame_stream.width, self.frame_stream.height) != shape:
+            sinks = tuple(self.frame_stream.sinks)
+            self.frame_stream.drain()
+            self.frame_stream = FrameStream(self.camera, sinks=sinks)
+        return self.frame_stream
+
     def add_frame_sink(self, sink):
-        return self.file_writer.frames.add_sink(sink)
+        return self._get_frame_stream().add_sink(sink)
 
     def remove_frame_sink(self, sink):
-        return self.file_writer.frames.remove_sink(sink)
+        if self.frame_stream is None:
+            return sink
+        return self.frame_stream.remove_sink(sink)
 
     def clear_frame_sinks(self):
-        self.file_writer.frames.clear_sinks()
+        if self.frame_stream is not None:
+            self.frame_stream.clear_sinks()
 
     def _seek_event(self, event: TimelineEvent, target_time: float) -> None:
-        if event.kind == "wait":
-            dt = target_time - event.t_start
-            if dt > 0:
-                self.advance_time(dt)
+        local_target = max(
+            0.0,
+            min(target_time - event.t_start, event.t_end - event.t_start),
+        )
+        if local_target <= 0:
             return
 
-        local_time = max(0.0, min(target_time - event.t_start, event.t_end - event.t_start))
+        last_t = 0.0
+        if event.kind == "wait":
+            for local_t in self.get_time_progression(
+                local_target,
+                override_skip_animations=True,
+            ):
+                self.advance_time(local_t - last_t)
+                last_t = local_t
+            return
+
         active = [shallow_copy(anim) for anim in event.animations]
         self.begin_animations(active)
-        for animation in active:
-            animation.update_reference_mobjects(local_time, frame_rate=self.camera.fps)
-            alpha = 1.0 if animation.run_time == 0 else local_time / animation.run_time
-            animation.interpolate(alpha)
-        self.time = event.t_start + local_time
-        self.update_mobjects(local_time)
+        for local_t in self.get_time_progression(
+            local_target,
+            override_skip_animations=True,
+        ):
+            dt = local_t - last_t
+            last_t = local_t
+            for animation in active:
+                animation.update_reference_mobjects(
+                    dt,
+                    frame_rate=self.camera.fps,
+                )
+                alpha = 1.0 if animation.run_time == 0 else local_t / animation.run_time
+                animation.interpolate(alpha)
+            self.increment_time(dt)
+            self.update_mobjects(dt)
+
         if target_time >= event.t_end:
             self.finish_animations(active)
 
