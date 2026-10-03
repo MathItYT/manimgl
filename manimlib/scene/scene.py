@@ -712,9 +712,15 @@ class Scene(object):
             # before replaying every event so a replay follows the same scene
             # graph as the original construct().
             if event.start_state is not None:
+                # Restore the event's original scene graph, then silently
+                # evaluate it back to the already-seeked cursor.  Otherwise a
+                # seek such as seek_to(1.0) would be rewound to event.t_start.
+                target_cursor = cursor
                 self.restore_state(event.start_state)
                 self.time = event.t_start
-                cursor = event.t_start
+                if target_cursor > event.t_start + eps:
+                    self._seek_event(event, target_cursor)
+                cursor = target_cursor
 
             local_start = max(0.0, cursor - event.t_start)
             local_end = max(0.0, segment_end - event.t_start)
