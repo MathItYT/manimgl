@@ -12,6 +12,7 @@ from manimlib.animation.transform import Restore
 from manimlib.constants import BLACK, WHITE
 from manimlib.mobject.geometry import Circle
 from manimlib.mobject.types.vectorized_mobject import VGroup
+from manimlib.utils.rate_functions import linear
 
 from typing import TYPE_CHECKING
 

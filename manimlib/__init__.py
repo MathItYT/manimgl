@@ -58,10 +58,12 @@ from manimlib.mobject.svg.svg_mobject import *
 from manimlib.mobject.svg.special_tex import *
 from manimlib.mobject.svg.tex_mobject import *
 from manimlib.mobject.svg.text_mobject import *
+from manimlib.mobject.svg.typst_mobject import *
 from manimlib.mobject.three_dimensions import *
 from manimlib.mobject.types.dot_cloud import *
 from manimlib.mobject.types.image_mobject import *
 from manimlib.mobject.types.point_cloud_mobject import *
+from manimlib.mobject.types.shader_mobject import *
 from manimlib.mobject.types.surface import *
 from manimlib.mobject.types.video_mobject import *
 from manimlib.mobject.types.vectorized_mobject import *
