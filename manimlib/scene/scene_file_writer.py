@@ -371,6 +371,12 @@ class SceneFileWriter(object):
 
     def add_sound_to_video(self) -> None:
         movie_file_path = self.get_movie_file_path()
+        # The audio timeline must not outlive the rendered video. This is
+        # especially important after seek_to(), where a sound can be replayed
+        # at the beginning of a short rendered segment.
+        if self.includes_sound and self.write_to_movie:
+            output_duration_ms = int(round(1000 * self.get_output_time()))
+            self.audio_segment = self.audio_segment[:output_duration_ms]
         stem, ext = os.path.splitext(movie_file_path)
         sound_file_path = stem + ".wav"
         # Makes sure sound file length will match video file
