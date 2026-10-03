@@ -764,8 +764,13 @@ class Scene(object):
         if self.skip_animations:
             return
         time = self.get_time() + time_offset
-        self.sound_events.append(SoundEvent(sound_file, time, gain, gain_to_background))
+        event = SoundEvent(sound_file, time, gain, gain_to_background)
+        self.sound_events.append(event)
         self.file_writer.add_sound(sound_file, time, gain, gain_to_background)
+        # In window mode, add_sound() is an immediate timeline event. Play it
+        # here; seek_to() uses the deferred replay path in emit_frame() instead.
+        if self.window and not self._seeking:
+            self.play_sound_event(event)
 
     def _get_frame_stream(self) -> FrameStream:
         shape = self.camera.get_pixel_shape()
