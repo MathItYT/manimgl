@@ -64,3 +64,14 @@ def test_scene_declares_frame_stream_before_writer():
     writer_init = source.index("self.file_writer = SceneFileWriter(self, **self.file_writer_config)")
     assert stream_init < writer_init
     assert "from manimlib.renderer.frame_stream import FrameStream" in source
+
+
+def test_scene_emit_frame_does_not_reenter_file_writer():
+    from pathlib import Path
+
+    source = Path("manimlib/scene/scene.py").read_text(encoding="utf-8")
+    start = source.index("    def emit_frame(self) -> None:")
+    end = source.index("\n    # Related to updating", start)
+    method = source[start:end]
+    assert "self.file_writer.write_frame()" not in method
+    assert "self.frame_stream.send(self.time)" in method
