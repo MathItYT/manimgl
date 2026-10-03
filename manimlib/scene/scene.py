@@ -71,6 +71,7 @@ class TimelineEvent:
     t_end: float
     animations: tuple
     metadata: dict | None = None
+    start_state: SceneState | None = None
 
     @property
     def animation(self):
@@ -668,6 +669,7 @@ class Scene(object):
 
         prototypes = tuple(shallow_copy(anim) for anim in animations)
         t_start = self.time
+        start_state = self.get_state()
 
         self.pre_play()
         self.begin_animations(animations)
@@ -682,6 +684,7 @@ class Scene(object):
                 t_start=t_start,
                 t_end=self.time,
                 animations=prototypes,
+                start_state=start_state,
             )
         )
 
@@ -697,6 +700,7 @@ class Scene(object):
         if self._timeline_base_state is None:
             self._timeline_base_state = self.get_state()
         t_start = self.time
+        start_state = self.get_state()
 
         self.pre_play()
         self.update_mobjects(dt=0)  # Any problems with this?
@@ -725,6 +729,7 @@ class Scene(object):
                     t_end=self.time,
                     animations=(),
                     metadata={"note": note},
+                    start_state=start_state,
                 )
             )
 
@@ -852,7 +857,14 @@ class Scene(object):
         self._active_sound_processes.append(process)
 
     def seek_to(self, target_time: float) -> None:
-        """Restore and evaluate the timeline at an absolute time."""
+        """Restore and evaluate the timeline at an absolute time.
+
+        Each timeline event keeps a snapshot of the scene immediately before
+        it starts. Seeking restores the snapshot of the event containing the
+        target and evaluates only that event. This preserves mobjects added,
+        removed, or structurally changed between earlier plays and prevents
+        later animations from being reconstructed from the initial scene state.
+        """
         if target_time < 0:
             raise ValueError("target_time must be >= 0")
 
@@ -868,19 +880,28 @@ class Scene(object):
 
         self._seeking = True
         try:
-            self.restore_state(self._timeline_base_state)
-            self.time = self._timeline_base_state.time
-            for event in self.timeline:
-                if event.t_start >= target_time:
+            event = None
+            for candidate in self.timeline:
+                if candidate.t_start > target_time:
                     break
-                event_target = min(target_time, event.t_end)
-                self._seek_event(event, event_target)
-                if event_target >= target_time:
+                event = candidate
+                if target_time < candidate.t_end:
                     break
+
+            if event is None or event.start_state is None:
+                self.restore_state(self._timeline_base_state)
+                self.time = self._timeline_base_state.time
+                if event is not None:
+                    self._seek_event(event, target_time)
+            else:
+                self.restore_state(event.start_state)
+                self.time = event.start_state.time
+                self._seek_event(event, target_time)
+
             self.time = target_time
             self.num_plays = sum(
-                event.kind == "animation" and event.t_end <= target_time
-                for event in self.timeline
+                candidate.kind == "animation" and candidate.t_end <= target_time
+                for candidate in self.timeline
             )
         finally:
             self._seeking = False
@@ -889,6 +910,7 @@ class Scene(object):
         if self.window:
             self.virtual_animation_start_time = target_time
             self.real_animation_start_time = time.time()
+
     def serialize_timeline(self):
         from manimlib.scene.scene_graph import SceneGraphSerializer
         return SceneGraphSerializer(self)
