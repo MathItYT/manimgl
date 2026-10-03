@@ -163,6 +163,7 @@ class Scene(object):
         self._timeline_base_state = None
         self._seeking = False
         self._replay_after_seek = False
+        self._execution_generation = 0
         self.original_skipping_status: bool = self.skip_animations
         self.undo_stack = []
         self.redo_stack = []
@@ -642,7 +643,8 @@ class Scene(object):
                 self.add(animation.mobject)
                 all_mobjects = all_mobjects.union(family)
 
-    def progress_through_animations(self, animations: Iterable[Animation]) -> None:
+    def progress_through_animations(self, animations: Iterable[Animation]) -> bool:
+        generation = self._execution_generation
         last_t = 0
         for t in self.get_animation_time_progression(animations):
             dt = t - last_t
@@ -655,6 +657,9 @@ class Scene(object):
             self.update_mobjects(dt)
             self.render_frame()
             self.emit_frame()
+            if generation != self._execution_generation:
+                return False
+        return True
 
     def finish_animations(self, animations: Iterable[Animation]) -> None:
         for animation in animations:
@@ -689,7 +694,10 @@ class Scene(object):
 
         self.pre_play()
         self.begin_animations(animations)
-        self.progress_through_animations(animations)
+        completed = self.progress_through_animations(animations)
+        if not completed:
+            self.file_writer.end_animation()
+            return
         self.finish_animations(animations)
         self.post_play()
 
@@ -929,6 +937,7 @@ class Scene(object):
                 log.info(note)
             self.hold_loop()
         else:
+            generation = self._execution_generation
             time_progression = self.get_wait_time_progression(duration, stop_condition)
             last_t = 0
             for t in time_progression:
@@ -936,6 +945,9 @@ class Scene(object):
                 last_t = t
                 self.update_frame(dt)
                 self.emit_frame()
+                if generation != self._execution_generation:
+                    self.file_writer.end_animation()
+                    return
                 if stop_condition is not None and stop_condition():
                     break
         self.post_play()
@@ -1118,6 +1130,17 @@ class Scene(object):
         previous_time = self.time
         if target_time == previous_time:
             return
+
+        # A seek issued by the window event handler must invalidate the
+        # currently running play()/wait() loop.  Otherwise that loop resumes
+        # after the callback and applies stale animation frames to the newly
+        # restored scene state.
+        self._execution_generation += 1
+
+        for process in self._active_sound_processes:
+            stop_sound(process)
+        self._active_sound_processes.clear()
+        self._seek_audio_events = []
 
         if self._timeline_base_state is None:
             if target_time > self.time:
