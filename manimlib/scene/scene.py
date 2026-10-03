@@ -323,6 +323,7 @@ class Scene(object):
         # FrameStream owns frame delivery; SceneFileWriter is only one possible sink.
         if self.frame_stream is not None:
             self.frame_stream.send(self.time)
+            self.file_writer.note_frame_emitted()
         if self.file_writer.write_to_movie and self.file_writer.progress_display is not None:
             self.file_writer.progress_display.update()
 
@@ -807,32 +808,22 @@ class Scene(object):
         if target_time >= event.t_end:
             self.finish_animations(active)
 
-    def _replay_audio_between(self, start_time: float, end_time: float) -> None:
-        """Replay sound events crossed while seeking between two scene times.
+    def _replay_audio_at(self, target_time: float) -> None:
+        """Replay sounds scheduled at the state reached by ``seek_to``.
 
-        ``seek_to`` rebuilds the visual state deterministically, but audio is not
-        part of the mobject state. Keep sound events as timeline data and
-        explicitly replay the events in the interval crossed by the seek.
-
-        The events are emitted immediately because a seek is an instantaneous
-        state operation. Audio backends that need scheduled playback can
-        override ``play_sound_event``.
+        The reconstruction performed by seek_to() does not emit video frames.
+        The next emitted frame therefore starts a new output segment. A sound
+        at the reached scene timestamp must be inserted at that output position.
         """
-        if not self.sound_events or start_time == end_time:
-            return
-
-        lo, hi = sorted((start_time, end_time))
+        eps = 1e-9
+        output_time = self.file_writer.get_output_time()
         for event in self.sound_events:
-            if lo < event.time <= hi:
+            if abs(event.time - target_time) <= eps:
+                self.file_writer.replay_sound_event(event, output_time)
                 self.play_sound_event(event)
 
     def play_sound_event(self, event: SoundEvent) -> None:
-        """Play a recorded sound event.
-
-        This is a small backend hook so the interactive/Pyodide runtime can
-        provide its own audio implementation while desktop ManimGL keeps using
-        the existing ``play_sound`` helper.
-        """
+        """Play a recorded sound event immediately in the interactive backend."""
         play_sound(event.sound_file)
 
     def seek_to(self, target_time: float) -> None:
@@ -847,7 +838,7 @@ class Scene(object):
         if self._timeline_base_state is None:
             if target_time > self.time:
                 self.advance_time(target_time - self.time)
-            self._replay_audio_between(previous_time, target_time)
+            self._replay_audio_at(target_time)
             return
 
         self._seeking = True
@@ -862,7 +853,6 @@ class Scene(object):
                 if event_target >= target_time:
                     break
             self.time = target_time
-            self.file_writer.rebuild_audio(self.sound_events)
             self.num_plays = sum(
                 event.kind == "animation" and event.t_end <= target_time
                 for event in self.timeline
@@ -870,7 +860,7 @@ class Scene(object):
         finally:
             self._seeking = False
 
-        self._replay_audio_between(previous_time, target_time)
+        self._replay_audio_at(target_time)
     def serialize_timeline(self):
         from manimlib.scene.scene_graph import SceneGraphSerializer
         return SceneGraphSerializer(self)
