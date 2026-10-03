@@ -307,6 +307,15 @@ class Scene(object):
             return
         if self.is_window_closing():
             raise EndScene()
+
+        # Animation loops call render_frame() directly, so window callbacks
+        # must be polled here as well. Without this, a seek key press cannot
+        # interrupt an in-progress play()/wait() until that operation ends.
+        if self.window:
+            self.window.poll_events()
+            if self.is_window_closing():
+                raise EndScene()
+
         self.camera.renderer.post_processor.time = self.time
         self.camera.capture(*self.mobjects)
         # Window previews are real-time, unlike movie rendering. Keep the
