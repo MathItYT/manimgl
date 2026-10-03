@@ -688,6 +688,47 @@ class Scene(object):
             )
         )
 
+    def _replay_timeline_after_seek(self, end_time: float) -> None:
+        """Render recorded timeline events after a seek."""
+        cursor = self.time
+        eps = 1e-9
+        while cursor < end_time - eps:
+            event = next((e for e in self.timeline if e.t_start <= cursor + eps and e.t_end > cursor + eps), None)
+            if event is None:
+                next_event = next((e for e in self.timeline if e.t_start > cursor + eps), None)
+                segment_end = min(end_time, next_event.t_start if next_event else end_time)
+                last = cursor
+                for t in self.get_time_progression(segment_end - cursor, override_skip_animations=True):
+                    self.advance_time(t - last); last = t
+                    self.render_frame(); self.emit_frame()
+                cursor = segment_end
+                continue
+            segment_end = min(end_time, event.t_end)
+            local_start = max(0.0, cursor - event.t_start)
+            local_end = max(0.0, segment_end - event.t_start)
+            if event.kind == "wait":
+                last_t = local_start
+                for local_t in self.get_time_progression(local_end, override_skip_animations=True):
+                    if local_t <= local_start + eps: continue
+                    dt = local_t - last_t; last_t = local_t
+                    self.advance_time(dt); self.render_frame(); self.emit_frame()
+            else:
+                active = [shallow_copy(anim) for anim in event.animations]
+                self.begin_animations(active)
+                last_t = local_start
+                for local_t in self.get_time_progression(local_end, override_skip_animations=True):
+                    if local_t <= local_start + eps: continue
+                    dt = local_t - last_t; last_t = local_t
+                    for animation in active:
+                        animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
+                        alpha = 1.0 if animation.run_time == 0 else local_t / animation.run_time
+                        animation.interpolate(alpha)
+                    self.increment_time(dt); self.update_mobjects(dt)
+                    self.render_frame(); self.emit_frame()
+                if segment_end >= event.t_end - eps: self.finish_animations(active)
+            cursor = segment_end
+        self.time = end_time
+
     def wait(
         self,
         duration: Optional[float] = None,
@@ -695,6 +736,11 @@ class Scene(object):
         note: str = None,
         ignore_presenter_mode: bool = False
     ):
+        if getattr(self, "_replay_after_seek", False) and not self._seeking:
+            self._replay_after_seek = False
+            self._replay_timeline_after_seek(self.time + (self.default_wait_time if duration is None else duration))
+            return
+
         if duration is None:
             duration = self.default_wait_time
         if self._timeline_base_state is None:
@@ -907,6 +953,7 @@ class Scene(object):
             self._seeking = False
 
         self._replay_audio_at(target_time)
+        self._replay_after_seek = True
         if self.window:
             self.virtual_animation_start_time = target_time
             self.real_animation_start_time = time.time()
