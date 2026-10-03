@@ -77,6 +77,12 @@ class SceneFileWriter(object):
         self.writing_process: sp.Popen | None = None
         self.progress_display: ProgressDisplay | None = None
         self.ended_with_interrupt: bool = False
+        # Output clock: Scene.time may move backwards during seek_to().
+        self.emitted_frame_count: int = 0
+        # Number of video frames already emitted to the movie. This is the
+        # output clock and must not follow Scene.time, which can move backwards
+        # when Scene.seek_to() is used.
+        self.emitted_frame_count: int = 0
 
         self.init_output_directories()
         self.init_audio()
@@ -184,6 +190,47 @@ class SceneFileWriter(object):
         if gain:
             new_segment = new_segment.apply_gain(gain)
         self.add_audio_segment(new_segment, time, gain_to_background)
+
+    # Output timeline
+    def get_output_time(self) -> float:
+        """Return the timestamp at the current end of the rendered video."""
+        if not self.write_to_movie:
+            return 0.0
+        return self.emitted_frame_count / self.scene.camera.fps
+
+    def note_frame_emitted(self) -> None:
+        """Advance the output clock after a video frame has been submitted."""
+        if self.write_to_movie:
+            self.emitted_frame_count += 1
+
+    def replay_sound_event(self, event, output_time: float | None = None) -> None:
+        """Append a replayed sound event to the rendered audio timeline."""
+        if output_time is None:
+            output_time = self.get_output_time()
+        self.add_sound(
+            event.sound_file,
+            output_time,
+            event.gain,
+            event.gain_to_background,
+        )
+
+    # Output timeline
+    def get_output_time(self) -> float:
+        """Return the timestamp at the current end of the rendered video."""
+        if not self.write_to_movie:
+            return 0.0
+        return self.emitted_frame_count / self.scene.camera.fps
+
+    def note_frame_emitted(self) -> None:
+        """Advance the output clock after a video frame is submitted."""
+        if self.write_to_movie:
+            self.emitted_frame_count += 1
+
+    def replay_sound_event(self, event, output_time: float | None = None) -> None:
+        """Append a replayed sound event at an output-video timestamp."""
+        if output_time is None:
+            output_time = self.get_output_time()
+        self.add_sound(event.sound_file, output_time, event.gain, event.gain_to_background)
 
     # Writers
     def begin(self) -> None:
