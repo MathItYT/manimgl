@@ -162,6 +162,7 @@ class Scene(object):
         self._active_sound_processes: list = []
         self._timeline_base_state = None
         self._seeking = False
+        self._replay_after_seek = False
         self.original_skipping_status: bool = self.skip_animations
         self.undo_stack = []
         self.redo_stack = []
@@ -242,17 +243,18 @@ class Scene(object):
         )
         self.skip_animations = False
 
-        if self._replay_after_seek:
-            timeline_end = max(
-                (event.t_end for event in self.timeline),
-                default=self.time,
-            )
-            if timeline_end > self.time + 1e-9:
-                self._replay_timeline_after_seek(timeline_end)
-            self._replay_after_seek = False
 
         frame_dt = 1 / self.camera.fps
         while not self.is_window_closing():
+            if self._replay_after_seek:
+                timeline_end = max(
+                    (event.t_end for event in self.timeline),
+                    default=self.time,
+                )
+                if timeline_end > self.time + 1e-9:
+                    self._replay_timeline_after_seek(timeline_end)
+                self._replay_after_seek = False
+                continue
             self.update_frame(frame_dt)
 
     def embed(
@@ -892,7 +894,6 @@ class Scene(object):
 
         self.time = end_time
 
-
     def wait(
         self,
         duration: Optional[float] = None,
@@ -900,7 +901,7 @@ class Scene(object):
         note: str = None,
         ignore_presenter_mode: bool = False
     ):
-        if getattr(self, "_replay_after_seek", False) and not self._seeking:
+        if self._replay_after_seek and not self._seeking:
             self._replay_after_seek = False
             self._replay_timeline_after_seek(self.time + (self.default_wait_time if duration is None else duration))
             return
