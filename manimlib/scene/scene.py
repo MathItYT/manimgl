@@ -807,15 +807,47 @@ class Scene(object):
         if target_time >= event.t_end:
             self.finish_animations(active)
 
+    def _replay_audio_between(self, start_time: float, end_time: float) -> None:
+        """Replay sound events crossed while seeking between two scene times.
+
+        ``seek_to`` rebuilds the visual state deterministically, but audio is not
+        part of the mobject state. Keep sound events as timeline data and
+        explicitly replay the events in the interval crossed by the seek.
+
+        The events are emitted immediately because a seek is an instantaneous
+        state operation. Audio backends that need scheduled playback can
+        override ``play_sound_event``.
+        """
+        if not self.sound_events or start_time == end_time:
+            return
+
+        lo, hi = sorted((start_time, end_time))
+        for event in self.sound_events:
+            if lo < event.time <= hi:
+                self.play_sound_event(event)
+
+    def play_sound_event(self, event: SoundEvent) -> None:
+        """Play a recorded sound event.
+
+        This is a small backend hook so the interactive/Pyodide runtime can
+        provide its own audio implementation while desktop ManimGL keeps using
+        the existing ``play_sound`` helper.
+        """
+        play_sound(event.sound_file)
+
     def seek_to(self, target_time: float) -> None:
         """Restore and evaluate the timeline at an absolute time."""
         if target_time < 0:
             raise ValueError("target_time must be >= 0")
-        if target_time == self.time:
+
+        previous_time = self.time
+        if target_time == previous_time:
             return
+
         if self._timeline_base_state is None:
             if target_time > self.time:
                 self.advance_time(target_time - self.time)
+            self._replay_audio_between(previous_time, target_time)
             return
 
         self._seeking = True
@@ -838,6 +870,7 @@ class Scene(object):
         finally:
             self._seeking = False
 
+        self._replay_audio_between(previous_time, target_time)
     def serialize_timeline(self):
         from manimlib.scene.scene_graph import SceneGraphSerializer
         return SceneGraphSerializer(self)
