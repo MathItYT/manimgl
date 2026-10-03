@@ -238,19 +238,10 @@ class Scene(object):
             "Press `command + q` or `esc` to quit"
         )
         self.skip_animations = False
-        if getattr(self, "_replay_after_seek", False):
-            # interact() is not a wait(): it has no timeline event of its own.
-            # Consume the complete recorded suffix here, otherwise update_frame()
-            # only advances the clock and never executes later play()/wait() events.
-            timeline_end = max(
-                (event.t_end for event in self.timeline),
-                default=self.time,
-            )
-            if timeline_end > self.time + 1e-9:
-                self._replay_timeline_after_seek(timeline_end)
-            self._replay_after_seek = False
-
         while not self.is_window_closing():
+            if getattr(self, "_replay_after_seek", False):
+                if self._replay_timeline_frame(1 / self.camera.fps):
+                    continue
             self.update_frame(1 / self.camera.fps)
 
     def embed(
@@ -921,7 +912,7 @@ class Scene(object):
                 return False
 
         event = self.timeline[index]
-        if getattr(self, "_interactive_replay_event_index", None) != index:
+        if getattr(self, "_interactive_replay_initialized_event_index", None) != index:
             if event.start_state is not None:
                 self.restore_state(event.start_state)
                 self.time = event.t_start
@@ -934,6 +925,7 @@ class Scene(object):
                 self._interactive_replay_animations = None
                 self._interactive_replay_local_time = 0.0
             self._interactive_replay_event_index = index
+            self._interactive_replay_initialized_event_index = index
 
         target = min(self.time + dt, event.t_end)
         if event.kind == "wait":
@@ -966,8 +958,12 @@ class Scene(object):
         if next_index >= len(self.timeline):
             self._replay_after_seek = False
             self._interactive_replay_event_index = None
+            self._interactive_replay_initialized_event_index = None
+            self._interactive_replay_animations = None
+            self._interactive_replay_local_time = 0.0
             return False
         self._interactive_replay_event_index = next_index
+        self._interactive_replay_initialized_event_index = None
         self._interactive_replay_animations = None
         self._interactive_replay_local_time = 0.0
         return True
@@ -1046,11 +1042,13 @@ class Scene(object):
 
         self._replay_audio_at(target_time)
         self._interactive_replay_event_index = None
+        self._interactive_replay_initialized_event_index = None
         self._interactive_replay_animations = None
         self._interactive_replay_local_time = 0.0
         for index, candidate in enumerate(self.timeline):
             if candidate.t_start <= target_time + 1e-9 < candidate.t_end:
                 self._interactive_replay_event_index = index
+                self._interactive_replay_initialized_event_index = index
                 if candidate.kind == "animation":
                     active = [shallow_copy(anim) for anim in candidate.animations]
                     self.begin_animations(active)
