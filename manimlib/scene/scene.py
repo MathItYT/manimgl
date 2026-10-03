@@ -333,7 +333,7 @@ class Scene(object):
             self._seek_audio_events = []
             output_time = self.file_writer.get_output_time()
             for event, source_offset in pending:
-                self.file_writer.replay_sound_event(event, output_time, source_offset)
+                self.file_writer.replay_sound_event(event, output_time=output_time, source_offset=source_offset)
                 if self.window:
                     self.play_sound_event(event, source_offset)
         # FrameStream owns frame delivery; SceneFileWriter is only one possible sink.
