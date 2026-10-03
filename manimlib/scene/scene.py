@@ -866,15 +866,17 @@ class Scene(object):
                     end_time,
                     next_event.t_start if next_event else end_time,
                 )
-                last_t = cursor
-                for t in self.get_time_progression(
-                    segment_end - cursor,
-                    override_skip_animations=True,
-                ):
-                    self.advance_time(t - last_t)
-                    last_t = t
-                    self.render_frame()
-                    self.emit_frame()
+                gap = segment_end - cursor
+                if gap > eps:
+                    last_t = 0.0
+                    for t in self.get_time_progression(
+                        gap,
+                        override_skip_animations=True,
+                    ):
+                        self.advance_time(t - last_t)
+                        last_t = t
+                        self.render_frame()
+                        self.emit_frame()
                 cursor = segment_end
                 continue
 
@@ -889,7 +891,8 @@ class Scene(object):
 
             local_start = max(0.0, cursor - event.t_start)
             local_end = max(0.0, segment_end - event.t_start)
-            self._replay_event_segment(event, local_start, local_end)
+            if local_end > local_start + eps:
+                self._replay_event_segment(event, local_start, local_end)
             cursor = segment_end
 
         self.time = end_time
