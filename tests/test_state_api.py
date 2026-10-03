@@ -56,3 +56,11 @@ def test_scene_graph_serializes_explicit_object_metadata():
     assert data["objects"][0]["parameters"]["radius"] == 2
     assert data["animations"][0]["t_start"] == 0.0
     assert data["animations"][0]["t_end"] == 1.0
+
+
+def test_scene_declares_frame_stream_before_writer():
+    source = open("manimlib/scene/scene.py", encoding="utf-8").read()
+    stream_init = source.index("self.frame_stream: FrameStream | None = None")
+    writer_init = source.index("self.file_writer = SceneFileWriter(self, **self.file_writer_config)")
+    assert stream_init < writer_init
+    assert "from manimlib.renderer.frame_stream import FrameStream" in source
