@@ -239,6 +239,19 @@ class Scene(object):
         )
         self.skip_animations = False
         while not self.is_window_closing():
+            if getattr(self, "_replay_after_seek", False):
+                self._replay_after_seek = False
+                timeline_end = max(
+                    (event.t_end for event in self.timeline),
+                    default=self.time,
+                )
+                replay_end = min(
+                    timeline_end,
+                    self.time + 1 / self.camera.fps,
+                )
+                if replay_end > self.time + 1e-9:
+                    self._replay_timeline_after_seek(replay_end)
+                    continue
             self.update_frame(1 / self.camera.fps)
 
     def embed(
