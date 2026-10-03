@@ -926,6 +926,27 @@ class Scene(object):
         event = self.timeline[index]
         target = min(self.time + dt, event.t_end)
 
+        # Enter an event even when seek_to() landed in its middle.  The old
+        # implementation only initialized the replay when time == t_start,
+        # so a seek to t=1 inside a later play() left interact() with no active
+        # animation and it silently fell back to update_frame().
+        active_event = getattr(self, "_interactive_replay_event", None)
+        if event.kind == "animation" and active_event is not event:
+            if event.start_state is not None:
+                cursor = self.time
+                self.restore_state(event.start_state)
+                self.time = event.t_start
+                if cursor > event.t_start + eps:
+                    self._seek_event(event, cursor)
+                self.time = cursor
+            active = [shallow_copy(anim) for anim in event.animations]
+            self.begin_animations(active)
+            self._interactive_replay_event = event
+            self._interactive_replay_animations = active
+            self._interactive_replay_local_time = max(
+                0.0, self.time - event.t_start
+            )
+
         if event.kind == "wait":
             step = target - self.time
             self.advance_time(step)
