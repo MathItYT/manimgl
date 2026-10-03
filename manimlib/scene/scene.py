@@ -238,11 +238,11 @@ class Scene(object):
             "Press `command + q` or `esc` to quit"
         )
         self.skip_animations = False
+        frame_dt = 1 / self.camera.fps
         while not self.is_window_closing():
-            if getattr(self, "_replay_after_seek", False):
-                if self._replay_timeline_frame(1 / self.camera.fps):
-                    continue
-            self.update_frame(1 / self.camera.fps)
+            if self._replay_after_seek and self._replay_timeline_frame(frame_dt):
+                continue
+            self.update_frame(frame_dt)
 
     def embed(
         self,
@@ -691,6 +691,99 @@ class Scene(object):
             )
         )
 
+    # Timeline replay helpers
+
+    def _timeline_event_at(self, scene_time: float):
+        """Return the recorded event containing scene_time, if any."""
+        eps = 1e-9
+        return next(
+            (
+                (index, event)
+                for index, event in enumerate(self.timeline)
+                if event.t_start <= scene_time + eps < event.t_end
+            ),
+            (None, None),
+        )
+
+    def _reset_interactive_replay(self) -> None:
+        """Clear all state used by frame-by-frame post-seek replay."""
+        self._interactive_replay_event_index = None
+        self._interactive_replay_initialized_event_index = None
+        self._interactive_replay_animations = None
+        self._interactive_replay_local_time = 0.0
+
+    def _initialize_interactive_replay_event(self, index: int) -> None:
+        """Restore and prepare one recorded event for interactive replay."""
+        event = self.timeline[index]
+        if event.start_state is not None:
+            self.restore_state(event.start_state)
+            self.time = event.t_start
+
+        self._interactive_replay_animations = None
+        self._interactive_replay_local_time = max(
+            0.0,
+            self.time - event.t_start,
+        )
+        if event.kind == "animation":
+            active = [shallow_copy(anim) for anim in event.animations]
+            self.begin_animations(active)
+            self._interactive_replay_animations = active
+
+        self._interactive_replay_event_index = index
+        self._interactive_replay_initialized_event_index = index
+
+    def _set_interactive_replay_target(self, target_time: float) -> None:
+        """Position the interactive replay cursor at target_time."""
+        self._reset_interactive_replay()
+        index, event = self._timeline_event_at(target_time)
+        if event is None:
+            return
+
+        self._interactive_replay_event_index = index
+        self._interactive_replay_initialized_event_index = index
+        self._interactive_replay_local_time = max(
+            0.0,
+            target_time - event.t_start,
+        )
+        if event.kind == "animation":
+            active = [shallow_copy(anim) for anim in event.animations]
+            self.begin_animations(active)
+            self._interactive_replay_animations = active
+
+    def _finish_interactive_replay_event(self, index: int) -> bool:
+        """Finish one event and move the replay cursor to the next event."""
+        event = self.timeline[index]
+        if event.kind == "animation":
+            self.finish_animations(self._interactive_replay_animations)
+
+        next_index = index + 1
+        if next_index >= len(self.timeline):
+            self._reset_interactive_replay()
+            self._replay_after_seek = False
+            return False
+
+        self._interactive_replay_event_index = next_index
+        self._interactive_replay_initialized_event_index = None
+        self._interactive_replay_animations = None
+        self._interactive_replay_local_time = 0.0
+        return True
+
+    def _advance_replay_animation(self, active, local_target: float, local_time: float) -> float:
+        """Advance active animations to a local timeline position."""
+        step = local_target - local_time
+        if step <= 1e-9:
+            return local_time
+        for animation in active:
+            animation.update_reference_mobjects(
+                step,
+                frame_rate=self.camera.fps,
+            )
+            alpha = 1.0 if animation.run_time == 0 else local_target / animation.run_time
+            animation.interpolate(alpha)
+        self.increment_time(step)
+        self.update_mobjects(step)
+        return local_target
+
     def _replay_timeline_after_seek(self, end_time: float) -> None:
         """Render recorded timeline events after a seek."""
         cursor = self.time
@@ -902,93 +995,38 @@ class Scene(object):
             self.finish_animations(active)
 
     def _replay_timeline_frame(self, dt: float) -> bool:
-        eps = 1e-9
-        index = getattr(self, "_interactive_replay_event_index", None)
+        """Advance the current recorded event by one interactive frame."""
+        index = self._interactive_replay_event_index
         if index is None:
-            index = next((i for i, event in enumerate(self.timeline)
-                if event.t_start <= self.time + eps < event.t_end), None)
-            if index is None:
+            index, event = self._timeline_event_at(self.time)
+            if event is None:
                 self._replay_after_seek = False
                 return False
+            self._interactive_replay_event_index = index
+
+        if self._interactive_replay_initialized_event_index != index:
+            self._initialize_interactive_replay_event(index)
 
         event = self.timeline[index]
-        if getattr(self, "_interactive_replay_initialized_event_index", None) != index:
-            if event.start_state is not None:
-                self.restore_state(event.start_state)
-                self.time = event.t_start
-            if event.kind == "animation":
-                active = [shallow_copy(anim) for anim in event.animations]
-                self.begin_animations(active)
-                self._interactive_replay_animations = active
-                self._interactive_replay_local_time = max(0.0, self.time - event.t_start)
-            else:
-                self._interactive_replay_animations = None
-                self._interactive_replay_local_time = 0.0
-            self._interactive_replay_event_index = index
-            self._interactive_replay_initialized_event_index = index
-
         target = min(self.time + dt, event.t_end)
         if event.kind == "wait":
-            step = target - self.time
-            self.advance_time(step)
-            self.render_frame()
-            self.emit_frame()
+            self.advance_time(target - self.time)
         else:
-            active = self._interactive_replay_animations
             local_target = target - event.t_start
-            step = local_target - self._interactive_replay_local_time
-            if step > eps:
-                for animation in active:
-                    animation.update_reference_mobjects(step, frame_rate=self.camera.fps)
-                    alpha = 1.0 if animation.run_time == 0 else local_target / animation.run_time
-                    animation.interpolate(alpha)
-                self.increment_time(step)
-                self.update_mobjects(step)
-                self._interactive_replay_local_time = local_target
-                self.render_frame()
-                self.emit_frame()
+            self._interactive_replay_local_time = self._advance_replay_animation(
+                self._interactive_replay_animations,
+                local_target,
+                self._interactive_replay_local_time,
+            )
 
         self.time = target
-        if target < event.t_end - eps:
+        self.render_frame()
+        self.emit_frame()
+
+        if target < event.t_end - 1e-9:
             return True
+        return self._finish_interactive_replay_event(index)
 
-        if event.kind == "animation":
-            self.finish_animations(self._interactive_replay_animations)
-        next_index = index + 1
-        if next_index >= len(self.timeline):
-            self._replay_after_seek = False
-            self._interactive_replay_event_index = None
-            self._interactive_replay_initialized_event_index = None
-            self._interactive_replay_animations = None
-            self._interactive_replay_local_time = 0.0
-            return False
-        self._interactive_replay_event_index = next_index
-        self._interactive_replay_initialized_event_index = None
-        self._interactive_replay_animations = None
-        self._interactive_replay_local_time = 0.0
-        return True
-
-    def _replay_audio_at(self, target_time: float) -> None:
-        """Replay sounds scheduled at the state reached by ``seek_to``.
-
-        The reconstruction performed by seek_to() does not emit video frames.
-        The next emitted frame therefore starts a new output segment. A sound
-        at the reached scene timestamp must be inserted at that output position.
-        """
-        # Do not play system audio here. seek_to() reconstructs state without
-        # emitting frames, so live playback is deferred until emit_frame().
-        # This keeps the sound synchronized with the window's rendered frames.
-        self._seek_audio_events = []
-        for event in self.sound_events:
-            source_offset = max(0.0, target_time - event.time)
-            duration = self.file_writer.get_sound_duration(event.sound_file)
-            if event.time <= target_time + 1e-9 and source_offset < duration:
-                self._seek_audio_events.append((event, source_offset))
-
-    def play_sound_event(self, event: SoundEvent, source_offset: float = 0.0) -> None:
-        """Play a recorded sound event in the interactive backend."""
-        process = play_sound(event.sound_file, source_offset)
-        self._active_sound_processes.append(process)
 
     def seek_to(self, target_time: float) -> None:
         """Restore and evaluate the timeline at an absolute time.
@@ -1041,20 +1079,7 @@ class Scene(object):
             self._seeking = False
 
         self._replay_audio_at(target_time)
-        self._interactive_replay_event_index = None
-        self._interactive_replay_initialized_event_index = None
-        self._interactive_replay_animations = None
-        self._interactive_replay_local_time = 0.0
-        for index, candidate in enumerate(self.timeline):
-            if candidate.t_start <= target_time + 1e-9 < candidate.t_end:
-                self._interactive_replay_event_index = index
-                self._interactive_replay_initialized_event_index = index
-                if candidate.kind == "animation":
-                    active = [shallow_copy(anim) for anim in candidate.animations]
-                    self.begin_animations(active)
-                    self._interactive_replay_animations = active
-                    self._interactive_replay_local_time = target_time - candidate.t_start
-                break
+        self._set_interactive_replay_target(target_time)
         self._replay_after_seek = True
         if self.window:
             self.virtual_animation_start_time = target_time
