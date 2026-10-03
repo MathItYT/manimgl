@@ -784,33 +784,89 @@ class Scene(object):
         self.update_mobjects(step)
         return local_target
 
+    def _replay_event_segment(
+        self,
+        event: TimelineEvent,
+        local_start: float,
+        local_end: float,
+    ) -> None:
+        """Replay one recorded event over a local time interval."""
+        if local_end <= local_start + 1e-9:
+            return
+
+        if event.kind == "wait":
+            last_t = local_start
+            for local_t in self.get_time_progression(
+                local_end,
+                override_skip_animations=True,
+            ):
+                if local_t <= local_start + 1e-9:
+                    continue
+                self.advance_time(local_t - last_t)
+                last_t = local_t
+                self.render_frame()
+                self.emit_frame()
+            return
+
+        active = [shallow_copy(anim) for anim in event.animations]
+        self.begin_animations(active)
+        last_t = local_start
+        for local_t in self.get_time_progression(
+            local_end,
+            override_skip_animations=True,
+        ):
+            if local_t <= local_start + 1e-9:
+                continue
+            dt = local_t - last_t
+            last_t = local_t
+            for animation in active:
+                animation.update_reference_mobjects(
+                    dt,
+                    frame_rate=self.camera.fps,
+                )
+                alpha = 1.0 if animation.run_time == 0 else local_t / animation.run_time
+                animation.interpolate(alpha)
+            self.increment_time(dt)
+            self.update_mobjects(dt)
+            self.render_frame()
+            self.emit_frame()
+        if local_end >= event.t_end - event.t_start - 1e-9:
+            self.finish_animations(active)
+
     def _replay_timeline_after_seek(self, end_time: float) -> None:
-        """Render recorded timeline events after a seek."""
+        """Replay recorded events from the current time through end_time."""
         cursor = self.time
         eps = 1e-9
+
         while cursor < end_time - eps:
-            event = next((e for e in self.timeline if e.t_start <= cursor + eps and e.t_end > cursor + eps), None)
+            index, event = self._timeline_event_at(cursor)
             if event is None:
-                next_event = next((e for e in self.timeline if e.t_start > cursor + eps), None)
-                segment_end = min(end_time, next_event.t_start if next_event else end_time)
-                last = cursor
-                for t in self.get_time_progression(segment_end - cursor, override_skip_animations=True):
-                    self.advance_time(t - last); last = t
-                    self.render_frame(); self.emit_frame()
+                next_event = next(
+                    (
+                        event
+                        for event in self.timeline
+                        if event.t_start > cursor + eps
+                    ),
+                    None,
+                )
+                segment_end = min(
+                    end_time,
+                    next_event.t_start if next_event else end_time,
+                )
+                last_t = cursor
+                for t in self.get_time_progression(
+                    segment_end - cursor,
+                    override_skip_animations=True,
+                ):
+                    self.advance_time(t - last_t)
+                    last_t = t
+                    self.render_frame()
+                    self.emit_frame()
                 cursor = segment_end
                 continue
-            segment_end = min(end_time, event.t_end)
 
-            # Timeline events are separated by arbitrary scene mutations
-            # (add/remove mobjects, installing updaters, etc.) that happen
-            # between play()/wait() calls.  Those mutations are represented by
-            # the event's start_state, not by the previous event.  Restore it
-            # before replaying every event so a replay follows the same scene
-            # graph as the original construct().
+            segment_end = min(end_time, event.t_end)
             if event.start_state is not None:
-                # Restore the event's original scene graph, then silently
-                # evaluate it back to the already-seeked cursor.  Otherwise a
-                # seek such as seek_to(1.0) would be rewound to event.t_start.
                 target_cursor = cursor
                 self.restore_state(event.start_state)
                 self.time = event.t_start
@@ -820,28 +876,11 @@ class Scene(object):
 
             local_start = max(0.0, cursor - event.t_start)
             local_end = max(0.0, segment_end - event.t_start)
-            if event.kind == "wait":
-                last_t = local_start
-                for local_t in self.get_time_progression(local_end, override_skip_animations=True):
-                    if local_t <= local_start + eps: continue
-                    dt = local_t - last_t; last_t = local_t
-                    self.advance_time(dt); self.render_frame(); self.emit_frame()
-            else:
-                active = [shallow_copy(anim) for anim in event.animations]
-                self.begin_animations(active)
-                last_t = local_start
-                for local_t in self.get_time_progression(local_end, override_skip_animations=True):
-                    if local_t <= local_start + eps: continue
-                    dt = local_t - last_t; last_t = local_t
-                    for animation in active:
-                        animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
-                        alpha = 1.0 if animation.run_time == 0 else local_t / animation.run_time
-                        animation.interpolate(alpha)
-                    self.increment_time(dt); self.update_mobjects(dt)
-                    self.render_frame(); self.emit_frame()
-                if segment_end >= event.t_end - eps: self.finish_animations(active)
+            self._replay_event_segment(event, local_start, local_end)
             cursor = segment_end
+
         self.time = end_time
+
 
     def wait(
         self,
