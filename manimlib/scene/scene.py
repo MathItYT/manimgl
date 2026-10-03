@@ -53,6 +53,15 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class SoundEvent:
+    """A sound scheduled at an absolute scene time."""
+    def __init__(self, sound_file, time, gain=None, gain_to_background=None):
+        self.sound_file = sound_file
+        self.time = time
+        self.gain = gain
+        self.gain_to_background = gain_to_background
+
+
 class TimelineEvent:
     """A deterministic interval in the scene timeline."""
     name: str
@@ -143,6 +152,7 @@ class Scene(object):
         self.time: float = 0
         self.skip_time: float = 0
         self.timeline: list[TimelineEvent] = []
+        self.sound_events: list[SoundEvent] = []
         self._timeline_base_state = None
         self._seeking = False
         self.original_skipping_status: bool = self.skip_animations
@@ -732,6 +742,7 @@ class Scene(object):
         if self.skip_animations:
             return
         time = self.get_time() + time_offset
+        self.sound_events.append(SoundEvent(sound_file, time, gain, gain_to_background))
         self.file_writer.add_sound(sound_file, time, gain, gain_to_background)
 
     def _get_frame_stream(self) -> FrameStream:
@@ -818,6 +829,7 @@ class Scene(object):
                 if event_target >= target_time:
                     break
             self.time = target_time
+            self.file_writer.rebuild_audio(self.sound_events)
             self.num_plays = sum(
                 event.kind == "animation" and event.t_end <= target_time
                 for event in self.timeline

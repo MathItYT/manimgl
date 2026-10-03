@@ -137,6 +137,12 @@ class SceneFileWriter(object):
     def create_audio_segment(self) -> None:
         self.audio_segment = AudioSegment.silent()
 
+    def rebuild_audio(self, sound_events) -> None:
+        self.includes_sound = bool(sound_events)
+        self.audio_segment = AudioSegment.silent()
+        for event in sound_events:
+            self.add_sound(event.sound_file, event.time, event.gain, event.gain_to_background)
+
     def add_audio_segment(
         self,
         new_segment: AudioSegment,
