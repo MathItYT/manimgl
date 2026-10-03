@@ -296,10 +296,9 @@ class SceneFileWriter(object):
         self.progress_display.set_description(full_desc)
 
     def write_frame(self) -> None:
+        # Preserve the legacy writer entry point while keeping frame delivery owned by Scene.
         if self.write_to_movie:
             self.scene.emit_frame()
-            if self.progress_display is not None:
-                self.progress_display.update()
 
     def close_movie_pipe(self) -> None:
         # Whatever is still on its way off the gpu, before there is nowhere to put it

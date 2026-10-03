@@ -307,8 +307,13 @@ class Scene(object):
 
 
     def emit_frame(self) -> None:
-        if not self.skip_animations:
-            self.file_writer.write_frame()
+        if self.skip_animations:
+            return
+        # FrameStream owns frame delivery; SceneFileWriter is only one possible sink.
+        if self.frame_stream is not None:
+            self.frame_stream.send(self.time)
+        if self.file_writer.write_to_movie and self.file_writer.progress_display is not None:
+            self.file_writer.progress_display.update()
 
     # Related to updating
 
