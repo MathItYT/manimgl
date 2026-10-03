@@ -240,17 +240,7 @@ class Scene(object):
         self.skip_animations = False
         while not self.is_window_closing():
             if getattr(self, "_replay_after_seek", False):
-                self._replay_after_seek = False
-                timeline_end = max(
-                    (event.t_end for event in self.timeline),
-                    default=self.time,
-                )
-                replay_end = min(
-                    timeline_end,
-                    self.time + 1 / self.camera.fps,
-                )
-                if replay_end > self.time + 1e-9:
-                    self._replay_timeline_after_seek(replay_end)
+                if self._replay_timeline_frame(1 / self.camera.fps):
                     continue
             self.update_frame(1 / self.camera.fps)
 
@@ -910,6 +900,82 @@ class Scene(object):
 
         if target_time >= event.t_end:
             self.finish_animations(active)
+
+    def _replay_timeline_frame(self, dt: float) -> bool:
+        """Advance the recorded timeline by one interactive frame."""
+        eps = 1e-9
+        if not self.timeline:
+            self._replay_after_seek = False
+            return False
+
+        index = next(
+            (i for i, event in enumerate(self.timeline)
+             if event.t_start <= self.time + eps and event.t_end > self.time + eps),
+            None,
+        )
+        if index is None:
+            index = next(
+                (i for i, event in enumerate(self.timeline)
+                 if event.t_start > self.time + eps),
+                None,
+            )
+            if index is None:
+                self._replay_after_seek = False
+                return False
+
+        event = self.timeline[index]
+        target = min(self.time + dt, event.t_end)
+
+        if event.kind == "wait":
+            step = target - self.time
+            self.advance_time(step)
+            self.render_frame()
+            self.emit_frame()
+        else:
+            if abs(self.time - event.t_start) <= eps:
+                if event.start_state is not None:
+                    self.restore_state(event.start_state)
+                    self.time = event.t_start
+                active = [shallow_copy(anim) for anim in event.animations]
+                self.begin_animations(active)
+                self._interactive_replay_event = event
+                self._interactive_replay_animations = active
+                self._interactive_replay_local_time = 0.0
+
+            active = getattr(self, "_interactive_replay_animations", None)
+            if active is None or getattr(self, "_interactive_replay_event", None) is not event:
+                return False
+
+            next_local = target - event.t_start
+            step = next_local - self._interactive_replay_local_time
+            if step > eps:
+                for animation in active:
+                    animation.update_reference_mobjects(
+                        step,
+                        frame_rate=self.camera.fps,
+                    )
+                    alpha = 1.0 if animation.run_time == 0 else next_local / animation.run_time
+                    animation.interpolate(alpha)
+                self.increment_time(step)
+                self.update_mobjects(step)
+                self._interactive_replay_local_time = next_local
+                self.render_frame()
+                self.emit_frame()
+
+            if target >= event.t_end - eps:
+                self.finish_animations(active)
+                self._interactive_replay_event = None
+                self._interactive_replay_animations = None
+                self._interactive_replay_local_time = 0.0
+
+        self.time = target
+        if target >= event.t_end - eps:
+            next_index = index + 1
+            self._replay_after_seek = (
+                next_index < len(self.timeline)
+                and self.timeline[next_index].t_start <= target + eps
+            )
+        return self._replay_after_seek
 
     def _replay_audio_at(self, target_time: float) -> None:
         """Replay sounds scheduled at the state reached by ``seek_to``.
