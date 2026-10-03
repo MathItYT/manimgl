@@ -62,6 +62,7 @@ class SoundEvent:
         self.gain_to_background = gain_to_background
 
 
+@dataclass
 class TimelineEvent:
     """A deterministic interval in the scene timeline."""
     name: str
