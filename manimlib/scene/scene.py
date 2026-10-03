@@ -902,8 +902,14 @@ class Scene(object):
         ignore_presenter_mode: bool = False
     ):
         if self._replay_after_seek and not self._seeking:
-            self._replay_after_seek = False
-            self._replay_timeline_after_seek(self.time + (self.default_wait_time if duration is None else duration))
+            replay_end = self.time + (
+                self.default_wait_time if duration is None else duration
+            )
+            self._replay_timeline_after_seek(replay_end)
+            self._replay_after_seek = any(
+                event.t_end > self.time + 1e-9
+                for event in self.timeline
+            )
             return
 
         if duration is None:
