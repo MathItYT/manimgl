@@ -822,7 +822,6 @@ class Scene(object):
                 self.file_writer.replay_sound_event(event, output_time)
                 if self.window:
                     self.play_sound_event(event)
-                self.play_sound_event(event)
 
     def play_sound_event(self, event: SoundEvent) -> None:
         """Play a recorded sound event immediately in the interactive backend."""
