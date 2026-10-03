@@ -203,16 +203,21 @@ class SceneFileWriter(object):
         if self.write_to_movie:
             self.emitted_frame_count += 1
 
-    def replay_sound_event(self, event, output_time: float | None = None) -> None:
-        """Append a replayed sound event to the rendered audio timeline."""
+    def replay_sound_event(self, event, output_time: float | None = None, source_offset: float = 0.0) -> None:
+        """Append a replayed sound event, starting at a source offset."""
         if output_time is None:
             output_time = self.get_output_time()
-        self.add_sound(
-            event.sound_file,
-            output_time,
-            event.gain,
-            event.gain_to_background,
-        )
+        file_path = get_full_sound_file_path(event.sound_file)
+        new_segment = AudioSegment.from_file(file_path)
+        if event.gain:
+            new_segment = new_segment.apply_gain(event.gain)
+        if source_offset > 0:
+            new_segment = new_segment[int(round(source_offset * 1000)):]
+        self.add_audio_segment(new_segment, output_time, event.gain_to_background)
+
+    def get_sound_duration(self, sound_file: str) -> float:
+        file_path = get_full_sound_file_path(sound_file)
+        return len(AudioSegment.from_file(file_path)) / 1000.0
 
     # Output timeline
     def get_output_time(self) -> float:

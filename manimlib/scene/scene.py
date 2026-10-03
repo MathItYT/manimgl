@@ -35,7 +35,7 @@ from manimlib.renderer.frame_stream import FrameStream
 from manimlib.utils.dict_ops import merge_dicts_recursively
 from manimlib.utils.family_ops import extract_mobject_family_members
 from manimlib.utils.family_ops import recursive_mobject_remove
-from manimlib.utils.sounds import play_sound
+from manimlib.utils.sounds import play_sound, stop_sound
 from manimlib.utils.color import color_to_rgba
 from manimlib.window import Window
 
@@ -157,7 +157,8 @@ class Scene(object):
         # Index of the first sound event that still has to be replayed
         # after a seek. Live audio is triggered from emitted frames so it stays
         # synchronized with the window preview rather than firing during seek.
-        self._seek_audio_index: int | None = None
+        self._seek_audio_events: list[tuple[SoundEvent, float]] = []
+        self._active_sound_processes: list = []
         self._timeline_base_state = None
         self._seeking = False
         self.original_skipping_status: bool = self.skip_animations
@@ -327,19 +328,14 @@ class Scene(object):
     def emit_frame(self) -> None:
         if self.skip_animations:
             return
-        if self._seek_audio_index is not None:
-            eps = 1e-9
-            while self._seek_audio_index < len(self.sound_events):
-                event = self.sound_events[self._seek_audio_index]
-                if event.time > self.time + eps:
-                    break
-                output_time = self.file_writer.get_output_time()
-                self.file_writer.replay_sound_event(event, output_time)
+        if self._seek_audio_events:
+            pending = self._seek_audio_events
+            self._seek_audio_events = []
+            output_time = self.file_writer.get_output_time()
+            for event, source_offset in pending:
+                self.file_writer.replay_sound_event(event, output_time, source_offset)
                 if self.window:
-                    self.play_sound_event(event)
-                self._seek_audio_index += 1
-            if self._seek_audio_index >= len(self.sound_events):
-                self._seek_audio_index = None
+                    self.play_sound_event(event, source_offset)
         # FrameStream owns frame delivery; SceneFileWriter is only one possible sink.
         if self.frame_stream is not None:
             self.frame_stream.send(self.time)
@@ -843,14 +839,17 @@ class Scene(object):
         # Do not play system audio here. seek_to() reconstructs state without
         # emitting frames, so live playback is deferred until emit_frame().
         # This keeps the sound synchronized with the window's rendered frames.
-        self._seek_audio_index = next(
-            (i for i, event in enumerate(self.sound_events) if event.time >= target_time - 1e-9),
-            None,
-        )
+        self._seek_audio_events = []
+        for event in self.sound_events:
+            source_offset = max(0.0, target_time - event.time)
+            duration = self.file_writer.get_sound_duration(event.sound_file)
+            if event.time <= target_time + 1e-9 and source_offset < duration:
+                self._seek_audio_events.append((event, source_offset))
 
-    def play_sound_event(self, event: SoundEvent) -> None:
-        """Play a recorded sound event immediately in the interactive backend."""
-        play_sound(event.sound_file)
+    def play_sound_event(self, event: SoundEvent, source_offset: float = 0.0) -> None:
+        """Play a recorded sound event in the interactive backend."""
+        process = play_sound(event.sound_file, source_offset)
+        self._active_sound_processes.append(process)
 
     def seek_to(self, target_time: float) -> None:
         """Restore and evaluate the timeline at an absolute time."""
@@ -1104,7 +1103,9 @@ class Scene(object):
         pass
 
     def on_close(self) -> None:
-        pass
+        for process in self._active_sound_processes:
+            stop_sound(process)
+        self._active_sound_processes.clear()
 
     def focus(self) -> None:
         """
