@@ -220,6 +220,9 @@ class Scene(object):
 
     def tear_down(self) -> None:
         self.stop_skipping()
+        for process in self._active_sound_processes:
+            stop_sound(process)
+        self._active_sound_processes.clear()
         self.file_writer.finish()
         if self.window:
             self.window.destroy()
@@ -1072,6 +1075,15 @@ class Scene(object):
             return True
         return self._finish_interactive_replay_event(index)
 
+
+    def _replay_audio_at(self, target_time: float) -> None:
+        """Queue sounds that are still active at a seek target."""
+        self._seek_audio_events = []
+        for event in self.sound_events:
+            source_offset = max(0.0, target_time - event.time)
+            duration = self.file_writer.get_sound_duration(event.sound_file)
+            if event.time <= target_time + 1e-9 and source_offset < duration:
+                self._seek_audio_events.append((event, source_offset))
 
     def seek_to(self, target_time: float) -> None:
         """Restore and evaluate the timeline at an absolute time.
