@@ -238,10 +238,19 @@ class Scene(object):
             "Press `command + q` or `esc` to quit"
         )
         self.skip_animations = False
+        if getattr(self, "_replay_after_seek", False):
+            # interact() is not a wait(): it has no timeline event of its own.
+            # Consume the complete recorded suffix here, otherwise update_frame()
+            # only advances the clock and never executes later play()/wait() events.
+            timeline_end = max(
+                (event.t_end for event in self.timeline),
+                default=self.time,
+            )
+            if timeline_end > self.time + 1e-9:
+                self._replay_timeline_after_seek(timeline_end)
+            self._replay_after_seek = False
+
         while not self.is_window_closing():
-            if getattr(self, "_replay_after_seek", False):
-                if self._replay_timeline_frame(1 / self.camera.fps):
-                    continue
             self.update_frame(1 / self.camera.fps)
 
     def embed(
