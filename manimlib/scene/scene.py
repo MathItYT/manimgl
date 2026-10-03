@@ -954,6 +954,12 @@ class Scene(object):
             self.skip_animations = self.original_skipping_status
         return self
 
+    def play_sound_event(self, event: SoundEvent, start_time: float = 0.0) -> None:
+        """Start a window-preview sound and retain its process for cleanup."""
+        process = play_sound(event.sound_file, start_time=start_time)
+        if process is not None:
+            self._active_sound_processes.append(process)
+
     def add_sound(
         self,
         sound_file: str,
