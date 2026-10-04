@@ -664,6 +664,15 @@ class Scene(object):
         self.virtual_animation_start_time = self.time
         self.real_animation_start_time = time.time()
 
+        # In headless mode, frames are written to a movie without a playback
+        # clock. After a seek, the scene clock and the output timeline can
+        # differ, so keep audio events aligned with the frame currently being
+        # rendered rather than with the absolute scene time.
+        if self.window is None:
+            self.file_writer.set_audio_time_offset(
+                self.time - self.file_writer.get_output_time()
+            )
+
         self.draw_frame(force_draw=True)
         self.should_begin_animations = False
 
