@@ -354,7 +354,17 @@ class SceneFileWriter(object):
         movie_file_path = self.get_movie_file_path()
         stem, ext = os.path.splitext(movie_file_path)
         sound_file_path = stem + ".wav"
-        # Makes sure sound file length will match video file
+
+        # The audio timeline may extend beyond the rendered video after a
+        # headless seek. The video duration is authoritative: trailing audio
+        # must never extend the output movie.
+        video_duration_ms = int(round(
+            self.output_time * 1000
+        ))
+        if len(self.audio_segment) > video_duration_ms:
+            self.audio_segment = self.audio_segment[:video_duration_ms]
+
+        # Makes sure sound file length will match video file.
         self.add_audio_segment(AudioSegment.silent(0))
         self.audio_segment.export(
             sound_file_path,
