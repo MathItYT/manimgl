@@ -166,6 +166,7 @@ class Scene(object):
         self._execution_generation = 0
         self._pending_seek_time = None
         self._active_playback = False
+        self._constructing = False
         self.original_skipping_status: bool = self.skip_animations
         self.undo_stack = []
         self.redo_stack = []
@@ -198,8 +199,10 @@ class Scene(object):
         self.file_writer.begin()
 
         self.setup()
+        self._constructing = True
         try:
             self.construct()
+            self._constructing = False
             self.interact()
         except EndScene:
             pass
@@ -1140,6 +1143,11 @@ class Scene(object):
             return
         self._pending_seek_time = None
         self.seek_to(target_time)
+        if self._constructing:
+            # construct() is going to continue from the next Python statement.
+            # Do not let the next wait()/play() consume the seek as an
+            # interactive replay request.
+            self._replay_after_seek = False
 
     def seek_to(self, target_time: float) -> None:
         """Restore and evaluate the timeline at an absolute time.
@@ -1207,9 +1215,24 @@ class Scene(object):
         finally:
             self._seeking = False
 
-        self._replay_audio_at(target_time)
-        self._set_interactive_replay_target(target_time)
-        self._replay_after_seek = True
+        # When seeking while construct() is still executing, the recorded
+        # future is no longer authoritative: construct() will rebuild it from
+        # the next statement. Interactive replay is only needed after
+        # construct() has finished.
+        if self._constructing:
+            self.timeline = [
+                event for event in self.timeline
+                if event.t_end <= target_time + 1e-9
+            ]
+            self.sound_events = [
+                event for event in self.sound_events
+                if event.time <= target_time + 1e-9
+            ]
+            self._reset_interactive_replay()
+            self._replay_after_seek = False
+        else:
+            self._set_interactive_replay_target(target_time)
+            self._replay_after_seek = True
         if self.window:
             self.virtual_animation_start_time = target_time
             self.real_animation_start_time = time.time()
