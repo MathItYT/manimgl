@@ -34,6 +34,7 @@ from manimlib.utils.dict_ops import merge_dicts_recursively
 from manimlib.utils.family_ops import extract_mobject_family_members
 from manimlib.utils.family_ops import recursive_mobject_remove
 from manimlib.utils.sounds import play_sound
+from manimlib.utils.sounds import get_full_sound_file_path
 from manimlib.utils.color import color_to_rgba
 from manimlib.window import Window
 
@@ -138,7 +139,7 @@ class Scene(object):
         self.hold_on_wait = self.presenter_mode
         self.quit_interaction = False
         self._active_sound_processes: list[subprocess.Popen] = []
-        self._interactive_sound_events: list[tuple[float, str]] = []
+        self._interactive_sound_events: list[tuple[float, str, float]] = []
 
         # Much nicer to work with deterministic scenes
         if self.random_seed is not None:
@@ -197,10 +198,11 @@ class Scene(object):
         if self.window is None:
             return
 
-        for event_time, sound_file in self._interactive_sound_events:
-            if event_time < scene_time:
+        for event_time, sound_file, duration in self._interactive_sound_events:
+            elapsed = scene_time - event_time
+            if elapsed >= duration:
                 continue
-            process = play_sound(sound_file)
+            process = play_sound(sound_file, max(0.0, elapsed))
             self._active_sound_processes.append(process)
 
     def tear_down(self) -> None:
@@ -798,7 +800,9 @@ class Scene(object):
 
         if self.window is not None:
             event_time = self.get_time() + time_offset
-            self._interactive_sound_events.append((event_time, sound_file))
+            from pydub import AudioSegment
+            duration = len(AudioSegment.from_file(get_full_sound_file_path(sound_file))) / 1000.0
+            self._interactive_sound_events.append((event_time, sound_file, duration))
             process = play_sound(sound_file)
             self._active_sound_processes.append(process)
             return
