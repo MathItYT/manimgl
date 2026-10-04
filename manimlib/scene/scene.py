@@ -4,6 +4,7 @@ from collections import OrderedDict
 import platform
 import random
 import time
+import subprocess
 from functools import wraps
 from contextlib import contextmanager
 from contextlib import ExitStack
@@ -136,6 +137,7 @@ class Scene(object):
         self.mouse_drag_point = Point()
         self.hold_on_wait = self.presenter_mode
         self.quit_interaction = False
+        self._active_sound_processes: list[subprocess.Popen] = []
 
         # Much nicer to work with deterministic scenes
         if self.random_seed is not None:
@@ -184,7 +186,14 @@ class Scene(object):
         # To be implemented in subclasses
         pass
 
+    def stop_sound_processes(self) -> None:
+        for process in self._active_sound_processes:
+            if process.poll() is None:
+                process.terminate()
+        self._active_sound_processes.clear()
+
     def tear_down(self) -> None:
+        self.stop_sound_processes()
         self.stop_skipping()
         self.file_writer.finish()
         if self.window:
@@ -643,6 +652,8 @@ class Scene(object):
         if idx is None:
             return
 
+        self.stop_sound_processes()
+
         self.current_checkpoint = idx
         state, animations, duration, _ = self.checkpoints[idx]
 
@@ -771,6 +782,12 @@ class Scene(object):
     ):
         if self.skip_animations:
             return
+
+        if self.window is not None:
+            process = play_sound(sound_file)
+            self._active_sound_processes.append(process)
+            return
+
         time = self.get_time() + time_offset
         self.file_writer.add_sound(sound_file, time, gain, gain_to_background)
 
