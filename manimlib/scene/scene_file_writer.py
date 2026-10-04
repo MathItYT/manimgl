@@ -77,6 +77,8 @@ class SceneFileWriter(object):
         self.writing_process: sp.Popen | None = None
         self.progress_display: ProgressDisplay | None = None
         self.ended_with_interrupt: bool = False
+        self.output_time: float = 0.0
+        self.audio_time_offset: float = 0.0
 
         self.init_output_directories()
         self.init_audio()
@@ -177,7 +179,15 @@ class SceneFileWriter(object):
         new_segment = AudioSegment.from_file(file_path)
         if gain:
             new_segment = new_segment.apply_gain(gain)
+        if time is not None:
+            time -= self.audio_time_offset
         self.add_audio_segment(new_segment, time, gain_to_background)
+
+    def get_output_time(self) -> float:
+        return self.output_time
+
+    def set_audio_time_offset(self, offset: float) -> None:
+        self.audio_time_offset = offset
 
     # Writers
     def begin(self) -> None:
@@ -297,6 +307,7 @@ class SceneFileWriter(object):
     def write_frame(self) -> None:
         if self.write_to_movie:
             self.frames.send()
+            self.output_time += 1 / self.scene.camera.fps
             if self.progress_display is not None:
                 self.progress_display.update()
 
