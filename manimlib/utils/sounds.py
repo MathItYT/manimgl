@@ -25,18 +25,18 @@ def play_sound(sound_file, start_time: float = 0.0) -> Any:
     system = platform.system()
     if system == "Windows":
         # Windows
-        subprocess.Popen(
+        return subprocess.Popen(
             ["powershell", "-c", f"(New-Object Media.SoundPlayer '{full_path}').PlaySync()"],
             shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
+        )
     elif system == "Darwin":
         # macOS
-        subprocess.Popen(
+        return subprocess.Popen(
             ["afplay", full_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
     else:
-        subprocess.Popen(
+        return subprocess.Popen(
             ["aplay", full_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
