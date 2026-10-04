@@ -138,6 +138,7 @@ class Scene(object):
         self.hold_on_wait = self.presenter_mode
         self.quit_interaction = False
         self._active_sound_processes: list[subprocess.Popen] = []
+        self._interactive_sound_events: list[tuple[float, str]] = []
 
         # Much nicer to work with deterministic scenes
         if self.random_seed is not None:
@@ -191,6 +192,16 @@ class Scene(object):
             if process.poll() is None:
                 process.terminate()
         self._active_sound_processes.clear()
+
+    def replay_interactive_sounds(self, scene_time: float) -> None:
+        if self.window is None:
+            return
+
+        for event_time, sound_file in self._interactive_sound_events:
+            if event_time < scene_time:
+                continue
+            process = play_sound(sound_file)
+            self._active_sound_processes.append(process)
 
     def tear_down(self) -> None:
         self.stop_sound_processes()
@@ -683,6 +694,8 @@ class Scene(object):
             output_time = self.file_writer.get_output_time()
             self.file_writer.set_audio_time_offset(self.time - output_time)
             self.file_writer.replay_audio_from(self.time)
+        else:
+            self.replay_interactive_sounds(self.time)
 
         self.draw_frame(force_draw=True)
         self.should_begin_animations = False
@@ -784,6 +797,8 @@ class Scene(object):
             return
 
         if self.window is not None:
+            event_time = self.get_time() + time_offset
+            self._interactive_sound_events.append((event_time, sound_file))
             process = play_sound(sound_file)
             self._active_sound_processes.append(process)
             return
