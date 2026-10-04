@@ -376,7 +376,7 @@ class InteractiveScene(Scene):
             self.play(*(
                 FadeIn(mc, run_time=0.5, scale=1.5)
                 for mc in mob_copies
-            ))
+            ), register=False)
             self.add_to_selection(*mob_copies)
             return
         except ValueError:

@@ -120,6 +120,7 @@ class Scene(object):
         self.id_to_mobject_map: dict[int, Mobject] = dict()
         self.num_plays: int = 0
         self.time: float = 0
+        self.max_time: float = 0
         self.skip_time: float = 0
         self.original_skipping_status: bool = self.skip_animations
         self.undo_stack = []
@@ -140,6 +141,12 @@ class Scene(object):
         if self.random_seed is not None:
             random.seed(self.random_seed)
             np.random.seed(self.random_seed)
+
+        # Seek controls
+        self.should_end_playing: bool = False
+        self.checkpoints: list[tuple[SceneState, list[Animation], float, Optional[Callable[[], bool]]]] = []
+        self.paused: bool = False
+        self.current_checkpoint: Optional[int] = None
 
     def __str__(self) -> str:
         return self.__class__.__name__
@@ -233,9 +240,41 @@ class Scene(object):
         self.update_frame(force_draw=True)
         self.get_image().show()
 
+    def progress_current_checkpoint(self, dt: float) -> None:
+        if self.current_checkpoint is None:
+            return
+
+        current_checkpoint = self.checkpoints[self.current_checkpoint]
+        animations = current_checkpoint[1]
+        start_time = current_checkpoint[0].time
+        duration = current_checkpoint[2]
+        end_time = start_time + duration
+
+        if self.time >= end_time:
+            self.finish_animations(animations)
+            self.post_play()
+            if self.current_checkpoint + 1 < len(self.checkpoints):
+                self.current_checkpoint += 1
+                next_checkpoint = self.checkpoints[self.current_checkpoint]
+                self.restore_state(next_checkpoint[0])
+                
+                # Sincronizar reloj para el nuevo checkpoint
+                self.virtual_animation_start_time = self.time
+                self.real_animation_start_time = time.time()
+            else:
+                self.current_checkpoint = None
+            return
+
+        for animation in animations:
+            animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
+            alpha = (self.time - start_time) / duration if duration > 0 else 1.0
+            animation.interpolate(float(np.clip(alpha, 0.0, 1.0)))
+
     def update_frame(self, dt: float = 0, force_draw: bool = False) -> None:
-        self.increment_time(dt)
-        self.update_mobjects(dt)
+        if not self.paused:
+            self.increment_time(dt)
+            self.progress_current_checkpoint(dt)
+            self.update_mobjects(dt)
         self.draw_frame(dt, force_draw)
 
     def draw_frame(self, dt: float = 0, force_draw: bool = False) -> None:
@@ -278,12 +317,15 @@ class Scene(object):
         )
 
     # Related to time
+    def get_max_time(self) -> float:
+        return self.max_time
 
     def get_time(self) -> float:
         return self.time
 
     def increment_time(self, dt: float) -> None:
         self.time += dt
+        self.max_time = max(self.max_time, self.time)
 
     # Related to internal mobject organization
 
@@ -545,9 +587,12 @@ class Scene(object):
                 self.add(animation.mobject)
                 all_mobjects = all_mobjects.union(family)
 
-    def progress_through_animations(self, animations: Iterable[Animation]) -> None:
+    def progress_through_animations(self, animations: Iterable[Animation]) -> bool:
         last_t = 0
         for t in self.get_animation_time_progression(animations):
+            if self.should_end_playing:
+                self.should_end_playing = False
+                return False
             dt = t - last_t
             last_t = t
             # The clock moves before anything else in the frame, so that time
@@ -562,6 +607,7 @@ class Scene(object):
             self.update_mobjects(dt)
             self.draw_frame(dt)
             self.emit_frame()
+        return True
 
     def finish_animations(self, animations: Iterable[Animation]) -> None:
         for animation in animations:
@@ -572,6 +618,55 @@ class Scene(object):
         # progress_through_animations
         self.update_mobjects(0)
 
+    def pause(self) -> None:
+        self.paused = True
+
+    def resume(self) -> None:
+        self.paused = False
+
+    def seek(self, t: float) -> None:
+        if t < 0:
+            t = 0.0
+        if t > self.max_time:
+            t = self.max_time
+
+        if self.current_checkpoint is None:
+            self.should_end_playing = True
+
+        idx = None
+        for i in range(len(self.checkpoints) - 1, -1, -1):
+            state = self.checkpoints[i][0]
+            if state.time <= t:
+                idx = i
+                break
+
+        if idx is None:
+            return
+
+        self.current_checkpoint = idx
+        state, animations, duration, _ = self.checkpoints[idx]
+
+        # 1. Restaurar estado de los mobjects al inicio del checkpoint
+        self.restore_state(state)
+
+        # 2. Interpolar al punto t deseado
+        if animations:
+            alpha = (t - state.time) / duration if duration > 0 else 1.0
+            alpha = float(np.clip(alpha, 0.0, 1.0))
+            for anim in animations:
+                anim.interpolate(alpha)
+
+        # 3. Asignar el nuevo tiempo
+        self.time = t
+        self.update_mobjects(t - state.time)
+
+        # 4. SINCRONIZACIÓN DE RELOJ: Re-anclar el tiempo virtual al real
+        self.virtual_animation_start_time = self.time
+        self.real_animation_start_time = time.time()
+
+        self.draw_frame(force_draw=True)
+        self.should_begin_animations = False
+
     @affects_mobject_list
     def play(
         self,
@@ -579,6 +674,7 @@ class Scene(object):
         run_time: float | None = None,
         rate_func: Callable[[float], float] | None = None,
         lag_ratio: float | None = None,
+        register: bool = True
     ) -> None:
         if len(proto_animations) == 0:
             log.warning("Called Scene.play with no animations")
@@ -588,7 +684,14 @@ class Scene(object):
             anim.update_rate_info(run_time, rate_func, lag_ratio)
         self.pre_play()
         self.begin_animations(animations)
-        self.progress_through_animations(animations)
+        if register:
+            self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), animations, run_time or self.get_run_time(animations), None))
+        no_interrupt = self.progress_through_animations(animations)
+        if not no_interrupt and register:
+            while self.current_checkpoint is not None:
+                self.update_frame(dt=1 / self.camera.fps)
+                self.emit_frame()
+            return
         self.finish_animations(animations)
         self.post_play()
 
@@ -597,7 +700,8 @@ class Scene(object):
         duration: Optional[float] = None,
         stop_condition: Callable[[], bool] = None,
         note: str = None,
-        ignore_presenter_mode: bool = False
+        ignore_presenter_mode: bool = False,
+        register: bool = True
     ):
         if duration is None:
             duration = self.default_wait_time
@@ -608,9 +712,17 @@ class Scene(object):
                 log.info(note)
             self.hold_loop()
         else:
+            if register:
+                self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), [], duration or self.default_wait_time, stop_condition))
             time_progression = self.get_wait_time_progression(duration, stop_condition)
             last_t = 0
             for t in time_progression:
+                if self.should_end_playing and register:
+                    self.should_end_playing = False
+                    while self.current_checkpoint is not None:
+                        self.update_frame(dt=1 / self.camera.fps)
+                        self.emit_frame()
+                    return
                 dt = t - last_t
                 last_t = t
                 self.update_frame(dt)
@@ -655,8 +767,8 @@ class Scene(object):
 
     # Helpers for interactive development
 
-    def get_state(self) -> SceneState:
-        return SceneState(self)
+    def get_state(self, ignore: list[str] | None = None) -> SceneState:
+        return SceneState(self, ignore=ignore)
 
     @affects_mobject_list
     def restore_state(self, scene_state: SceneState):
@@ -841,7 +953,7 @@ class Scene(object):
             return
 
         if char == manim_config.key_bindings.reset:
-            self.play(self.camera.frame.animate.to_default_state())
+            self.play(self.camera.frame.animate.to_default_state(), register=False)
         elif char == "z" and (modifiers & Mods.CTRL_OR_CMD):
             self.undo()
         elif char == "z" and (modifiers & (Mods.CTRL_OR_CMD | Mods.SHIFT)):
