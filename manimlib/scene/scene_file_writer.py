@@ -195,12 +195,23 @@ class SceneFileWriter(object):
         self.audio_time_offset = offset
 
     def replay_audio_from(self, scene_time: float) -> None:
-        """Replay sounds that occur at or after scene_time on the new output timeline."""
+        """Replay audio events from the requested scene time on the output timeline."""
         output_start = self.output_time
+
         for event_time, segment, gain_to_background in self.audio_events:
-            if event_time < scene_time:
+            # The event already finished before the seek.
+            if event_time + segment.duration_seconds <= scene_time:
                 continue
-            output_time = output_start + event_time - scene_time
+
+            # If the event started before the seek, discard the part that has
+            # already elapsed and play the remaining portion immediately.
+            if event_time < scene_time:
+                elapsed = scene_time - event_time
+                segment = segment[int(elapsed * 1000):]
+                output_time = output_start
+            else:
+                output_time = output_start + event_time - scene_time
+
             self.add_audio_segment(segment, output_time, gain_to_background)
 
     # Writers
