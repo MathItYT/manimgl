@@ -79,6 +79,7 @@ class SceneFileWriter(object):
         self.ended_with_interrupt: bool = False
         self.output_time: float = 0.0
         self.audio_time_offset: float = 0.0
+        self.audio_events: list[tuple[float, AudioSegment, float | None]] = []
 
         self.init_output_directories()
         self.init_audio()
@@ -181,6 +182,10 @@ class SceneFileWriter(object):
             new_segment = new_segment.apply_gain(gain)
         if time is not None:
             time -= self.audio_time_offset
+        scene_time = time
+        if scene_time is not None:
+            self.audio_events.append((scene_time, new_segment, gain_to_background))
+            time = scene_time - self.audio_time_offset
         self.add_audio_segment(new_segment, time, gain_to_background)
 
     def get_output_time(self) -> float:
@@ -188,6 +193,15 @@ class SceneFileWriter(object):
 
     def set_audio_time_offset(self, offset: float) -> None:
         self.audio_time_offset = offset
+
+    def replay_audio_from(self, scene_time: float) -> None:
+        """Replay sounds that occur at or after scene_time on the new output timeline."""
+        output_start = self.output_time
+        for event_time, segment, gain_to_background in self.audio_events:
+            if event_time < scene_time:
+                continue
+            output_time = output_start + event_time - scene_time
+            self.add_audio_segment(segment, output_time, gain_to_background)
 
     # Writers
     def begin(self) -> None:
