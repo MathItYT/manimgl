@@ -35,3 +35,4 @@ def play_sound(sound_file: str) -> subprocess.Popen:
             ["aplay", full_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
+
