@@ -669,9 +669,9 @@ class Scene(object):
         # differ, so keep audio events aligned with the frame currently being
         # rendered rather than with the absolute scene time.
         if self.window is None:
-            self.file_writer.set_audio_time_offset(
-                self.time - self.file_writer.get_output_time()
-            )
+            output_time = self.file_writer.get_output_time()
+            self.file_writer.set_audio_time_offset(self.time - output_time)
+            self.file_writer.replay_audio_from(self.time)
 
         self.draw_frame(force_draw=True)
         self.should_begin_animations = False
