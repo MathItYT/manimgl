@@ -164,6 +164,8 @@ class Scene(object):
         self._seeking = False
         self._replay_after_seek = False
         self._execution_generation = 0
+        self._pending_seek_time = None
+        self._active_playback = False
         self.original_skipping_status: bool = self.skip_animations
         self.undo_stack = []
         self.redo_stack = []
@@ -703,9 +705,12 @@ class Scene(object):
 
         self.pre_play()
         self.begin_animations(animations)
+        self._active_playback = True
         completed = self.progress_through_animations(animations)
+        self._active_playback = False
         if not completed:
             self.file_writer.end_animation()
+            self._apply_pending_seek()
             return
         self.finish_animations(animations)
         self.post_play()
@@ -941,6 +946,7 @@ class Scene(object):
 
         self.pre_play()
         self.update_mobjects(dt=0)  # Any problems with this?
+        self._active_playback = True
         if self.presenter_mode and not self.skip_animations and not ignore_presenter_mode:
             if note:
                 log.info(note)
@@ -955,11 +961,15 @@ class Scene(object):
                 self.update_frame(dt)
                 self.emit_frame()
                 if generation != self._execution_generation:
+                    self._active_playback = False
                     self.file_writer.end_animation()
+                    self._apply_pending_seek()
                     return
                 if stop_condition is not None and stop_condition():
                     break
+        self._active_playback = False
         self.post_play()
+        self._apply_pending_seek()
 
         if self.time > t_start:
             self.timeline.append(
@@ -1124,6 +1134,13 @@ class Scene(object):
             if event.time <= target_time + 1e-9 and source_offset < duration:
                 self._seek_audio_events.append((event, source_offset))
 
+    def _apply_pending_seek(self) -> None:
+        target_time = self._pending_seek_time
+        if target_time is None:
+            return
+        self._pending_seek_time = None
+        self.seek_to(target_time)
+
     def seek_to(self, target_time: float) -> None:
         """Restore and evaluate the timeline at an absolute time.
 
@@ -1138,6 +1155,11 @@ class Scene(object):
 
         previous_time = self.time
         if target_time == previous_time:
+            return
+
+        if not self._seeking and self._active_playback:
+            self._pending_seek_time = target_time
+            self._execution_generation += 1
             return
 
         # A seek issued by the window event handler must invalidate the
