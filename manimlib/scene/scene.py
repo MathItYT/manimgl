@@ -78,6 +78,10 @@ class TimelineEvent:
         return self.animations[0] if self.animations else None
 
 
+class _SeekDuringConstruct(Exception):
+    """Abort construct() so the post-seek timeline can take over."""
+
+
 class Scene(object):
     random_seed: int = 0
     pan_sensitivity: float = 0.5
@@ -200,6 +204,8 @@ class Scene(object):
         self.setup()
         try:
             self.construct()
+            self.interact()
+        except _SeekDuringConstruct:
             self.interact()
         except EndScene:
             pass
@@ -711,7 +717,7 @@ class Scene(object):
         if not completed:
             self.file_writer.end_animation()
             self._apply_pending_seek()
-            return
+            raise _SeekDuringConstruct
         self.finish_animations(animations)
         self.post_play()
 
@@ -964,7 +970,7 @@ class Scene(object):
                     self._active_playback = False
                     self.file_writer.end_animation()
                     self._apply_pending_seek()
-                    return
+                    raise _SeekDuringConstruct
                 if stop_condition is not None and stop_condition():
                     break
         self._active_playback = False
