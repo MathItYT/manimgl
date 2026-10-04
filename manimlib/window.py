@@ -215,6 +215,12 @@ class Window(object):
         Draws the finished frame onto what the surface gave us, stretched to fill it, see
         shaders/present.wgsl. A pass of its own, the two textures differing in size and format.
         """
+        # rendercanvas may invoke draw independently of Scene.show(). During a seek
+        # triggered from a window callback there can be a draw between frames, so
+        # there is legitimately no scene texture to bind yet.
+        if self.frame_view is None:
+            return
+
         bind_group = self.device.create_bind_group(layout=self.present_layout, entries=[
             {"binding": 0, "resource": self.frame_view},
             {"binding": 1, "resource": self.present_sampler},
