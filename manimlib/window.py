@@ -432,4 +432,7 @@ if sys.platform == "emscripten":
         window = await Window.create_for_pyodide(canvas_id)
         scene = scene_class(window=window)
         scene.run()
+        # construct() has now populated the checkpoint timeline. Playback is
+        # deliberately asynchronous so the browser can service RAF/DOM events.
+        await scene.browser_playback_loop()
         return scene
