@@ -12,6 +12,12 @@ class BrowserWasmRequestHandler(http.server.SimpleHTTPRequestHandler):
     """Static server with headers required by threaded browser WASM."""
 
     def end_headers(self) -> None:
+        # Development server: never let the browser cache Pyodide/WASM
+        # assets or generated wheels. These resources keep the same URL
+        # while their contents change during development.
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
@@ -45,6 +51,7 @@ def main() -> None:
 
     print(f"Serving {directory}")
     print(f"http://{args.host}:{args.port}/pyodide_manim.html")
+    print("Cache-Control: no-store")
     print("Cross-Origin-Opener-Policy: same-origin")
     print("Cross-Origin-Embedder-Policy: require-corp")
 
