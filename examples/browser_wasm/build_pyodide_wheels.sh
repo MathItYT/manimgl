@@ -65,9 +65,9 @@ PY
 }
 
 echo "==> Building ManimGL wheel"
-rm -rf "$ROOT/build" "$ROOT"/manimgl.egg-info "$ROOT"/src/manimgl.egg-info
-rm -f "$OUT"/manimgl-*.whl
-rm -f "$OUT"/manimgl-*.whl
+rm -rf -- "$ROOT/build" "$ROOT/manimgl.egg-info" "$ROOT/src/manimgl.egg-info"
+find "$OUT" -maxdepth 1 -type f -name "manimgl-*.whl" -delete
+find "$OUT" -maxdepth 1 -type f -name "manimgl-*.whl" -delete
 SETUP_CFG_BACKUP="$CACHE/setup.cfg.pyodide-wheel-backup"
 cp "$ROOT/setup.cfg" "$SETUP_CFG_BACKUP"
 trap 'cp "$SETUP_CFG_BACKUP" "$ROOT/setup.cfg"; rm -f "$SETUP_CFG_BACKUP"' EXIT
@@ -88,7 +88,7 @@ git -C "$WGPU_DIR" checkout "$WGPU_REF"
 git -C "$WGPU_DIR" reset --hard "origin/$WGPU_REF"
 
 echo "==> Building browser wgpu wheel"
-rm -f "$OUT"/wgpu-*.whl
+find "$OUT" -maxdepth 1 -type f -name "wgpu-*.whl" -delete
 WGPU_VERSION_FILE="$WGPU_DIR/wgpu/_version.py"
 WGPU_VERSION_BACKUP="$CACHE/wgpu-version.pyodide-wheel-backup"
 cp "$WGPU_VERSION_FILE" "$WGPU_VERSION_BACKUP"
@@ -97,7 +97,7 @@ sed -i -E "s/^__version__ = .*/__version__ = \"$WGPU_VERSION\"/" "$WGPU_VERSION_
 
 (
     cd "$WGPU_DIR"
-    rm -rf build wgpu.egg-info\n    WGPU_PY_BUILD_NOARCH=1 python -m pip wheel . --no-deps --no-cache-dir --wheel-dir "$OUT"
+    rm -rf -- build wgpu.egg-info\n    WGPU_PY_BUILD_NOARCH=1 python -m pip wheel . --no-deps --no-cache-dir --wheel-dir "$OUT"
 )
 
 WGPU_WHEEL="$(find "$OUT" -maxdepth 1 -type f -name 'wgpu-*.whl' -print -quit)"
