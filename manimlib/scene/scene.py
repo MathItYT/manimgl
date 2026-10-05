@@ -36,6 +36,9 @@ from manimlib.utils.family_ops import extract_mobject_family_members
 from manimlib.utils.family_ops import recursive_mobject_remove
 from manimlib.utils.sounds import play_sound
 from manimlib.utils.sounds import get_full_sound_file_path
+
+if sys.platform == "emscripten":
+    from manimlib.utils.browser_audio import browser_audio
 from manimlib.utils.color import color_to_rgba
 from manimlib.window import Window
 
@@ -711,6 +714,8 @@ class Scene(object):
             output_time = self.file_writer.get_output_time()
             self.file_writer.set_audio_time_offset(self.time - output_time)
             self.file_writer.replay_audio_from(self.time)
+        elif sys.platform == "emscripten":
+            browser_audio.seek(self.time, self._interactive_sound_events)
         else:
             self.replay_interactive_sounds(self.time)
 
@@ -815,15 +820,42 @@ class Scene(object):
 
         if self.window is not None:
             event_time = self.get_time() + time_offset
-            from pydub import AudioSegment
-            duration = len(AudioSegment.from_file(get_full_sound_file_path(sound_file))) / 1000.0
-            self._interactive_sound_events.append((event_time, sound_file, duration))
-            process = play_sound(sound_file)
-            self._active_sound_processes.append(process)
+            if sys.platform == "emscripten":
+                self._interactive_sound_events.append((event_time, sound_file, 0.0))
+                browser_audio.register(sound_file)
+                browser_audio.play(sound_file, 0.0)
+            else:
+                from pydub import AudioSegment
+                duration = len(AudioSegment.from_file(get_full_sound_file_path(sound_file))) / 1000.0
+                self._interactive_sound_events.append((event_time, sound_file, duration))
+                process = play_sound(sound_file)
+                self._active_sound_processes.append(process)
             return
 
         time = self.get_time() + time_offset
         self.file_writer.add_sound(sound_file, time, gain, gain_to_background)
+
+    async def browser_playback_loop(self, repeat: bool = False) -> None:
+        """Replay the checkpoint timeline without blocking the browser."""
+        if sys.platform != "emscripten":
+            raise RuntimeError("browser_playback_loop() is only available in Pyodide")
+        import asyncio
+        import time as _time
+        frame_duration = 1.0 / float(self.camera.fps)
+        while not self.is_window_closing():
+            self.seek(0.0)
+            browser_audio.play_from(0.0, self._interactive_sound_events)
+            started_at = _time.perf_counter()
+            while not self.is_window_closing():
+                await asyncio.sleep(frame_duration)
+                elapsed = _time.perf_counter() - started_at
+                if elapsed >= self.max_time:
+                    self.seek(self.max_time)
+                    break
+                self.seek(elapsed)
+            if not repeat:
+                break
+        browser_audio.stop_all()
 
     # Helpers for interactive development
 
