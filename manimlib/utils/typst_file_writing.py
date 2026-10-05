@@ -1,4 +1,5 @@
 import os
+import sys
 from functools import lru_cache
 import xml.etree.ElementTree as ET
 from manimlib.utils.directories import get_cache_dir
@@ -153,6 +154,11 @@ def flatten_typst_svg(svg_path: str) -> None:
 
 @lru_cache()
 def typst_to_svg(content: str) -> str:
+    if sys.platform == "emscripten":
+        raise RuntimeError(
+            "typst_to_svg() is asynchronous in Pyodide. Use "
+            "await typst_to_svg_async() or await Typst.create(...)."
+        )
     try:
         import typst
         return typst.compile(content.encode(), format="svg")
