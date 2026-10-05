@@ -196,18 +196,20 @@ export async function initializePangoText() {
     const path = `/fonts/${++fontCounter.value}-${safeName}`;
     Module.FS.mkdirTree("/fonts");
     Module.FS.writeFile(path, bytes);
-    const ok = Module.ccall(
+    const ptr = Module.ccall(
       "manim_pango_register_font",
       "number",
       ["string"],
       [path],
     );
-    if (!ok) {
+    if (!ptr) {
       try { Module.FS.unlink(path); } catch (_) {}
       throw new Error(`PangoCairo could not register font: ${fileName}`);
     }
 
-    return { name: fileName, path };
+    const family = Module.UTF8ToString(ptr);
+    Module.ccall("manim_pango_free", null, ["number"], [ptr]);
+    return { name: fileName, family, path };
   }
 
   window.PangoTextWasm = {
