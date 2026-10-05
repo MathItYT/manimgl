@@ -789,6 +789,85 @@ class Scene(object):
         self.finish_animations(animations)
         self.post_play()
 
+    async def _browser_frame(self) -> None:
+        """Yield to the browser so the canvas can present the current frame."""
+        if sys.platform != "emscripten":
+            return
+        from manimlib.utils.browser_scheduler import next_animation_frame
+        await next_animation_frame()
+
+    async def play_async(
+        self,
+        *proto_animations: Animation | _AnimationBuilder,
+        run_time: float | None = None,
+        rate_func: Callable[[float], float] | None = None,
+        lag_ratio: float | None = None,
+        register: bool = True,
+    ) -> None:
+        """Play an animation without blocking the browser event loop."""
+        if sys.platform != "emscripten":
+            return self.play(*proto_animations, run_time=run_time, rate_func=rate_func,
+                             lag_ratio=lag_ratio, register=register)
+        if not proto_animations:
+            log.warning("Called Scene.play_async with no animations")
+            return
+        animations = list(map(prepare_animation, proto_animations))
+        for anim in animations:
+            anim.update_rate_info(run_time, rate_func, lag_ratio)
+        self.pre_play()
+        self.begin_animations(animations)
+        duration = run_time or self.get_run_time(animations)
+        if register:
+            self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), animations, duration, None))
+        last_t = 0.0
+        fps = self.camera.fps
+        for t in np.arange(0, duration, 1 / fps) + 1 / fps:
+            if self.should_end_playing:
+                self.should_end_playing = False
+                break
+            dt = float(t - last_t)
+            last_t = float(t)
+            self.increment_time(dt)
+            for animation in animations:
+                animation.update_reference_mobjects(dt, frame_rate=fps)
+                animation.interpolate(float(t) / animation.run_time)
+            self.update_mobjects(dt)
+            self.draw_frame(dt, force_draw=True)
+            self.emit_frame()
+            await self._browser_frame()
+        self.finish_animations(animations)
+        self.post_play()
+
+    async def wait_async(
+        self,
+        duration: float | None = None,
+        register: bool = True,
+    ) -> None:
+        """Wait while yielding frames to requestAnimationFrame in the browser."""
+        if sys.platform != "emscripten":
+            return self.wait(duration=duration, register=register)
+        duration = self.default_wait_time if duration is None else duration
+        self.pre_play()
+        self.update_mobjects(0)
+        if register:
+            self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), [], duration, None))
+        last_t = 0.0
+        for t in np.arange(0, duration, 1 / self.camera.fps) + 1 / self.camera.fps:
+            dt = float(t - last_t)
+            last_t = float(t)
+            self.update_frame(dt, force_draw=True)
+            self.emit_frame()
+            await self._browser_frame()
+        self.post_play()
+
+    async def browser_present(self) -> None:
+        """Present the current scene frame and yield once to the browser."""
+        if sys.platform != "emscripten":
+            self.update_frame(force_draw=True)
+            return
+        self.update_frame(force_draw=True)
+        await self._browser_frame()
+
     def wait(
         self,
         duration: Optional[float] = None,
