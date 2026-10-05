@@ -821,9 +821,10 @@ class Scene(object):
         if self.window is not None:
             event_time = self.get_time() + time_offset
             if sys.platform == "emscripten":
+                # Audio is only registered during the pre-render pass. Actual playback
+                # starts after seek(0) when the asynchronous browser loop begins.
                 self._interactive_sound_events.append((event_time, sound_file, 0.0))
                 browser_audio.register(sound_file)
-                browser_audio.play(sound_file, 0.0)
             else:
                 from pydub import AudioSegment
                 duration = len(AudioSegment.from_file(get_full_sound_file_path(sound_file))) / 1000.0
