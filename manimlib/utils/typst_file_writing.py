@@ -152,11 +152,15 @@ def flatten_typst_svg(svg_path: str) -> None:
     tree.write(svg_path, encoding="utf-8", xml_declaration=True)
 
 
-@lru_cache()
 def typst_to_svg(content: str):
     if sys.platform == "emscripten":
         from manimlib.utils.browser_typst import typst_to_svg_async
         return typst_to_svg_async(content)
+    return _native_typst_to_svg(content)
+
+
+@lru_cache()
+def _native_typst_to_svg(content: str):
     try:
         import typst
         return typst.compile(content.encode(), format="svg")
