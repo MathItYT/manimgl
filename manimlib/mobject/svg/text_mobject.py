@@ -243,14 +243,17 @@ class MarkupText(StringMobject):
         if sys.platform != "emscripten":
             return cls(text, **kwargs)
         probe = cls(text, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>', **kwargs)
+        content = probe.get_content(probe.use_labelled_svg)
         svg = await markup_to_svg_async(
-            probe.get_content(probe.use_labelled_svg),
+            content,
             justify=probe.justify,
             indent=probe.indent,
             alignment=probe.alignment,
             line_width=probe.line_width,
         )
-        return cls(text, _svg_override=svg, **kwargs)
+        obj = cls(text, _svg_override=svg, **kwargs)
+        obj.content = content
+        return obj
 
     # Toolkits
 
