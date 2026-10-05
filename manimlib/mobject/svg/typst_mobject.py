@@ -102,14 +102,29 @@ class SingleStringTypst(StringMobject):
         # First build a lightweight parser instance to obtain the exact Typst source,
         # including Manim's color labels and document preamble. The actual geometry is
         # then constructed from the SVG returned by typst-wasm.
-        probe = cls(typst_string, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>', **kwargs)
-        content = probe.get_content(probe.use_labelled_svg)
+        # The StringMobject constructor normally renders a second, labelled
+        # SVG for span matching. That path is synchronous, while browser
+        # Typst compilation is asynchronous. Build the labelled document
+        # directly and tell the final object to use it, so no synchronous
+        # Typst compilation is attempted inside __init__.
+        probe = cls(
+            typst_string,
+            _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>',
+            use_labelled_svg=True,
+            **kwargs,
+        )
+        content = probe.get_content(is_labelled=True)
         svg = await typst_to_svg_async(content)
         if not isinstance(svg, str):
             raise TypeError(
                 f"Browser Typst compiler returned {type(svg).__name__}; expected SVG text."
             )
-        return cls(typst_string, _svg_override=svg, **kwargs)
+        return cls(
+            typst_string,
+            _svg_override=svg,
+            use_labelled_svg=True,
+            **kwargs,
+        )
 
     def _build_char_to_submob_map(self) -> list[list[int]]:
         mapping: list[list[int]] = [[] for _ in range(len(self.string))]
