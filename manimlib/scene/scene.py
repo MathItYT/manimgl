@@ -6,6 +6,7 @@ import random
 import time
 import subprocess
 import sys
+import inspect
 from functools import wraps
 from contextlib import contextmanager
 from contextlib import ExitStack
@@ -28,8 +29,9 @@ from manimlib.mobject.mobject import Mobject
 from manimlib.mobject.mobject import Point
 from manimlib.mobject.types.vectorized_mobject import VGroup
 from manimlib.mobject.types.vectorized_mobject import VMobject
-from manimlib.scene.scene_embed import InteractiveSceneEmbed
-from manimlib.scene.scene_embed import CheckpointManager
+if sys.platform != "emscripten":
+    from manimlib.scene.scene_embed import InteractiveSceneEmbed
+    from manimlib.scene.scene_embed import CheckpointManager
 from manimlib.scene.scene_file_writer import SceneFileWriter
 from manimlib.utils.dict_ops import merge_dicts_recursively
 from manimlib.utils.family_ops import extract_mobject_family_members
@@ -163,30 +165,50 @@ class Scene(object):
         return self.window
 
     def run(self) -> None:
-        self.virtual_animation_start_time: float = 0
-        self.real_animation_start_time: float = time.time()
-        self.file_writer.begin()
+        """Run the scene on native platforms; build it on Pyodide."""
+        if sys.platform == "emscripten":
+            self.build()
+            return
+        self.build()
+        self.playback()
 
+    def build(self):
+        """Construct the scene and prepare its timeline without entering playback."""
+        self.virtual_animation_start_time = 0
+        self.real_animation_start_time = time.time()
+        self.file_writer.begin()
         self.setup()
         try:
-            self.construct()
-            self.interact()
+            result = self.construct()
+            if inspect.isawaitable(result):
+                raise RuntimeError(
+                    "An async construct() must be awaited by the browser scene runner"
+                )
         except EndScene:
             pass
         except KeyboardInterrupt:
-            # Get rid keyboard interupt symbols
-            print("", end="\r")
+            print("", end="\\r")
             self.file_writer.ended_with_interrupt = True
-
         if sys.platform == "emscripten":
-            # The browser owns the event loop and the Window must remain alive so its
-            # rendercanvas handlers can continue delivering DOM events to this scene.
             self.stop_sound_processes()
             self.stop_skipping()
             self.file_writer.finish()
-            return
+            self.seek(0.0, sync_audio=False)
+            return self
+        return self
 
-        self.tear_down()
+    def playback(self) -> None:
+        if sys.platform == "emscripten":
+            raise RuntimeError("Use await scene.playback_async() in Pyodide")
+        try:
+            self.interact()
+        finally:
+            self.tear_down()
+
+    async def playback_async(self, repeat: bool = False) -> None:
+        if sys.platform != "emscripten":
+            raise RuntimeError("playback_async() is only available in Pyodide")
+        await self.browser_playback_loop(repeat=repeat)
 
     def setup(self) -> None:
         """
