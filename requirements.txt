@@ -1,7 +1,7 @@
 addict
 appdirs
 audioop-lts; python_version>='3.13'
-av
+av; sys_platform != "emscripten"
 colour
 diskcache
 ipython>=8.18.0
