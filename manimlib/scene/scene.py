@@ -5,6 +5,7 @@ import platform
 import random
 import time
 import subprocess
+import sys
 from functools import wraps
 from contextlib import contextmanager
 from contextlib import ExitStack
@@ -219,6 +220,10 @@ class Scene(object):
         pulling whatever events the window has to report
         """
         if self.window is None:
+            return
+        # In the browser, rendercanvas owns the event loop. Blocking here with a
+        # Python while-loop would prevent requestAnimationFrame and DOM events from running.
+        if sys.platform == "emscripten":
             return
         log.info(
             "\nTips: Using the keys `d`, `f`, or `z` " +
