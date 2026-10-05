@@ -3,9 +3,12 @@ from __future__ import annotations
 from collections import OrderedDict
 from fractions import Fraction
 import platform
-import threading
-
-import av
+if __import__('sys').platform != 'emscripten':
+    import threading
+    import av
+else:
+    threading = None
+    av = None
 import numpy as np
 from PIL import Image
 
@@ -179,6 +182,11 @@ class VideoSource(object):
     # ======================================================================
 
     def _init_file(self, preload: bool | None) -> None:
+        if av is None:
+            raise RuntimeError(
+                "VideoMobject file decoding via PyAV/FFmpeg is not available in Pyodide. "
+                "Use a browser HTMLVideoElement-backed video source instead."
+            )
         self.container = av.open(self.path)
         self.stream = self.container.streams.video[0]
         self.stream.thread_type = "AUTO"
@@ -221,6 +229,8 @@ class VideoSource(object):
         All blocking frame acquisition occurs exclusively on the capture
         thread.
         """
+        if av is None or threading is None:
+            raise RuntimeError("Live VideoMobject capture is native-only; browser capture must use MediaDevices.")
         if device_format is None:
             device_format = DEFAULT_DEVICE_FORMATS.get(
                 platform.system()
