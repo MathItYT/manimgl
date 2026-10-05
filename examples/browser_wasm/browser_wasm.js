@@ -25,6 +25,10 @@ export async function initializeBrowserWasm(options = {}) {
     options.typstModule ||
     "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist/index.js"
   );
+  const typstWorkerModule = await import(
+    options.typstWorkerModule ||
+    "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist/worker/browser.js"
+  );
 
   if (!window.manimTypstCompiler) {
     const workerUrl = options.typstWorkerUrl ||
@@ -44,7 +48,7 @@ export async function initializeBrowserWasm(options = {}) {
       ),
     };
 
-    const worker = () => typstModule.createWebWorker(workerUrl);
+    const worker = () => typstWorkerModule.createWebWorker(workerUrl);
     window.manimTypstCompiler = await typstModule.createTypstCompiler({
       backend: "worker",
       worker,
