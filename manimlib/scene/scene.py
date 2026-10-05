@@ -890,6 +890,7 @@ class Scene(object):
                     self.seek(self.max_time, sync_audio=False)
                     break
                 self.seek(elapsed, sync_audio=False)
+                browser_audio.sync(elapsed, self._interactive_sound_events)
             if not repeat:
                 break
         browser_audio.stop_all()
