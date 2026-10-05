@@ -7,7 +7,9 @@ import re
 import tempfile
 from functools import lru_cache
 
-import manimpango
+import sys
+if sys.platform != "emscripten":
+    import manimpango
 import pygments
 import pygments.formatters
 import pygments.lexers
@@ -59,6 +61,9 @@ def markup_to_svg(
     alignment: str = "CENTER",
     line_width: float | None = None,
 ) -> str:
+    if sys.platform == "emscripten":
+        raise RuntimeError("markup_to_svg() is asynchronous in Pyodide; use await Text.create(...)")
+
     validate_error = manimpango.MarkupUtils.validate(markup_str)
     if validate_error:
         raise ValueError(
@@ -100,6 +105,20 @@ def markup_to_svg(
     return result
 
 
+async def markup_to_svg_async(markup_str: str, justify: bool = False, indent: float = 0, alignment: str = "CENTER", line_width: float | None = None) -> str:
+    if sys.platform != "emscripten":
+        return markup_to_svg(markup_str, justify, indent, alignment, line_width)
+    from js import window
+    result = await window.manimPangoTextToSvg(
+        markup_str,
+        justify,
+        indent,
+        alignment,
+        -1 if line_width is None else line_width / FRAME_WIDTH * DEFAULT_PIXEL_WIDTH,
+    )
+    return str(result)
+
+
 @lru_cache(maxsize=1)
 def get_text_mob_scale_factor() -> float:
     # Render a reference "0" and calibrate so that font_size_for_unit_height
@@ -107,6 +126,8 @@ def get_text_mob_scale_factor() -> float:
     ref_size = 48
     font_size_for_unit_height = manim_config.text.font_size_for_unit_height
     pango_size = str(round(ref_size * 1024))
+    if sys.platform == "emscripten":
+        return 1.0
     svg_string = markup_to_svg(f'<span font_size="{pango_size}">0</span>')
     svg_height = get_svg_content_height(svg_string)
     return ref_size / (font_size_for_unit_height * svg_height)
@@ -200,7 +221,12 @@ class MarkupText(StringMobject):
         if self.t2c:
             self.set_color_by_text_to_color_map(self.t2c)
         if height is None:
-            self.scale(get_text_mob_scale_factor())
+            if sys.platform == "emscripten":
+                svg_height = get_svg_content_height(self.svg_string)
+                if svg_height > 0:
+                    self.scale(self.font_size / (48.0 * svg_height))
+            else:
+                self.scale(get_text_mob_scale_factor())
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
@@ -211,6 +237,20 @@ class MarkupText(StringMobject):
             alignment=self.alignment,
             line_width=self.line_width
         )
+
+    @classmethod
+    async def create(cls, text: str, **kwargs):
+        if sys.platform != "emscripten":
+            return cls(text, **kwargs)
+        probe = cls(text, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>', **kwargs)
+        svg = await markup_to_svg_async(
+            probe.content,
+            justify=probe.justify,
+            indent=probe.indent,
+            alignment=probe.alignment,
+            line_width=probe.line_width,
+        )
+        return cls(text, _svg_override=svg, **kwargs)
 
     # Toolkits
 
