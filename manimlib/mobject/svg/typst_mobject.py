@@ -105,6 +105,10 @@ class SingleStringTypst(StringMobject):
         probe = cls(typst_string, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>', **kwargs)
         content = probe.get_content(probe.use_labelled_svg)
         svg = await typst_to_svg_async(content)
+        if not isinstance(svg, str):
+            raise TypeError(
+                f"Browser Typst compiler returned {type(svg).__name__}; expected SVG text."
+            )
         return cls(typst_string, _svg_override=svg, **kwargs)
 
     def _build_char_to_submob_map(self) -> list[list[int]]:
