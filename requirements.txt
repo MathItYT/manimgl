@@ -28,4 +28,4 @@ trimesh
 tqdm
 typing-extensions; python_version < "3.11"
 validators
-wgpu
+wgpu @ git+https://github.com/MathItYT/wgpu-py.git@feature/pyodide-webgpu-backend
