@@ -57,12 +57,12 @@ char *manim_pango_register_font(const char *path) {
 
     configure_browser_fontconfig();
 
-    FcConfig *config = FcConfigGetCurrent();
-    if (!config) {
-        config = FcInitLoadConfigAndFonts();
-        if (!config) return NULL;
-        FcConfigSetCurrent(config);
-    }
+    // FcConfigGetCurrent() may have initialized Fontconfig before the
+    // browser-specific environment variables were installed. Always load
+    // the embedded browser config explicitly and make it the current config.
+    FcConfig *config = FcInitLoadConfigAndFonts();
+    if (!config) return NULL;
+    FcConfigSetCurrent(config);
 
     if (!FcConfigAppFontAddFile(config, (const FcChar8 *)path)) {
         return NULL;
