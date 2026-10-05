@@ -28,11 +28,15 @@
     try {
       setStatus("Loading browser WASM backends…");
       await initializeBrowserWasm();
-      try {
-        const pango = await import("./browser_wasm/dist/pango_text_loader.js");
-        await pango.initializePangoText();
-      } catch (error) {
-        console.warn("PangoCairo WASM is not built; Text.create() will fail.", error);
+      const pango = await import("./browser_wasm/dist/pango_text_loader.js");
+      if (typeof pango.initializePangoText !== "function") {
+        throw new Error("PangoCairo loader does not export initializePangoText()");
+      }
+      await pango.initializePangoText();
+      if (typeof window.manimPangoTextToSvg !== "function") {
+        throw new Error(
+          "PangoCairo WASM initialized, but window.manimPangoTextToSvg was not installed",
+        );
       }
 
       setStatus("Loading Pyodide…");
