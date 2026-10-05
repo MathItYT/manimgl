@@ -332,7 +332,8 @@ class Scene(object):
         if self.window and not self.skip_animations:
             vt = self.time - self.virtual_animation_start_time
             rt = time.time() - self.real_animation_start_time
-            time.sleep(max(vt - rt, 0))
+            if sys.platform != "emscripten":
+                time.sleep(max(vt - rt, 0))
 
     def emit_frame(self) -> None:
         if not self.skip_animations:
