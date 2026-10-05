@@ -62,13 +62,11 @@ def _native_convert_skia_path_to_vmobject(path: pathops.Path, vmobject: VMobject
     return vmobject.reverse_points()
 
 
-def _browser_boolean(vmobject: VMobject, others: list[VMobject], operation: str) -> VMobject:
+def _browser_boolean(target: VMobject, vmobjects: list[VMobject], operation: str) -> VMobject:
     from manimlib.mobject.svg.svg_mobject import SVGMobject
     from manimlib.utils.browser_pathops import browser_pathops
 
-    svg_paths = [_convert_vmobject_to_svg_path(vmobject), *(
-        _convert_vmobject_to_svg_path(other) for other in others
-    )]
+    svg_paths = [_convert_vmobject_to_svg_path(mob) for mob in vmobjects]
     d = browser_pathops.combine(svg_paths, operation)
     result = SVGMobject(svg_string=f'<svg xmlns="http://www.w3.org/2000/svg"><path d="{d}"/></svg>')
     vmobject.become(result)
@@ -93,7 +91,7 @@ class Difference(VMobject):
     def __init__(self, subject: VMobject, clip: VMobject, **kwargs):
         super().__init__(**kwargs)
         if sys.platform == "emscripten":
-            _browser_boolean(self, [clip], "DIFFERENCE")
+            _browser_boolean(self, [subject, clip], "DIFFERENCE")
             return
         outpen = pathops.Path()
         pathops.difference([_native_convert_vmobject_to_skia_path(subject)], [_native_convert_vmobject_to_skia_path(clip)], outpen.getPen())
@@ -106,7 +104,7 @@ class Intersection(VMobject):
             raise ValueError("At least 2 mobjects needed for Intersection.")
         super().__init__(**kwargs)
         if sys.platform == "emscripten":
-            _browser_boolean(self, list(vmobjects[1:]), "INTERSECT")
+            _browser_boolean(self, list(vmobjects), "INTERSECT")
             return
         outpen = pathops.Path()
         pathops.intersection([_native_convert_vmobject_to_skia_path(vmobjects[0])], [_native_convert_vmobject_to_skia_path(vmobjects[1])], outpen.getPen())
@@ -123,7 +121,7 @@ class Exclusion(VMobject):
             raise ValueError("At least 2 mobjects needed for Exclusion.")
         super().__init__(**kwargs)
         if sys.platform == "emscripten":
-            _browser_boolean(self, list(vmobjects[1:]), "XOR")
+            _browser_boolean(self, list(vmobjects), "XOR")
             return
         outpen = pathops.Path()
         pathops.xor([_native_convert_vmobject_to_skia_path(vmobjects[0])], [_native_convert_vmobject_to_skia_path(vmobjects[1])], outpen.getPen())
