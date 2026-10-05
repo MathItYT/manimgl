@@ -40,7 +40,7 @@ char *manim_pango_text_to_svg(
 
     SvgBuffer buffer = {0};
     cairo_surface_t *surface = cairo_svg_surface_create_for_stream(
-        write_svg, &buffer, 1.0, 1.0
+        write_svg, &buffer, 16384.0, 16384.0
     );
     cairo_t *cr = cairo_create(surface);
     PangoLayout *layout = pango_cairo_create_layout(cr);
