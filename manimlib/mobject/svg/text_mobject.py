@@ -394,7 +394,12 @@ class MarkupText(StringMobject):
             "font_size": str(round(self.font_size * 1024)),
         }
         # `line_height` attribute is supported since Pango 1.50.
-        pango_version = manimpango.pango_version()
+        if sys.platform == "emscripten":
+            # The browser PangoCairo WASM build supports the modern markup
+            # attributes used below. Avoid importing native manimpango.
+            pango_version = "1.50.0"
+        else:
+            pango_version = manimpango.pango_version()
         if tuple(map(int, pango_version.split("."))) < (1, 50):
             if self.lsh is not None:
                 log.warning(
