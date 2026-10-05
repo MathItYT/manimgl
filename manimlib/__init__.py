@@ -1,3 +1,5 @@
+import sys
+
 try:
     from importlib.metadata import version, PackageNotFoundError
 except ImportError:  # For Python <3.8 fallback
@@ -19,6 +21,10 @@ if TYPE_CHECKING:
 from manimlib.constants import *
 
 from manimlib.window import *
+
+# The browser-only scene runner is intentionally absent on native platforms.
+if sys.platform == "emscripten":
+    from manimlib.window import run_scene_from_class
 
 from manimlib.animation.animation import *
 from manimlib.animation.composition import *
