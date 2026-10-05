@@ -109,9 +109,16 @@ class Gpu(object):
     a scene reloaded into a new device leaves the old one's behind with it.
     """
 
-    def __init__(self):
-        self.adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
-        self.device = self.adapter.request_device_sync()
+    def __init__(self, adapter=None, device=None):
+        # Native backends acquire the device synchronously. Pyodide cannot block the
+        # browser event loop, so Window acquires adapter/device asynchronously and passes
+        # them here.
+        self.adapter = adapter
+        self.device = device
+        if self.adapter is None:
+            self.adapter = wgpu.gpu.request_adapter_sync(power_preference="high-performance")
+        if self.device is None:
+            self.device = self.adapter.request_device_sync()
         self.queue = self.device.queue
 
         self.frame_uniforms = Uniforms(FRAME_DTYPE)
