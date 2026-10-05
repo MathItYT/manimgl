@@ -879,15 +879,13 @@ class Scene(object):
         """Replay the checkpoint timeline without blocking the browser."""
         if sys.platform != "emscripten":
             raise RuntimeError("browser_playback_loop() is only available in Pyodide")
-        import asyncio
-        import time as _time
-        frame_duration = 1.0 / float(self.camera.fps)
+        from manimlib.utils.browser_scheduler import next_animation_frame
         while not self.is_window_closing():
             self.seek(0.0)
-            started_at = _time.perf_counter()
+            started_at = await next_animation_frame()
             while not self.is_window_closing():
-                await asyncio.sleep(frame_duration)
-                elapsed = _time.perf_counter() - started_at
+                frame_time = await next_animation_frame()
+                elapsed = frame_time - started_at
                 if elapsed >= self.max_time:
                     self.seek(self.max_time, sync_audio=False)
                     break
