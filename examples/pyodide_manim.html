@@ -25,29 +25,48 @@
     ).href;
     const status = document.getElementById("status");
     const setStatus = (s) => status.textContent = s;
+
     try {
       setStatus("Loading browser WASM backends…");
       await initializeBrowserWasm();
+
       const pango = await import("./browser_wasm/dist/pango_text_loader.js");
       if (typeof pango.initializePangoText !== "function") {
         throw new Error("PangoCairo loader does not export initializePangoText()");
       }
       await pango.initializePangoText();
       if (typeof window.manimPangoTextToSvg !== "function") {
-        throw new Error(
-          "PangoCairo WASM initialized, but window.manimPangoTextToSvg was not installed",
-        );
+        throw new Error("PangoCairo WASM initialized, but window.manimPangoTextToSvg was not installed");
       }
+
+      // Download a real TTF and register it in the WASM Fontconfig instance.
+      // PangoCairo renders from Fontconfig, so the raw font bytes must be
+      // registered with Pango; CSS FontFace alone is not sufficient.
+      setStatus("Loading browser font…");
+      const fontUrl = "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/roboto/static/Roboto-Regular.ttf";
+      const fontResponse = await fetch(fontUrl);
+      if (!fontResponse.ok) {
+        throw new Error("Failed to load browser font: " + fontResponse.status);
+      }
+      const fontBytes = await fontResponse.arrayBuffer();
+
+      const registeredFont = await window.manimRegisterPangoFont(
+        fontBytes,
+        "Roboto-Regular.ttf",
+      );
+      window.manimBrowserFontFamily = String(registeredFont.family);
+      setStatus("Browser font registered: " + window.manimBrowserFontFamily);
 
       setStatus("Loading Pyodide…");
       const { loadPyodide } = await import(pyodideUrl);
       const pyodide = await loadPyodide();
+
       setStatus("Installing Python/WebGPU dependencies…");
       await pyodide.loadPackage(["micropip", "numpy", "scipy", "pillow", "sympy", "matplotlib", "pygments", "pyyaml", "tqdm", "fonttools"]);
 
       const wheelManifest = await fetch(wheelManifestUrl).then((response) => {
         if (!response.ok) {
-          throw new Error(`Failed to load wheel manifest: ${response.status}`);
+          throw new Error("Failed to load wheel manifest: " + response.status);
         }
         return response.json();
       });
@@ -61,17 +80,26 @@ import micropip
 await micropip.install("${wgpuWheel}")
 await micropip.install("${manimWheel}")
 `);
+
       setStatus("Starting Manim scene…");
       await pyodide.runPythonAsync(`
+from js import window
 from manimlib import *
 
 class BrowserScene(Scene):
     async def construct(self):
-        title = await Text.create("ManimGL + WebGPU")
+        # The font was registered from JavaScript before Python started.
+        title = await Text.create(
+            "ManimGL + WebGPU",
+            font=str(window.manimBrowserFontFamily),
+        )
+        title.scale(0.8)
+
         circle = Circle(radius=1.5)
         circle.set_color(BLUE)
         self.add(title, circle)
         self.update_frame(force_draw=True)
+
         circle.shift(RIGHT * 2)
         self.update_frame(force_draw=True)
 
