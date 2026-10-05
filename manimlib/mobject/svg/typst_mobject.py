@@ -11,6 +11,9 @@ from manimlib.utils.color import color_to_hex
 
 from manimlib.utils.typst_file_writing import typst_to_svg
 
+if __import__('sys').platform == 'emscripten':
+    from manimlib.utils.browser_typst import typst_to_svg_async
+
 if TYPE_CHECKING:
     from manimlib.typing import ManimColor, Selector, Span
 
@@ -76,10 +79,33 @@ class SingleStringTypst(StringMobject):
         )
 
         if "height" not in kwargs and "width" not in kwargs:
-            self.scale(get_tex_mob_scale_factor() * self.font_size)
-            self.scale_stroke_widths(get_tex_mob_scale_factor() * self.font_size)
+            import sys
+            if sys.platform == "emscripten":
+                from manimlib.mobject.svg.svg_mobject import get_svg_content_height
+                svg_height = get_svg_content_height(self.svg_string)
+                if svg_height > 0:
+                    scale = self.font_size / (10.0 * svg_height)
+                    self.scale(scale)
+                    self.scale_stroke_widths(scale)
+            else:
+                self.scale(get_tex_mob_scale_factor() * self.font_size)
+                self.scale_stroke_widths(get_tex_mob_scale_factor() * self.font_size)
 
         self._char_to_submob_map = self._build_char_to_submob_map()
+
+    @classmethod
+    async def create(cls, typst_string: str, **kwargs):
+        """Asynchronously construct a Typst mobject in Pyodide."""
+        import sys
+        if sys.platform != "emscripten":
+            return cls(typst_string, **kwargs)
+        # First build a lightweight parser instance to obtain the exact Typst source,
+        # including Manim's color labels and document preamble. The actual geometry is
+        # then constructed from the SVG returned by typst-wasm.
+        probe = cls(typst_string, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>', **kwargs)
+        content = probe.get_content(probe.use_labelled_svg)
+        svg = await typst_to_svg_async(content)
+        return cls(typst_string, _svg_override=svg, **kwargs)
 
     def _build_char_to_submob_map(self) -> list[list[int]]:
         mapping: list[list[int]] = [[] for _ in range(len(self.string))]
