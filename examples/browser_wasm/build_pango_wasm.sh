@@ -30,6 +30,12 @@ fi
 [[ -d "$PANGO_CAIRO_WASM_DIR/.git" ]] || die \
     "PANGO_CAIRO_WASM_DIR is not a git checkout: $PANGO_CAIRO_WASM_DIR"
 
+# Normalize the checkout path before changing directory. PANGO_CAIRO_WASM_DIR
+# is commonly supplied as a relative path from the ManimGL checkout; after
+# cd-ing into the checkout, using that relative path again would incorrectly
+# resolve it relative to itself.
+PANGO_CAIRO_WASM_DIR="$(cd "$PANGO_CAIRO_WASM_DIR" && pwd)"
+
 cd "$PANGO_CAIRO_WASM_DIR"
 
 # VitoVan's env.sh expects magicdir to point at this checkout.
@@ -62,7 +68,7 @@ if ! pkg-config --exists pangocairo; then
     echo "pangocairo.pc is missing; building PangoCairo and its WASM dependencies..."
     echo "This can take 20+ minutes on the first build."
 
-    LOCAL_BUILD="$PANGO_CAIRO_WASM_DIR/.manim_build_pango.sh"
+    LOCAL_BUILD="$PWD/.manim_build_pango.sh"
 
     # The upstream build script has two initial 'sudo dnf ...' commands.
     # Strip those host-package installation commands while preserving the
