@@ -89,7 +89,7 @@ from js import window
 class BrowserScene(Scene):
     async def construct(self):
         # The font was registered from JavaScript before Python started.
-        title = await Text.create(
+        title = Text.create(
             "ManimGL + WebGPU",
             font=str(window.manimBrowserFontFamily),
         )
