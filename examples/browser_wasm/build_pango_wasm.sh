@@ -98,6 +98,42 @@ pkg-config --variable=prefix pangocairo
 
 mkdir -p "$OUT"
 
+# Fontconfig cannot use the host's /etc/fonts inside the browser. Bundle a
+# small deterministic config together with a Unicode-capable sans font.
+FONT_ASSETS="$ROOT/.cache/manim-browser-fonts"
+rm -rf "$FONT_ASSETS"
+mkdir -p "$FONT_ASSETS/fonts" "$FONT_ASSETS/etc/fonts"
+
+command -v fc-match >/dev/null 2>&1 || die \
+    "fc-match was not found; install Fontconfig utilities to bundle browser fonts."
+
+BROWSER_FONT="$(fc-match -f '%{file}' 'sans:style=Regular' | head -n 1)"
+[[ -f "$BROWSER_FONT" ]] || die \
+    "Browser font was not found: $BROWSER_FONT"
+
+cp "$BROWSER_FONT" "$FONT_ASSETS/fonts/"
+FONT_FAMILY="$(fc-match -f '%{family}' 'sans:style=Regular' | head -n 1)"
+[[ -n "$FONT_FAMILY" ]] || FONT_FAMILY="sans"
+
+cat > "$FONT_ASSETS/etc/fonts/fonts.conf" <<EOF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>/usr/share/fonts</dir>
+  <dir>/usr/local/share/fonts</dir>
+  <dir>/fonts</dir>
+  <cachedir>/tmp/fontconfig</cachedir>
+  <alias>
+    <family>sans</family>
+    <prefer><family>$FONT_FAMILY</family></prefer>
+  </alias>
+  <alias>
+    <family>sans-serif</family>
+    <prefer><family>$FONT_FAMILY</family></prefer>
+  </alias>
+</fontconfig>
+EOF
+
 PANGOCAIRO_FLAGS="$(
     pkg-config --libs --cflags \
         glib-2.0,gobject-2.0,cairo,pixman-1,freetype2,fontconfig,expat,harfbuzz,pangocairo
