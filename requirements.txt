@@ -1,6 +1,6 @@
 addict
 appdirs
-audioop-lts; python_version>='3.13'
+audioop-lts; python_version>='3.13' and sys_platform != 'emscripten'
 av; sys_platform != "emscripten"
 colour
 diskcache
