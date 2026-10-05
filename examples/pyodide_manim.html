@@ -15,6 +15,8 @@
   <div id="status">Loading Pyodide…</div>
   <canvas id="manim-canvas" tabindex="0"></canvas>
   <script type="module">
+    import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
+
     const params = new URLSearchParams(location.search);
     const pyodideUrl = params.get("pyodide") || "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.mjs";
     const wgpuWheel = params.get("wgpu") || "./dist/wgpu.whl";
@@ -22,6 +24,15 @@
     const status = document.getElementById("status");
     const setStatus = (s) => status.textContent = s;
     try {
+      setStatus("Loading browser WASM backends…");
+      await initializeBrowserWasm();
+      try {
+        const pango = await import("./browser_wasm/dist/pango_text_loader.js");
+        await pango.initializePangoText();
+      } catch (error) {
+        console.warn("PangoCairo WASM is not built; Text.create() will fail.", error);
+      }
+
       setStatus("Loading Pyodide…");
       const { loadPyodide } = await import(pyodideUrl);
       const pyodide = await loadPyodide();
@@ -41,12 +52,18 @@ from manimlib import *
 
 class BrowserScene(Scene):
     def construct(self):
-        title = Text("ManimGL + WebGPU")
+        title = await Text.create("ManimGL + WebGPU")
         circle = Circle(radius=1.5)
         circle.set_color(BLUE)
         self.add(title, circle)
         self.update_frame(force_draw=True)
         circle.shift(RIGHT * 2)
+        self.update_frame(force_draw=True)
+
+        # Typst is also asynchronous in Pyodide.
+        formula = await Typst.create("x^2 + y^2 = r^2")
+        formula.next_to(circle, DOWN)
+        self.add(formula)
         self.update_frame(force_draw=True)
 
 await run_scene_from_class(BrowserScene, "manim-canvas")
