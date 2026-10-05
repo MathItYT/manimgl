@@ -22,46 +22,39 @@ export async function initializeBrowserWasm(options = {}) {
   }
 
   const typstModule = await import(
-    options.typstModule ||
-    "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist/index.js"
+    options.typstModule || "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/+esm"
   );
   const typstWorkerModule = await import(
-    options.typstWorkerModule ||
-    "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist/worker/browser.js"
+    options.typstWorkerModule || "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist/worker/browser.js"
   );
 
   if (!window.manimTypstCompiler) {
-    const workerUrl = options.typstWorkerUrl ||
-      "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist/worker/web-worker.js";
-    const coreBase = options.typstCoreBase ||
-      "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist/engine/";
+    const typstCdn = options.typstCdn || "https://cdn.jsdelivr.net/npm/typst-wasm@1.0.0/dist";
+    const workerEntry = options.typstWorkerEntry || typstCdn + "/worker/web-worker.js";
+    const workerUrl = options.typstWorkerUrl || URL.createObjectURL(
+      new Blob([`import ${JSON.stringify(workerEntry)};`], {
+        type: "text/javascript",
+      })
+    );
 
+    const coreBase = options.typstCoreBase || typstCdn + "/engine/";
     const coreModules = {
-      "engine.core.wasm": WebAssembly.compileStreaming(
-        fetch(coreBase + "engine.core.wasm")
-      ),
-      "engine.core2.wasm": WebAssembly.compileStreaming(
-        fetch(coreBase + "engine.core2.wasm")
-      ),
-      "engine.core3.wasm": WebAssembly.compileStreaming(
-        fetch(coreBase + "engine.core3.wasm")
-      ),
+      "engine.core.wasm": WebAssembly.compileStreaming(fetch(coreBase + "engine.core.wasm")),
+      "engine.core2.wasm": WebAssembly.compileStreaming(fetch(coreBase + "engine.core2.wasm")),
+      "engine.core3.wasm": WebAssembly.compileStreaming(fetch(coreBase + "engine.core3.wasm")),
     };
 
-    const worker = () => typstWorkerModule.createWebWorker(workerUrl);
+    window.manimTypstWorkerUrl = workerUrl;
     window.manimTypstCompiler = await typstModule.createTypstCompiler({
-      backend: "worker",
-      worker,
+      backend: "auto",
+      worker: () => typstWorkerModule.createWebWorker(workerUrl),
       coreModules,
     });
-    const fontBase = options.typstFontBase ||
-      "https://cdn.jsdelivr.net/npm/@typst-wasm/fonts@1.0.0/dist/files/";
+
+    const fontBase = options.typstFontBase || "https://cdn.jsdelivr.net/npm/@typst-wasm/fonts@1.0.0/dist/files/";
     const fontUrls = [
       fontBase + "LibertinusSerif-Regular.otf",
       fontBase + "NewCMMath-Regular.otf",
-      fontBase + "NewCM10-Regular.otf",
-      fontBase + "NewCM10-Bold.otf",
-      fontBase + "DejaVuSansMono.ttf",
     ];
     await window.manimTypstCompiler.addFonts(
       ...await Promise.all(fontUrls.map(async (url) =>
