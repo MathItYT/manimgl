@@ -73,6 +73,9 @@ char *manim_pango_text_to_svg(
     pixel_width = pixel_width > 0 ? pixel_width : 1;
     pixel_height = pixel_height > 0 ? pixel_height : 1;
 
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    pango_cairo_show_layout(cr, layout);
+
     cairo_svg_surface_set_document_unit(surface, CAIRO_SVG_UNIT_PX);
     cairo_svg_surface_restrict_to_version(surface, CAIRO_SVG_VERSION_1_2);
     cairo_surface_set_device_scale(surface, 1.0, 1.0);
