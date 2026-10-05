@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
+import sys
+
 import numpy as np
 import wgpu
 from PIL import Image
@@ -137,7 +139,7 @@ class Camera(object):
         # Where a window is showing the scene, frames are drawn at its size rather than at
         # the resolution they are written at, since drawing 4k to shrink into a small window
         # costs more than it shows. See at_output_resolution for the exception.
-        self.draw_at_window_size = window is not None
+        self.draw_at_window_size = window is not None and sys.platform != "emscripten"
         self.pixel_shape = (0, 0)
         self.init_frame(**frame_config)
         self.init_renderer()
