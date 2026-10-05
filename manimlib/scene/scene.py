@@ -714,8 +714,9 @@ class Scene(object):
             output_time = self.file_writer.get_output_time()
             self.file_writer.set_audio_time_offset(self.time - output_time)
             self.file_writer.replay_audio_from(self.time)
-        elif sys.platform == "emscripten" and sync_audio:
-            browser_audio.seek(self.time, self._interactive_sound_events)
+        elif sys.platform == "emscripten":
+            if sync_audio:
+                browser_audio.seek(self.time, self._interactive_sound_events)
         else:
             self.replay_interactive_sounds(self.time)
 
@@ -845,7 +846,6 @@ class Scene(object):
         frame_duration = 1.0 / float(self.camera.fps)
         while not self.is_window_closing():
             self.seek(0.0)
-            browser_audio.play_from(0.0, self._interactive_sound_events)
             started_at = _time.perf_counter()
             while not self.is_window_closing():
                 await asyncio.sleep(frame_duration)
