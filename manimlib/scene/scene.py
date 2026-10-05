@@ -165,36 +165,52 @@ class Scene(object):
         return self.window
 
     def run(self) -> None:
-        """Run the scene on native platforms; build it on Pyodide."""
+        """Run the scene on native platforms; browser scenes use build_async()."""
         if sys.platform == "emscripten":
-            self.build()
-            return
+            raise RuntimeError(
+                "Use await run_scene_from_class(...) for Pyodide scenes"
+            )
         self.build()
         self.playback()
 
-    def build(self):
-        """Construct the scene and prepare its timeline without entering playback."""
+    def _begin_build(self) -> None:
         self.virtual_animation_start_time = 0
         self.real_animation_start_time = time.time()
         self.file_writer.begin()
         self.setup()
+
+    def build(self):
+        """Construct and prepare the scene timeline synchronously."""
+        if sys.platform == "emscripten":
+            raise RuntimeError("Use await build_async() in Pyodide")
+        self._begin_build()
         try:
-            result = self.construct()
-            if inspect.isawaitable(result):
-                raise RuntimeError(
-                    "An async construct() must be awaited by the browser scene runner"
-                )
+            self.construct()
         except EndScene:
             pass
         except KeyboardInterrupt:
-            print("", end="\\r")
+            print("", end="\r")
             self.file_writer.ended_with_interrupt = True
-        if sys.platform == "emscripten":
-            self.stop_sound_processes()
-            self.stop_skipping()
-            self.file_writer.finish()
-            self.seek(0.0, sync_audio=False)
-            return self
+        return self
+
+    async def build_async(self):
+        """Construct and prepare the scene timeline without blocking the browser."""
+        if sys.platform != "emscripten":
+            return self.build()
+        self._begin_build()
+        try:
+            result = self.construct()
+            if inspect.isawaitable(result):
+                await result
+        except EndScene:
+            pass
+        except KeyboardInterrupt:
+            print("", end="\r")
+            self.file_writer.ended_with_interrupt = True
+        self.stop_sound_processes()
+        self.stop_skipping()
+        self.file_writer.finish()
+        self.seek(0.0, sync_audio=False)
         return self
 
     def playback(self) -> None:
