@@ -1,15 +1,31 @@
 from __future__ import annotations
 
+import sys
 import numpy as np
-import pathops
 
 from manimlib.mobject.types.vectorized_mobject import VMobject
 
+if sys.platform != "emscripten":
+    import pathops
 
-# Boolean operations between 2D mobjects
-# Borrowed from https://github.com/ManimCommunity/manim/
 
-def _convert_vmobject_to_skia_path(vmobject: VMobject) -> pathops.Path:
+def _convert_vmobject_to_svg_path(vmobject: VMobject) -> str:
+    commands = []
+    for submob in vmobject.family_members_with_points():
+        for subpath in submob.get_subpaths():
+            if len(subpath) == 0:
+                continue
+            quads = vmobject.get_bezier_tuples_from_points(subpath)
+            start = subpath[0]
+            commands.append(f"M {start[0]} {start[1]}")
+            for p0, p1, p2 in quads:
+                commands.append(f"Q {p1[0]} {p1[1]} {p2[0]} {p2[1]}")
+            if vmobject.consider_points_equal(subpath[0], subpath[-1]):
+                commands.append("Z")
+    return " ".join(commands)
+
+
+def _native_convert_vmobject_to_skia_path(vmobject: VMobject) -> pathops.Path:
     path = pathops.Path()
     for submob in vmobject.family_members_with_points():
         for subpath in submob.get_subpaths():
@@ -23,10 +39,7 @@ def _convert_vmobject_to_skia_path(vmobject: VMobject) -> pathops.Path:
     return path
 
 
-def _convert_skia_path_to_vmobject(
-    path: pathops.Path,
-    vmobject: VMobject
-) -> VMobject:
+def _native_convert_skia_path_to_vmobject(path: pathops.Path, vmobject: VMobject) -> VMobject:
     PathVerb = pathops.PathVerb
     current_path_start = np.array([0.0, 0.0, 0.0])
     for path_verb, points in path:
@@ -49,30 +62,42 @@ def _convert_skia_path_to_vmobject(
     return vmobject.reverse_points()
 
 
+def _browser_boolean(vmobject: VMobject, others: list[VMobject], operation: str) -> VMobject:
+    from manimlib.mobject.svg.svg_mobject import SVGMobject
+    from manimlib.utils.browser_pathops import browser_pathops
+
+    svg_paths = [_convert_vmobject_to_svg_path(vmobject), *(
+        _convert_vmobject_to_svg_path(other) for other in others
+    )]
+    d = browser_pathops.combine(svg_paths, operation)
+    result = SVGMobject(svg_string=f'<svg xmlns="http://www.w3.org/2000/svg"><path d="{d}"/></svg>')
+    vmobject.become(result)
+    return vmobject
+
+
 class Union(VMobject):
     def __init__(self, *vmobjects: VMobject, **kwargs):
         if len(vmobjects) < 2:
             raise ValueError("At least 2 mobjects needed for Union.")
         super().__init__(**kwargs)
+        if sys.platform == "emscripten":
+            _browser_boolean(self, list(vmobjects), "UNION")
+            return
         outpen = pathops.Path()
-        paths = [
-            _convert_vmobject_to_skia_path(vmobject)
-            for vmobject in vmobjects
-        ]
+        paths = [_native_convert_vmobject_to_skia_path(vmobject) for vmobject in vmobjects]
         pathops.union(paths, outpen.getPen())
-        _convert_skia_path_to_vmobject(outpen, self)
+        _native_convert_skia_path_to_vmobject(outpen, self)
 
 
 class Difference(VMobject):
     def __init__(self, subject: VMobject, clip: VMobject, **kwargs):
         super().__init__(**kwargs)
+        if sys.platform == "emscripten":
+            _browser_boolean(self, [clip], "DIFFERENCE")
+            return
         outpen = pathops.Path()
-        pathops.difference(
-            [_convert_vmobject_to_skia_path(subject)],
-            [_convert_vmobject_to_skia_path(clip)],
-            outpen.getPen(),
-        )
-        _convert_skia_path_to_vmobject(outpen, self)
+        pathops.difference([_native_convert_vmobject_to_skia_path(subject)], [_native_convert_vmobject_to_skia_path(clip)], outpen.getPen())
+        _native_convert_skia_path_to_vmobject(outpen, self)
 
 
 class Intersection(VMobject):
@@ -80,22 +105,16 @@ class Intersection(VMobject):
         if len(vmobjects) < 2:
             raise ValueError("At least 2 mobjects needed for Intersection.")
         super().__init__(**kwargs)
+        if sys.platform == "emscripten":
+            _browser_boolean(self, list(vmobjects[1:]), "INTERSECT")
+            return
         outpen = pathops.Path()
-        pathops.intersection(
-            [_convert_vmobject_to_skia_path(vmobjects[0])],
-            [_convert_vmobject_to_skia_path(vmobjects[1])],
-            outpen.getPen(),
-        )
-        new_outpen = outpen
+        pathops.intersection([_native_convert_vmobject_to_skia_path(vmobjects[0])], [_native_convert_vmobject_to_skia_path(vmobjects[1])], outpen.getPen())
         for _i in range(2, len(vmobjects)):
             new_outpen = pathops.Path()
-            pathops.intersection(
-                [outpen],
-                [_convert_vmobject_to_skia_path(vmobjects[_i])],
-                new_outpen.getPen(),
-            )
+            pathops.intersection([outpen], [_native_convert_vmobject_to_skia_path(vmobjects[_i])], new_outpen.getPen())
             outpen = new_outpen
-        _convert_skia_path_to_vmobject(outpen, self)
+        _native_convert_skia_path_to_vmobject(outpen, self)
 
 
 class Exclusion(VMobject):
@@ -103,19 +122,13 @@ class Exclusion(VMobject):
         if len(vmobjects) < 2:
             raise ValueError("At least 2 mobjects needed for Exclusion.")
         super().__init__(**kwargs)
+        if sys.platform == "emscripten":
+            _browser_boolean(self, list(vmobjects[1:]), "XOR")
+            return
         outpen = pathops.Path()
-        pathops.xor(
-            [_convert_vmobject_to_skia_path(vmobjects[0])],
-            [_convert_vmobject_to_skia_path(vmobjects[1])],
-            outpen.getPen(),
-        )
-        new_outpen = outpen
+        pathops.xor([_native_convert_vmobject_to_skia_path(vmobjects[0])], [_native_convert_vmobject_to_skia_path(vmobjects[1])], outpen.getPen())
         for _i in range(2, len(vmobjects)):
             new_outpen = pathops.Path()
-            pathops.xor(
-                [outpen],
-                [_convert_vmobject_to_skia_path(vmobjects[_i])],
-                new_outpen.getPen(),
-            )
+            pathops.xor([outpen], [_native_convert_vmobject_to_skia_path(vmobjects[_i])], new_outpen.getPen())
             outpen = new_outpen
-        _convert_skia_path_to_vmobject(outpen, self)
+        _native_convert_skia_path_to_vmobject(outpen, self)
