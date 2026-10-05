@@ -89,8 +89,8 @@ class SingleStringTypst(StringMobject):
                     self.scale(scale)
                     self.scale_stroke_widths(scale)
             else:
-                self.scale(get_tex_mob_scale_factor() * self.font_size)
-                self.scale_stroke_widths(get_tex_mob_scale_factor() * self.font_size)
+                self.scale(1.0)
+                self.scale_stroke_widths(1.0)
 
         self._char_to_submob_map = self._build_char_to_submob_map()
 
