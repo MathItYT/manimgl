@@ -174,6 +174,15 @@ class Scene(object):
             # Get rid keyboard interupt symbols
             print("", end="\r")
             self.file_writer.ended_with_interrupt = True
+
+        if sys.platform == "emscripten":
+            # The browser owns the event loop and the Window must remain alive so its
+            # rendercanvas handlers can continue delivering DOM events to this scene.
+            self.stop_sound_processes()
+            self.stop_skipping()
+            self.file_writer.finish()
+            return
+
         self.tear_down()
 
     def setup(self) -> None:
