@@ -9,6 +9,14 @@
 
 static unsigned long manim_svg_counter = 0;
 
+static void configure_browser_fontconfig(void) {
+    // Fontconfig normally discovers /etc/fonts/fonts.conf from the host OS.
+    // The browser WASM filesystem has no host /etc, so the build embeds a
+    // small self-contained config and the bundled fonts at these paths.
+    g_setenv("FONTCONFIG_FILE", "/etc/fonts/fonts.conf", TRUE);
+    g_setenv("FONTCONFIG_PATH", "/etc/fonts", TRUE);
+}
+
 static char *read_file(const char *path) {
     FILE *file = fopen(path, "rb");
     if (!file) return NULL;
@@ -51,6 +59,8 @@ char *manim_pango_text_to_svg(
     double width
 ) {
     if (!markup) return NULL;
+
+    configure_browser_fontconfig();
 
     char path[128];
     unsigned long id = __atomic_fetch_add(&manim_svg_counter, 1, __ATOMIC_RELAXED);
