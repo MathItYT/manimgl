@@ -23,7 +23,7 @@ mkdir -p "$OUT" "$CACHE"
 # wheel downloaded from the same URL.
 BUILD_ID="$(python - <<'PY'
 import secrets
-print(secrets.token_hex(8))
+print(secrets.randbelow(10**18))
 PY
 )"
 MANIM_VERSION="1.7.2.dev${BUILD_ID}"
