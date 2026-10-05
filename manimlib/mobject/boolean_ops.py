@@ -69,8 +69,8 @@ def _browser_boolean(target: VMobject, vmobjects: list[VMobject], operation: str
     svg_paths = [_convert_vmobject_to_svg_path(mob) for mob in vmobjects]
     d = browser_pathops.combine(svg_paths, operation)
     result = SVGMobject(svg_string=f'<svg xmlns="http://www.w3.org/2000/svg"><path d="{d}"/></svg>')
-    vmobject.become(result)
-    return vmobject
+    target.become(result)
+    return target
 
 
 class Union(VMobject):
