@@ -52,24 +52,55 @@ static char *read_file(const char *path) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int manim_pango_register_font(const char *path) {
-    if (!path) return 0;
+char *manim_pango_register_font(const char *path) {
+    if (!path) return NULL;
 
     configure_browser_fontconfig();
 
     FcConfig *config = FcConfigGetCurrent();
     if (!config) {
         config = FcInitLoadConfigAndFonts();
-        if (!config) return 0;
+        if (!config) return NULL;
         FcConfigSetCurrent(config);
     }
 
     if (!FcConfigAppFontAddFile(config, (const FcChar8 *)path)) {
-        return 0;
+        return NULL;
     }
 
     FcConfigBuildFonts(config);
-    return 1;
+
+    FcPattern *pattern = FcPatternBuild(
+        NULL,
+        FC_FILE, FcTypeString, path,
+        NULL
+    );
+    if (!pattern) return NULL;
+
+    FcObjectSet *objects = FcObjectSetBuild(FC_FAMILY, FC_STYLE, NULL);
+    FcFontSet *fonts = FcFontList(config, pattern, objects);
+    FcPatternDestroy(pattern);
+    FcObjectSetDestroy(objects);
+
+    if (!fonts || fonts->nfont == 0) {
+        if (fonts) FcFontSetDestroy(fonts);
+        return NULL;
+    }
+
+    FcChar8 *family = NULL;
+    FcResult result = FcPatternGetString(fonts->fonts[0], FC_FAMILY, 0, &family);
+    char *result_string = NULL;
+    if (result == FcResultMatch && family) {
+        result_string = strdup((const char *)family);
+    }
+
+    FcFontSetDestroy(fonts);
+    return result_string;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void manim_pango_free(char *data) {
+    free(data);
 }
 
 EMSCRIPTEN_KEEPALIVE
