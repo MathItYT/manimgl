@@ -18,6 +18,7 @@ docker run --rm \
     -w /app \
     vitovan/pango-cairo-wasm \
     bash -lc '
+        if [ -f /pango-cairo-wasm/env.sh ]; then . /pango-cairo-wasm/env.sh; fi
         export PKG_CONFIG_PATH=/pango-cairo-wasm:$PKG_CONFIG_PATH
         export PANGOCAIRO_FLAGS="$(pkg-config --libs --cflags glib-2.0,gobject-2.0,cairo,pixman-1,freetype2,fontconfig,expat,harfbuzz,pangocairo) -s USE_PTHREADS=0 -s ASYNCIFY"
         emcc $PANGOCAIRO_FLAGS examples/browser_wasm/pango_text.c -O3 -s MODULARIZE=1 -s EXPORT_ES6=1 -s EXPORT_NAME=createPangoModule -s EXPORTED_FUNCTIONS='["_manim_pango_text_to_svg","_manim_pango_free"]' -s EXPORTED_RUNTIME_METHODS='["ccall","UTF8ToString"]' -o examples/browser_wasm/dist/pango_text.js
