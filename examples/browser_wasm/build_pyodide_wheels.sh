@@ -33,16 +33,50 @@ echo "==> Browser build id: $BUILD_ID"
 echo "    ManimGL version: $MANIM_VERSION"
 echo "    wgpu version:    $WGPU_VERSION"
 
+
+verify_wheel_version() {
+    local wheel="$1"
+    local expected="$2"
+    WHEEL_PATH="$wheel" EXPECTED_VERSION="$expected" python - <<'PY'
+import os
+import zipfile
+
+wheel = os.environ["WHEEL_PATH"]
+expected = os.environ["EXPECTED_VERSION"]
+
+with zipfile.ZipFile(wheel) as zf:
+    metadata = next(
+        name for name in zf.namelist()
+        if name.endswith(".dist-info/METADATA")
+    )
+    text = zf.read(metadata).decode("utf-8")
+
+actual = next(
+    line.split(":", 1)[1].strip()
+    for line in text.splitlines()
+    if line.startswith("Version:")
+)
+
+if actual != expected:
+    raise SystemExit(
+        f"wheel version mismatch: expected {expected}, got {actual} ({wheel})"
+    )
+PY
+}
+
 echo "==> Building ManimGL wheel"
+rm -rf "$ROOT/build" "$ROOT"/manimgl.egg-info "$ROOT"/src/manimgl.egg-info
+rm -f "$OUT"/manimgl-*.whl
 rm -f "$OUT"/manimgl-*.whl
 SETUP_CFG_BACKUP="$CACHE/setup.cfg.pyodide-wheel-backup"
 cp "$ROOT/setup.cfg" "$SETUP_CFG_BACKUP"
 trap 'cp "$SETUP_CFG_BACKUP" "$ROOT/setup.cfg"; rm -f "$SETUP_CFG_BACKUP"' EXIT
 sed -i -E "s/^version = .*/version = $MANIM_VERSION/" "$ROOT/setup.cfg"
-python -m pip wheel "$ROOT" --no-deps --wheel-dir "$OUT"
+python -m pip wheel "$ROOT" --no-deps --no-cache-dir --wheel-dir "$OUT"
 
 MANIM_WHEEL="$(find "$OUT" -maxdepth 1 -type f -name 'manimgl-*.whl' -print -quit)"
 [[ -n "$MANIM_WHEEL" ]] || die "ManimGL wheel was not produced"
+verify_wheel_version "$MANIM_WHEEL" "$MANIM_VERSION"
 
 echo "==> Preparing wgpu-py checkout"
 if [[ ! -d "$WGPU_DIR/.git" ]]; then
@@ -63,11 +97,12 @@ sed -i -E "s/^__version__ = .*/__version__ = \"$WGPU_VERSION\"/" "$WGPU_VERSION_
 
 (
     cd "$WGPU_DIR"
-    WGPU_PY_BUILD_NOARCH=1 python -m pip wheel . --no-deps --wheel-dir "$OUT"
+    rm -rf build wgpu.egg-info\n    WGPU_PY_BUILD_NOARCH=1 python -m pip wheel . --no-deps --no-cache-dir --wheel-dir "$OUT"
 )
 
 WGPU_WHEEL="$(find "$OUT" -maxdepth 1 -type f -name 'wgpu-*.whl' -print -quit)"
 [[ -n "$WGPU_WHEEL" ]] || die "wgpu wheel was not produced"
+verify_wheel_version "$WGPU_WHEEL" "$WGPU_VERSION"
 
 echo "==> Writing wheel manifest"
 MANIM_NAME="$(basename "$MANIM_WHEEL")"
