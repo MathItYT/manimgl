@@ -242,7 +242,7 @@ class MarkupText(StringMobject):
     async def create(cls, text: str, **kwargs):
         if sys.platform != "emscripten":
             return cls(text, **kwargs)
-        probe = cls(text, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>', **kwargs)
+        probe = cls(text, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="1" height="1"/></svg>', **kwargs)
         content = probe.get_content(probe.use_labelled_svg)
         svg = await markup_to_svg_async(
             content,
