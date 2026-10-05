@@ -244,7 +244,7 @@ class MarkupText(StringMobject):
             return cls(text, **kwargs)
         probe = cls(text, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>', **kwargs)
         svg = await markup_to_svg_async(
-            probe.content,
+            probe.get_content(probe.use_labelled_svg),
             justify=probe.justify,
             indent=probe.indent,
             alignment=probe.alignment,
