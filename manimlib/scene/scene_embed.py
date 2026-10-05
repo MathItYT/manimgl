@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import inspect
-import pyperclip
+import sys
+if sys.platform != "emscripten":
+    import pyperclip
 import textwrap
 import time
 import traceback
@@ -24,6 +26,8 @@ if TYPE_CHECKING:
 
 class InteractiveSceneEmbed:
     def __init__(self, scene: Scene):
+        if sys.platform == "emscripten":
+            raise RuntimeError("Scene.embed() is not available in Pyodide; use the browser playback API.")
         self.scene = scene
         self.checkpoint_manager = CheckpointManager()
 
