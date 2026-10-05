@@ -153,12 +153,10 @@ def flatten_typst_svg(svg_path: str) -> None:
 
 
 @lru_cache()
-def typst_to_svg(content: str) -> str:
+def typst_to_svg(content: str):
     if sys.platform == "emscripten":
-        raise RuntimeError(
-            "typst_to_svg() is asynchronous in Pyodide. Use "
-            "await typst_to_svg_async() or await Typst.create(...)."
-        )
+        from manimlib.utils.browser_typst import typst_to_svg_async
+        return typst_to_svg_async(content)
     try:
         import typst
         return typst.compile(content.encode(), format="svg")
