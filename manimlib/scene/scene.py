@@ -664,7 +664,7 @@ class Scene(object):
     def resume(self) -> None:
         self.paused = False
 
-    def seek(self, t: float) -> None:
+    def seek(self, t: float, sync_audio: bool = True) -> None:
         if t < 0:
             t = 0.0
         if t > self.max_time:
@@ -714,7 +714,7 @@ class Scene(object):
             output_time = self.file_writer.get_output_time()
             self.file_writer.set_audio_time_offset(self.time - output_time)
             self.file_writer.replay_audio_from(self.time)
-        elif sys.platform == "emscripten":
+        elif sys.platform == "emscripten" and sync_audio:
             browser_audio.seek(self.time, self._interactive_sound_events)
         else:
             self.replay_interactive_sounds(self.time)
@@ -850,9 +850,9 @@ class Scene(object):
                 await asyncio.sleep(frame_duration)
                 elapsed = _time.perf_counter() - started_at
                 if elapsed >= self.max_time:
-                    self.seek(self.max_time)
+                    self.seek(self.max_time, sync_audio=False)
                     break
-                self.seek(elapsed)
+                self.seek(elapsed, sync_audio=False)
             if not repeat:
                 break
         browser_audio.stop_all()
