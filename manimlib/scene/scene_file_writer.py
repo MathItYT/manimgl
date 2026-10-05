@@ -7,7 +7,10 @@ import subprocess as sp
 import sys
 
 import numpy as np
-from pydub import AudioSegment
+if sys.platform != "emscripten":
+    from pydub import AudioSegment
+else:
+    AudioSegment = None
 from tqdm.auto import tqdm as ProgressDisplay
 from pathlib import Path
 
@@ -79,7 +82,7 @@ class SceneFileWriter(object):
         self.ended_with_interrupt: bool = False
         self.output_time: float = 0.0
         self.audio_time_offset: float = 0.0
-        self.audio_events: list[tuple[float, AudioSegment, float | None]] = []
+        self.audio_events: list[tuple[float, object, float | None]] = []
 
         self.init_output_directories()
         self.init_audio()
@@ -138,6 +141,8 @@ class SceneFileWriter(object):
         self.includes_sound: bool = False
 
     def create_audio_segment(self) -> None:
+        if sys.platform == "emscripten":
+            return
         self.audio_segment = AudioSegment.silent()
 
     def add_audio_segment(
@@ -176,6 +181,10 @@ class SceneFileWriter(object):
         gain: float | None = None,
         gain_to_background: float | None = None
     ) -> None:
+        if sys.platform == "emscripten":
+            # Browser audio is handled by BrowserAudio. Scene.add_sound() records
+            # the event without decoding it through pydub/audioop.
+            return
         file_path = get_full_sound_file_path(sound_file)
         new_segment = AudioSegment.from_file(file_path)
         if gain:
