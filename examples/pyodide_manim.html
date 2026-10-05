@@ -51,7 +51,7 @@ await micropip.install("${manimWheel}")
 from manimlib import *
 
 class BrowserScene(Scene):
-    def construct(self):
+    async def construct(self):
         title = await Text.create("ManimGL + WebGPU")
         circle = Circle(radius=1.5)
         circle.set_color(BLUE)
