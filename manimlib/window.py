@@ -150,22 +150,12 @@ class Window(object):
         device = await adapter.request_device_async()
         return cls(canvas_id=canvas_id, adapter=adapter, device=device, **kwargs)
 
-    @classmethod
-    async def create_for_pyodide(cls, canvas_id: str = "canvas", **kwargs):
-        if sys.platform != "emscripten":
-            raise RuntimeError("create_for_pyodide() is only available in Pyodide.")
-        adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
-        device = await adapter.request_device_async()
-        return cls(canvas_id=canvas_id, adapter=adapter, device=device, **kwargs)
-
     @property
     def glfw_window(self):
         """
         The window itself, for the two things a canvas offers no way to say: where on which
         monitor it opens, and that it should take focus.
         """
-        if sys.platform == "emscripten":
-            raise AttributeError("Pyodide windows do not have a GLFW window.")
         if sys.platform == "emscripten":
             raise AttributeError("Pyodide windows do not have a GLFW window.")
         return self.canvas._window
@@ -286,13 +276,10 @@ class Window(object):
     def focus(self) -> None:
         if sys.platform == "emscripten":
             return
-        if sys.platform == "emscripten":
-            return
         glfw.focus_window(self.glfw_window)
 
     def destroy(self) -> None:
         if sys.platform != "emscripten":
-            if sys.platform != "emscripten":
             self.canvas.close()
 
     # Where it opens
@@ -437,15 +424,6 @@ class Window(object):
         self.note_event()
         if self.scene:
             self.scene.on_close()
-
-
-if sys.platform == "emscripten":
-    async def run_scene_from_class(scene_class: type[Scene], canvas_id: str) -> Scene:
-        """Run a Manim scene directly in an HTML canvas under Pyodide."""
-        window = await Window.create_for_pyodide(canvas_id)
-        scene = scene_class(window=window)
-        scene.run()
-        return scene
 
 
 if sys.platform == "emscripten":
