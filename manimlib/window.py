@@ -431,8 +431,6 @@ if sys.platform == "emscripten":
         """Run a Manim scene directly in an HTML canvas under Pyodide."""
         window = await Window.create_for_pyodide(canvas_id)
         scene = scene_class(window=window)
-        scene.run()
-        # construct() has now populated the checkpoint timeline. Playback is
-        # deliberately asynchronous so the browser can service RAF/DOM events.
-        await scene.browser_playback_loop()
+        await scene.build_async()
+        await scene.playback_async()
         return scene
