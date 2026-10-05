@@ -7,7 +7,7 @@ diskcache
 ipython>=8.18.0
 isosurfaces
 fontTools
-glfw
+glfw; sys_platform != "emscripten"
 manimpango>=0.6.0
 matplotlib
 numpy
