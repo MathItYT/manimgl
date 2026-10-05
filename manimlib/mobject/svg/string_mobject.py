@@ -64,9 +64,10 @@ class StringMobject(SVGMobject, ABC):
         self.isolate = isolate
         self.protect = protect
         self.use_labelled_svg = use_labelled_svg
+        self._svg_override = kwargs.pop("_svg_override", None)
 
         self.parse()
-        svg_string = self.get_svg_string()
+        svg_string = self._svg_override if self._svg_override is not None else self.get_svg_string()
         super().__init__(svg_string=svg_string, **kwargs)
         self.set_stroke(stroke_color, stroke_width)
         self.set_fill(fill_color, border_width=fill_border_width)
