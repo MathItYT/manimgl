@@ -3,6 +3,7 @@
 #include <cairo/cairo-svg.h>
 #include <pango/pangocairo.h>
 #include <glib.h>
+#include <fontconfig/fontconfig.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -48,6 +49,27 @@ static char *read_file(const char *path) {
 
     data[size] = '\0';
     return data;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int manim_pango_register_font(const char *path) {
+    if (!path) return 0;
+
+    configure_browser_fontconfig();
+
+    FcConfig *config = FcConfigGetCurrent();
+    if (!config) {
+        config = FcInitLoadConfigAndFonts();
+        if (!config) return 0;
+        FcConfigSetCurrent(config);
+    }
+
+    if (!FcConfigAppFontAddFile(config, (const FcChar8 *)path)) {
+        return 0;
+    }
+
+    FcConfigBuildFonts(config);
+    return 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
