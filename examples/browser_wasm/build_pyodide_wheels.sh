@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-OUT="$ROOT/examples/browser_wasm/dist"
+OUT="$ROOT/examples/browser_wasm/dist/wheels"
 CACHE="$ROOT/.cache"
 WGPU_DIR="$CACHE/wgpu-py"
 WGPU_REF="${WGPU_REF:-feature/pyodide-webgpu-backend}"
