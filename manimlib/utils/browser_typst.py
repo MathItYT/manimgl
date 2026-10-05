@@ -40,4 +40,7 @@ async def initialize_browser_typst(
         return
     except Exception:
         pass
-    await window.manimInitializeTypst(worker_url, core_url, core2_url, core3_url)
+    await window.manimInitializeBrowserWasm({
+        typstWorkerUrl: worker_url,
+        typstCoreBase: core_url.rsplit("/", 1)[0] + "/",
+    })
