@@ -58,6 +58,7 @@ class SingleStringTypst(StringMobject):
         self.code_font = code_font
         self.base_color = color if color is not None else base_color
         self.t2c = t2c or typst_to_color_map or {}
+        skip_browser_svg_measurement = kwargs.pop("_skip_browser_svg_measurement", False)
 
         isolate = () if isolate is None else isolate
         protect = () if protect is None else protect
@@ -80,7 +81,7 @@ class SingleStringTypst(StringMobject):
 
         if "height" not in kwargs and "width" not in kwargs:
             import sys
-            if sys.platform == "emscripten":
+            if sys.platform == "emscripten" and not skip_browser_svg_measurement:
                 from manimlib.mobject.svg.svg_mobject import get_svg_content_height
                 svg_height = get_svg_content_height(self.svg_string)
                 if svg_height > 0:
@@ -111,6 +112,7 @@ class SingleStringTypst(StringMobject):
             typst_string,
             _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>',
             use_labelled_svg=True,
+            _skip_browser_svg_measurement=True,
             **kwargs,
         )
         content = probe.get_content(is_labelled=True)
