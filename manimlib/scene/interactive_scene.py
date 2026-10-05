@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import itertools as it
+import sys
+
 import numpy as np
-import pyperclip
+if sys.platform == "emscripten":
+    pyperclip = None
+else:
+    import pyperclip
 from IPython.core.getipython import get_ipython
 
 from manimlib.animation.fading import FadeIn
