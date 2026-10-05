@@ -19,7 +19,10 @@
 
     const params = new URLSearchParams(location.search);
     const pyodideUrl = params.get("pyodide") || "https://cdn.jsdelivr.net/pyodide/v0.29.3/full/pyodide.mjs";
-    const wheelManifestUrl = params.get("wheels") || "./browser_wasm/dist/wheels.json";
+    const wheelManifestUrl = new URL(
+      params.get("wheels") || "./browser_wasm/dist/wheels.json",
+      document.baseURI,
+    ).href;
     const status = document.getElementById("status");
     const setStatus = (s) => status.textContent = s;
     try {
