@@ -39,10 +39,7 @@
       const { loadPyodide } = await import(pyodideUrl);
       const pyodide = await loadPyodide();
       setStatus("Installing Python/WebGPU dependencies…");
-      await pyodide.loadPackage([
-        "numpy", "scipy", "pillow", "sympy", "matplotlib",
-        "pygments", "pyyaml", "tqdm", "fonttools"
-      ]);
+      await pyodide.loadPackage(["micropip", "numpy", "scipy", "pillow", "sympy", "matplotlib", "pygments", "pyyaml", "tqdm", "fonttools"]);
 
       const wheelManifest = await fetch(wheelManifestUrl).then((response) => {
         if (!response.ok) {
