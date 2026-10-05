@@ -105,11 +105,11 @@ def markup_to_svg(
     return result
 
 
-async def markup_to_svg_async(markup_str: str, justify: bool = False, indent: float = 0, alignment: str = "CENTER", line_width: float | None = None) -> str:
+def markup_to_svg_async(markup_str: str, justify: bool = False, indent: float = 0, alignment: str = "CENTER", line_width: float | None = None) -> str:
     if sys.platform != "emscripten":
         return markup_to_svg(markup_str, justify, indent, alignment, line_width)
     from js import window
-    result = await window.manimPangoTextToSvg(
+    result = window.manimPangoTextToSvg(
         markup_str,
         justify,
         indent,
@@ -239,12 +239,12 @@ class MarkupText(StringMobject):
         )
 
     @classmethod
-    async def create(cls, text: str, **kwargs):
+    def create(cls, text: str, **kwargs):
         if sys.platform != "emscripten":
             return cls(text, **kwargs)
         probe = cls(text, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="1" height="1"/></svg>', **kwargs)
         content = probe.get_content(probe.use_labelled_svg)
-        svg = await markup_to_svg_async(
+        svg = markup_to_svg_async(
             content,
             justify=probe.justify,
             indent=probe.indent,
