@@ -32,6 +32,11 @@ fi
 
 cd "$PANGO_CAIRO_WASM_DIR"
 
+# The upstream env.sh expects magicdir to point at the pango-cairo-wasm
+# checkout. It was historically provided by the Docker image; provide it
+# explicitly for the local build instead.
+export magicdir="$PWD"
+
 git submodule update --init --recursive
 
 # VitoVan's build.sh produces env.sh containing the pkg-config paths and
@@ -45,8 +50,13 @@ fi
 [[ -f env.sh ]] || die \
     "pango-cairo-wasm build completed without generating env.sh"
 
+# env.sh is an upstream script from an older shell environment and does not
+# declare magicdir itself. We provide it above. Temporarily disable nounset
+# while sourcing it because some Emscripten setup scripts probe unset vars.
 # shellcheck disable=SC1091
+set +u
 source ./env.sh
+set -u
 
 command -v emcc >/dev/null 2>&1 || die \
     "env.sh did not provide a working emcc."
@@ -81,7 +91,6 @@ emcc \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s EXPORTED_FUNCTIONS='["_manim_pango_text_to_svg","_manim_pango_free"]' \
     -s EXPORTED_RUNTIME_METHODS='["ccall","UTF8ToString"]' \
-    --embed-file "$PANGO_CAIRO_WASM_DIR/fonts@/usr/share/fonts" \
     -o "$OUT/pango_text.js"
 
 cat > "$OUT/pango_text_loader.js" <<'EOF'
