@@ -88,7 +88,10 @@ char *manim_pango_register_font(const char *path) {
     }
 
     FcChar8 *family = NULL;
-    FcResult result = FcPatternGetString(fonts->fonts[0], FC_FAMILY, 0, &family);
+    FcResult result = FcPatternGetString(
+        fonts->fonts[0], FC_FAMILY, 0, &family
+    );
+
     char *result_string = NULL;
     if (result == FcResultMatch && family) {
         result_string = strdup((const char *)family);
@@ -96,11 +99,6 @@ char *manim_pango_register_font(const char *path) {
 
     FcFontSetDestroy(fonts);
     return result_string;
-}
-
-EMSCRIPTEN_KEEPALIVE
-void manim_pango_free(char *data) {
-    free(data);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -116,7 +114,9 @@ char *manim_pango_text_to_svg(
     configure_browser_fontconfig();
 
     char path[128];
-    unsigned long id = __atomic_fetch_add(&manim_svg_counter, 1, __ATOMIC_RELAXED);
+    unsigned long id = __atomic_fetch_add(
+        &manim_svg_counter, 1, __ATOMIC_RELAXED
+    );
     snprintf(path, sizeof(path), "/tmp/manim-pango-%lu.svg", id);
 
     cairo_surface_t *surface = cairo_svg_surface_create(
@@ -149,7 +149,8 @@ char *manim_pango_text_to_svg(
 
     pango_layout_set_markup(layout, markup, -1);
 
-    PangoFontDescription *font = pango_font_description_from_string("sans 48");
+    PangoFontDescription *font =
+        pango_font_description_from_string("sans 48");
     pango_layout_set_font_description(layout, font);
     pango_font_description_free(font);
 
