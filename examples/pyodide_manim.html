@@ -83,8 +83,8 @@ await micropip.install("${manimWheel}")
 
       setStatus("Starting Manim scene…");
       await pyodide.runPythonAsync(`
-from js import window
 from manimlib import *
+from js import window
 
 class BrowserScene(Scene):
     async def construct(self):
