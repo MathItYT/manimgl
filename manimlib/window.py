@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-import glfw
+import sys
+
 import numpy as np
 import wgpu
-from rendercanvas.glfw import RenderCanvas
+
+if sys.platform == "emscripten":
+    from rendercanvas.pyodide import PyodideRenderCanvas
+else:
+    import glfw
+    from rendercanvas.glfw import RenderCanvas
 
 from manimlib.constants import ASPECT_RATIO
 from manimlib.constants import FRAME_SHAPE
@@ -88,6 +94,9 @@ class Window(object):
         full_screen: bool = False,
         size: Optional[tuple[int, int]] = None,
         position: Optional[tuple[int, int]] = None,
+        canvas_id: str = "canvas",
+        adapter=None,
+        device=None,
     ):
         self.scene: Optional[Scene] = None
         self.frame_view = None
@@ -95,23 +104,28 @@ class Window(object):
         self.pointer_position = np.zeros(2)
         self.undrawn_event = True
 
-        # Asking about monitors needs glfw started, which creating the canvas would otherwise
-        # be what did
-        glfw.init()
-        monitor = self.get_monitor(monitor_index)
-        self.canvas = RenderCanvas(
-            size=size or self.get_default_size(monitor, full_screen),
-            update_mode="manual",
-        )
-        self.canvas.request_draw(self.draw)
-        self.context = self.canvas.get_context("wgpu")
-        # The device this window's frames are drawn by, made here and kept for as long as the
-        # window, see configure
-        self.gpu = Gpu()
-        self.configure()
-        glfw.set_window_pos(self.glfw_window, *(
-            position or self.get_position(monitor, position_string)
-        ))
+        if sys.platform == "emscripten":
+            self.canvas = PyodideRenderCanvas(canvas_id, update_mode="manual")
+            self.canvas.request_draw(self.draw)
+            self.context = self.canvas.get_context("wgpu")
+            self.gpu = Gpu(adapter=adapter, device=device)
+            self.configure()
+        else:
+            # Asking about monitors needs glfw started, which creating the canvas would otherwise
+            # be what did
+            glfw.init()
+            monitor = self.get_monitor(monitor_index)
+            self.canvas = RenderCanvas(
+                size=size or self.get_default_size(monitor, full_screen),
+                update_mode="manual",
+            )
+            self.canvas.request_draw(self.draw)
+            self.context = self.canvas.get_context("wgpu")
+            self.gpu = Gpu()
+            self.configure()
+            glfw.set_window_pos(self.glfw_window, *(
+                position or self.get_position(monitor, position_string)
+            ))
 
         for event_type, handler in [
             ("pointer_move", self.on_pointer_move),
@@ -128,12 +142,22 @@ class Window(object):
         if scene:
             self.init_for_scene(scene)
 
+    @classmethod
+    async def create_for_pyodide(cls, canvas_id: str = "canvas", **kwargs):
+        if sys.platform != "emscripten":
+            raise RuntimeError("create_for_pyodide() is only available in Pyodide.")
+        adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
+        device = await adapter.request_device_async()
+        return cls(canvas_id=canvas_id, adapter=adapter, device=device, **kwargs)
+
     @property
     def glfw_window(self):
         """
         The window itself, for the two things a canvas offers no way to say: where on which
         monitor it opens, and that it should take focus.
         """
+        if sys.platform == "emscripten":
+            raise AttributeError("Pyodide windows do not have a GLFW window.")
         return self.canvas._window
 
     def init_for_scene(self, scene: Scene) -> None:
@@ -250,10 +274,13 @@ class Window(object):
         return key in self.pressed_keys
 
     def focus(self) -> None:
+        if sys.platform == "emscripten":
+            return
         glfw.focus_window(self.glfw_window)
 
     def destroy(self) -> None:
-        self.canvas.close()
+        if sys.platform != "emscripten":
+            self.canvas.close()
 
     # Where it opens
 
@@ -397,3 +424,12 @@ class Window(object):
         self.note_event()
         if self.scene:
             self.scene.on_close()
+
+
+if sys.platform == "emscripten":
+    async def run_scene_from_class(scene_class: type[Scene], canvas_id: str) -> Scene:
+        """Run a Manim scene directly in an HTML canvas under Pyodide."""
+        window = await Window.create_for_pyodide(canvas_id)
+        scene = scene_class(window=window)
+        scene.run()
+        return scene
