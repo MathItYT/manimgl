@@ -54,6 +54,20 @@ export async function initializeBrowserWasm(options = {}) {
       worker,
       coreModules,
     });
+    const fontBase = options.typstFontBase ||
+      "https://cdn.jsdelivr.net/npm/@typst-wasm/fonts@1.0.0/dist/files/";
+    const fontUrls = [
+      fontBase + "LibertinusSerif-Regular.otf",
+      fontBase + "NewCMMath-Regular.otf",
+      fontBase + "NewCM10-Regular.otf",
+      fontBase + "NewCM10-Bold.otf",
+      fontBase + "DejaVuSansMono.ttf",
+    ];
+    await window.manimTypstCompiler.addFonts(
+      ...await Promise.all(fontUrls.map(async (url) =>
+        new Uint8Array(await (await fetch(url)).arrayBuffer())
+      ))
+    );
   }
 
   if (!window.manimPangoTextToSvg && window.PangoTextWasm) {
