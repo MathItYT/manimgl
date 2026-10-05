@@ -116,10 +116,7 @@ emcc \
     -s USE_PTHREADS=1 \
     -s PTHREAD_POOL_SIZE=4 \
     -s ASYNCIFY \
-    # Pango/Cairo and their font backends contain legacy callback/function-pointer\
-    # casts that are tolerated by native ABIs but trap under Wasm's strict\
-    # function-table signatures. Keep the compatibility bridge at the final\
-    # link so the whole dependency stack is covered.\
+    -s EMULATE_FUNCTION_POINTER_CASTS=1 \
     -s EMULATE_FUNCTION_POINTER_CASTS=1 \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s EXPORTED_FUNCTIONS='["_manim_pango_text_to_svg","_manim_pango_free"]' \
