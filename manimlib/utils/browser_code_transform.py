@@ -153,6 +153,10 @@ class _BrowserTransformer(ast.NodeTransformer):
                 node.func.attr = 'add_axis_labels_async'
                 self.changed = True
                 return ast.copy_location(ast.Await(node), node)
+            if node.func.attr == 'get_axis_labels':
+                node.func.attr = 'get_axis_labels_async'
+                self.changed = True
+                return ast.copy_location(ast.Await(node), node)
         if name == 'NumberLine':
             for keyword in node.keywords:
                 if keyword.arg == 'include_numbers' and _is_true_constant(keyword.value):
