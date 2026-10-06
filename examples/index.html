@@ -109,21 +109,25 @@ class BrowserScene(Scene):
     async def construct(self):
         # The font was registered from JavaScript before Python started.
         title = Text.create(
-            "ManimGL + WebGPU",
+            "ManimGL + Pyodide = Love",
             font=str(window.manimBrowserFontFamily),
         )
-        title.scale(0.8)
+        title.scale(1.5)
+
+        await self.play_async(Write(title), run_time=1.5)
 
         circle = Circle(radius=1.5)
         circle.set_color(BLUE)
-        self.add(title, circle)
+        self.add(circle)
 
+        await self.play_async(ShowCreation(circle), run_time=1.5)
         await self.play_async(circle.animate.shift(RIGHT * 2), run_time=1.5)
 
         # Typst is also asynchronous in Pyodide.
         formula = await Typst.create("x^2 + y^2 = r^2")
+        formula.scale(1.5)
         formula.next_to(circle, DOWN)
-        self.add(formula)
+        await self.play_async(GrowFromCenter(formula), run_time=1.5)
 
 await run_scene_from_class(BrowserScene, "manim-canvas")
 `);
