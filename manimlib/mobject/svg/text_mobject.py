@@ -224,7 +224,7 @@ class MarkupText(StringMobject):
             if sys.platform == "emscripten":
                 svg_height = get_svg_content_height(self.svg_string)
                 if svg_height > 0:
-                    self.scale(self.font_size / (48.0 * svg_height))
+                    self.scale(self.font_size / (manim_config.text.font_size_for_unit_height * svg_height))
             else:
                 self.scale(get_text_mob_scale_factor())
 
