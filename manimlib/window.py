@@ -109,7 +109,6 @@ class Window(object):
 
         if sys.platform == "emscripten":
             self.canvas = PyodideRenderCanvas(canvas_id, update_mode="manual")
-            self._install_browser_pointer_tracking()
             self.set_render_size(*self.render_size)
             self.canvas.request_draw(self.draw)
             self.context = self.canvas.get_context("wgpu")
@@ -413,18 +412,28 @@ class Window(object):
             from js import document
 
             canvas = document.getElementById(self.canvas_id)
-            pointer = getattr(canvas, "__manimPointer", None) if canvas is not None else None
-
-            if pointer is not None:
-                left = float(pointer.left)
-                top = float(pointer.top)
-                width = float(pointer.width)
-                height = float(pointer.height)
+            if canvas is not None:
+                # rendercanvas reports pointer coordinates as offsetX/offsetY.
+                # Those values are CSS pixels, while Manim's render coordinates
+                # are the intrinsic canvas pixels (canvas.width/height).
+                #
+                # The canvas is centered by CSS and its displayed size is
+                # different from its 1920x1080 drawing-buffer size. Therefore
+                # the only correct conversion is:
+                #
+                #     displayed CSS px -> intrinsic render px
+                #
+                # using the actual displayed canvas dimensions. Do not use
+                # clientX/clientY or page offsets here: centering is already
+                # accounted for by offsetX/offsetY.
+                rect = canvas.getBoundingClientRect()
+                width = float(rect.width)
+                height = float(rect.height)
                 render_width, render_height = self.render_size
 
                 if width > 0 and height > 0:
-                    x = (float(pointer.clientX) - left) * render_width / width
-                    y = (float(pointer.clientY) - top) * render_height / height
+                    x = float(event["x"]) * render_width / width
+                    y = float(event["y"]) * render_height / height
                     return np.array([x, render_height - y])
 
         _, height = self.canvas.get_logical_size()
