@@ -432,7 +432,6 @@ class Window(object):
                             y = (
                                 client_y - float(rect.top)
                             ) * render_height / height
-                            y = y + render_height / 2.0
 
                             x = (
                                 float(event["x"])
