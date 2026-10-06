@@ -211,7 +211,7 @@ await _editor_scene.playback_async(repeat=False)
       if (!pyodide || !running) return;
       try {
         await pyodide.runPythonAsync(
-          "scene = globals().get('_editor_scene')\n"
+          "scene = globals().get('_editor_scene')\n" +
           "scene.should_end_playing = True if scene is not None else False"
         );
       } catch (_) {}
