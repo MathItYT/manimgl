@@ -159,7 +159,7 @@ class Window(object):
 
         status("DEBUG 1A: solicitando WebGPU adapter…")
         adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
-        status("DEBUG 1B: adapter obtenido; solicitando device…")
+        status(f"DEBUG 1B: adapter obtenido ({getattr(adapter, "summary", "sin summary")}); solicitando device…")
         device = await adapter.request_device_async()
         status("DEBUG 1C: device obtenido; creando Window…")
         return cls(canvas_id=canvas_id, adapter=adapter, device=device, **kwargs)
