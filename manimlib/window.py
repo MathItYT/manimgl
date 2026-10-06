@@ -522,8 +522,21 @@ class Window(object):
 
 if sys.platform == "emscripten":
     async def run_scene_from_class(scene_class: type[Scene], canvas_id: str) -> Scene:
-        """Run a Manim scene directly in an HTML canvas under Pyodide."""
+        """Build a Manim scene in an HTML canvas without blocking the caller."""
+        import asyncio
+
         window = await Window.create_for_pyodide(canvas_id)
         scene = scene_class(window=window)
-        await scene.run_live()
+
+        # Execute the scene itself as the awaited operation.  The browser
+        # interaction loop must not be awaited here: it is intentionally
+        # long-lived and would make the "Execute" coroutine never resolve.
+        await scene.build_async()
+        await scene.update_frame_async(force_draw=True)
+
+        # Keep pointer/keyboard redraws alive after execution, but leave the
+        # scene runner free to return the completed scene to the editor.
+        task = asyncio.create_task(scene.browser_interaction_loop())
+        scene._browser_interaction_task = task
         return scene
+
