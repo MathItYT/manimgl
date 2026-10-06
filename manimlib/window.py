@@ -12,6 +12,7 @@ else:
     from rendercanvas.glfw import RenderCanvas
 
 from manimlib.constants import ASPECT_RATIO
+from manimlib.constants import DEFAULT_RESOLUTION
 from manimlib.constants import FRAME_SHAPE
 from manimlib.event_keys import Keys
 from manimlib.event_keys import Mods
@@ -106,6 +107,7 @@ class Window(object):
 
         if sys.platform == "emscripten":
             self.canvas = PyodideRenderCanvas(canvas_id, update_mode="manual")
+            self.set_render_size(*DEFAULT_RESOLUTION)
             self.canvas.request_draw(self.draw)
             self.context = self.canvas.get_context("wgpu")
             self.gpu = Gpu(adapter=adapter, device=device)
@@ -190,6 +192,18 @@ class Window(object):
         self.format = preferred.removesuffix("-srgb")
         self.context.configure(device=self.device, format=self.format)
         self.init_present_resources()
+
+    def set_render_size(self, width: int, height: int) -> None:
+        """Set the browser canvas intrinsic size used by the WebGPU surface."""
+        if sys.platform != "emscripten":
+            return
+        from js import document
+
+        canvas = document.getElementById(self.canvas._canvas_id)
+        if canvas is None:
+            raise RuntimeError("Could not find the browser canvas element.")
+        canvas.width = int(width)
+        canvas.height = int(height)
 
     def get_size(self) -> tuple[int, int]:
         """How many pixels there are to draw, which is not the size in screen coordinates"""
