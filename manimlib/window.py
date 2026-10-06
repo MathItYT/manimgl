@@ -384,7 +384,12 @@ class Window(object):
             canvas = document.getElementById(self.canvas_id)
             if canvas is not None:
                 css_width = float(canvas.clientWidth)
-                css_height = float(canvas.clientHeight)
+                # offsetY is measured against the canvas's CSS box, while the
+                # browser's vertical layout can be fractional. Use the actual
+                # CSS bounding height for Y so the top/bottom edges map exactly
+                # to the render target, even when the canvas is centered and
+                # resized by CSS.
+                css_height = float(canvas.getBoundingClientRect().height)
                 render_width, render_height = self.render_size
 
                 if css_width > 0 and css_height > 0:
