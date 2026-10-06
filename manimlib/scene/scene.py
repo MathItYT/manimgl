@@ -974,6 +974,18 @@ class Scene(object):
                 break
         browser_audio.stop_all()
 
+    async def browser_interaction_loop(self) -> None:
+        """Keep browser input processing and redraws alive after playback."""
+        if sys.platform != "emscripten":
+            raise RuntimeError("browser_interaction_loop() is only available in Pyodide")
+        from manimlib.utils.browser_scheduler import next_animation_frame
+
+        while not self.is_window_closing():
+            self.window.poll_events()
+            if self.window.has_undrawn_event():
+                self.update_frame(force_draw=True)
+            await next_animation_frame()
+
     # Helpers for interactive development
 
     def get_state(self, ignore: list[str] | None = None) -> SceneState:
