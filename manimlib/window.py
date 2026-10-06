@@ -109,6 +109,7 @@ class Window(object):
 
         if sys.platform == "emscripten":
             self.canvas = PyodideRenderCanvas(canvas_id, update_mode="manual")
+            self._install_browser_pointer_tracking()
             self.set_render_size(*self.render_size)
             self.canvas.request_draw(self.draw)
             self.context = self.canvas.get_context("wgpu")
@@ -196,6 +197,38 @@ class Window(object):
             self.set_render_size(*self.render_size)
         self.context.configure(device=self.device, format=self.format)
         self.init_present_resources()
+
+    def _install_browser_pointer_tracking(self) -> None:
+        """Track viewport pointer coordinates independently of rendercanvas's offsetX/Y."""
+        from js import eval
+
+        eval(
+            """
+            (() => {
+                const canvas = document.getElementById(%r);
+                if (!canvas || canvas.__manimPointerTrackingInstalled) {
+                    return;
+                }
+
+                const update = (event) => {
+                    const rect = canvas.getBoundingClientRect();
+                    canvas.__manimPointer = {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                        left: rect.left,
+                        top: rect.top,
+                        width: rect.width,
+                        height: rect.height,
+                    };
+                };
+
+                for (const type of ["pointermove", "pointerdown", "pointerup", "wheel"]) {
+                    canvas.addEventListener(type, update, true);
+                }
+                canvas.__manimPointerTrackingInstalled = true;
+            })();
+            """ % self.canvas_id
+        )
 
     def set_render_size(self, width: int, height: int) -> None:
         """Set the browser canvas intrinsic size used by the WebGPU surface."""
@@ -367,34 +400,31 @@ class Window(object):
 
     def event_position(self, event: dict) -> np.ndarray:
         """
-        Convert the browser pointer position to Manim render-pixel coordinates.
+        Convert a browser pointer position to Manim render-pixel coordinates.
 
-        rendercanvas provides offsetX/offsetY, which are local to the canvas CSS
-        layout box. Do not use getBoundingClientRect() here: its dimensions
-        include CSS transforms. With a CSS transform scale, using the bounding
-        rect would apply the transform a second time.
+        rendercanvas exposes offsetX/offsetY, but those coordinates are not reliable
+        when the canvas is transformed with CSS. A centered, CSS-scaled canvas can
+        make offset coordinates refer to the layout box instead of the visual canvas.
 
-        clientWidth/clientHeight describe the untransformed CSS layout box.
-        The canvas position in the page is irrelevant because offsetX/offsetY
-        are already relative to the canvas.
+        Use viewport coordinates and the canvas's visual bounding rectangle instead.
+        This handles CSS transforms, centering, fractional sizes, and page position.
         """
         if sys.platform == "emscripten":
             from js import document
 
             canvas = document.getElementById(self.canvas_id)
-            if canvas is not None:
-                css_width = float(canvas.clientWidth)
-                # offsetY is measured against the canvas's CSS box, while the
-                # browser's vertical layout can be fractional. Use the actual
-                # CSS bounding height for Y so the top/bottom edges map exactly
-                # to the render target, even when the canvas is centered and
-                # resized by CSS.
-                css_height = float(canvas.getBoundingClientRect().height)
+            pointer = getattr(canvas, "__manimPointer", None) if canvas is not None else None
+
+            if pointer is not None:
+                left = float(pointer.left)
+                top = float(pointer.top)
+                width = float(pointer.width)
+                height = float(pointer.height)
                 render_width, render_height = self.render_size
 
-                if css_width > 0 and css_height > 0:
-                    x = float(event["x"]) * render_width / css_width
-                    y = float(event["y"]) * render_height / css_height
+                if width > 0 and height > 0:
+                    x = (float(pointer.clientX) - left) * render_width / width
+                    y = (float(pointer.clientY) - top) * render_height / height
                     return np.array([x, render_height - y])
 
         _, height = self.canvas.get_logical_size()
