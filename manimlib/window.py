@@ -114,6 +114,7 @@ class Window(object):
             self.context = self.canvas.get_context("wgpu")
             self.gpu = Gpu(adapter=adapter, device=device)
             self.configure()
+            self._install_browser_pointer_tracking()
         else:
             # Asking about monitors needs glfw started, which creating the canvas would otherwise
             # be what did
@@ -401,44 +402,36 @@ class Window(object):
         """
         Convert a browser pointer position to Manim render-pixel coordinates.
 
-        rendercanvas exposes offsetX/offsetY, but those coordinates are not reliable
-        when the canvas is transformed with CSS. A centered, CSS-scaled canvas can
-        make offset coordinates refer to the layout box instead of the visual canvas.
-
-        Use viewport coordinates and the canvas's visual bounding rectangle instead.
-        This handles CSS transforms, centering, fractional sizes, and page position.
+        rendercanvas's browser coordinates can be based on the canvas layout
+        position rather than its transformed visual position. Use the actual
+        viewport pointer position and the canvas's visual bounding rectangle.
         """
         if sys.platform == "emscripten":
             from js import document
 
             canvas = document.getElementById(self.canvas_id)
             if canvas is not None:
-                # rendercanvas reports pointer coordinates as offsetX/offsetY.
-                # Those values are CSS pixels, while Manim's render coordinates
-                # are the intrinsic canvas pixels (canvas.width/height).
-                #
-                # The canvas is centered by CSS and its displayed size is
-                # different from its 1920x1080 drawing-buffer size. Therefore
-                # the only correct conversion is:
-                #
-                #     displayed CSS px -> intrinsic render px
-                #
-                # using the actual displayed canvas dimensions. Do not use
-                # clientX/clientY or page offsets here: centering is already
-                # accounted for by offsetX/offsetY.
-                rect = canvas.getBoundingClientRect()
-                width = float(rect.width)
-                render_width, render_height = self.render_size
-                height = width / ASPECT_RATIO
+                pointer = getattr(canvas, "__manimPointer", None)
+                if pointer is not None:
+                    try:
+                        client_x = float(pointer.clientX)
+                        client_y = float(pointer.clientY)
+                    except (AttributeError, TypeError, ValueError):
+                        client_x = client_y = None
 
-                if width > 0 and height > 0:
-                    x = float(event["x"]) * render_width / width
-                    y = float(event["y"]) * render_height / height
-                    return np.array([x, render_height - y])
+                    if client_x is not None and client_y is not None:
+                        rect = canvas.getBoundingClientRect()
+                        width = float(rect.width)
+                        height = float(rect.height)
+                        render_width, render_height = self.render_size
+
+                        if width > 0 and height > 0:
+                            x = (client_x - float(rect.left)) * render_width / width
+                            y = (client_y - float(rect.top)) * render_height / height
+                            return np.array([x, render_height - y])
 
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
-
     def event_point(self, event: dict) -> np.ndarray:
         return self.pixel_coords_to_space_coords(*self.event_position(event))
 
