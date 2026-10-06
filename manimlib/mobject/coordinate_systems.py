@@ -801,3 +801,30 @@ class ComplexPlane(NumberPlane):
         self.coordinate_labels.draw_fills_together_if_disjoint()
         self.add(self.coordinate_labels)
         return self
+
+
+    async def add_coordinate_labels_async(
+        self,
+        numbers: list[complex] | None = None,
+        skip_first: bool = True,
+        font_size: int = 36,
+        **kwargs
+    ) -> Self:
+        """Browser-safe ComplexPlane coordinate labels."""
+        if numbers is None:
+            numbers = self.get_default_coordinate_values(skip_first)
+        self.coordinate_labels = VGroup()
+        for number in numbers:
+            z = complex(number)
+            if abs(z.imag) > abs(z.real):
+                axis = self.get_y_axis()
+                value = z.imag
+                kwargs["unit_tex"] = "i"
+            else:
+                axis = self.get_x_axis()
+                value = z.real
+            number_mob = await axis.get_number_mobject_async(value, font_size=font_size, **kwargs)
+            self.coordinate_labels.add(number_mob)
+        self.coordinate_labels.draw_fills_together_if_disjoint()
+        self.add(self.coordinate_labels)
+        return self
