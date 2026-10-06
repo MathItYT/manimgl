@@ -102,13 +102,10 @@ class DecimalNumber(VMobject):
                 sm.become(smt)
                 sm.scale(font_size / smt.font_size)
         else:
-            submobjects = []
-            for char, smt in zip(self.num_string, submob_templates):
-                mob = smt.copy().scale(font_size / smt.font_size)
-                if char == ".":
-                    mob.scale(0.5)
-                submobjects.append(mob)
-            self.set_submobjects(submobjects)
+            self.set_submobjects([
+                smt.copy().scale(font_size / smt.font_size)
+                for smt in submob_templates
+            ])
 
         digit_buff = self.digit_buff_per_font_unit * font_size
         self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
@@ -151,25 +148,46 @@ class DecimalNumber(VMobject):
 
         from manimlib.mobject.svg.typst_mobject import Typst
 
-        async def make_mob(char: str):
-            return await Typst.create(char, **self.text_config)
+        font_size = self.get_font_size()
+        isolate = tuple(self.num_string)
+        number_mob = await Typst.create(
+            self.num_string,
+            isolate=isolate,
+            font_size=font_size,
+            **self.text_config,
+        )
 
-        submob_templates = [await make_mob(char) for char in self.num_string]
+        # Render the complete number as one Typst expression. This is
+        # important: Typst's glyph metrics preserve the natural relative
+        # size of punctuation (especially the decimal point), whereas
+        # rendering each character separately would normalize "." to the
+        # same height as a digit.
+        submob_templates = [
+            number_mob.get_part_by_typst(char, index)
+            for index, char in enumerate(self.num_string)
+        ]
+
         if self.show_ellipsis:
-            dots = await Typst.create("...", **self.text_config)
+            dots = await Typst.create(
+                "...",
+                font_size=font_size,
+                **self.text_config,
+            )
             dots.arrange(RIGHT, buff=2 * dots[0].get_width())
             submob_templates.append(dots)
-        if self.unit is not None:
-            submob_templates.append(await make_mob(self.unit))
 
-        font_size = self.get_font_size()
-        submobjects = []
-        for char, smt in zip(self.num_string, submob_templates):
-            mob = smt.copy().scale(font_size / smt.font_size)
-            if char == ".":
-                mob.scale(0.5)
-            submobjects.append(mob)
-        self.set_submobjects(submobjects)
+        if self.unit is not None:
+            unit = await Typst.create(
+                self.unit,
+                font_size=font_size,
+                **self.text_config,
+            )
+            submob_templates.append(unit)
+
+        self.set_submobjects([
+            smt.copy()
+            for smt in submob_templates
+        ])
         digit_buff = self.digit_buff_per_font_unit * font_size
         self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
 
