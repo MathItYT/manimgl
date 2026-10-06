@@ -400,15 +400,11 @@ class Window(object):
 
     def event_position(self, event: dict) -> np.ndarray:
         """
-        Convert a browser pointer position to Manim render-pixel coordinates.
+        Convert a pointer position to Manim render-pixel coordinates.
 
-        rendercanvas reports offsetX/offsetY, but those coordinates can have a
-        different origin from the visually positioned canvas. Use the viewport
-        pointer position to correct the origin while preserving the render-pixel
-        scale used by the original conversion.
-
-        Y is inverted here because pixel_coords_to_space_coords() expects
-        render pixels measured upward from the bottom.
+        rendercanvas's event coordinates already have the correct scale.
+        For the browser canvas, only compensate for the visual vertical
+        translation introduced by CSS centering/scaling.
         """
         if sys.platform == "emscripten":
             from js import document
@@ -418,28 +414,26 @@ class Window(object):
                 pointer = getattr(canvas, "__manimPointer", None)
                 if pointer is not None:
                     try:
-                        client_x = float(pointer.clientX)
                         client_y = float(pointer.clientY)
                     except (AttributeError, TypeError, ValueError):
-                        client_x = client_y = None
+                        client_y = None
 
-                    if client_x is not None and client_y is not None:
+                    if client_y is not None:
                         rect = canvas.getBoundingClientRect()
-                        width = float(rect.width)
-                        render_width, render_height = self.render_size
-                        # Keep the original Y scale. In particular, do not use
-                        # rect.height here: the canvas is constrained by its
-                        # 16:9 aspect ratio in CSS.
-                        height = width / ASPECT_RATIO
 
-                        if width > 0 and height > 0:
-                            x = (
-                                client_x - float(rect.left)
-                            ) * render_width / width
-                            y = (
-                                client_y - float(rect.top)
-                            ) * render_height / height
-                            return np.array([x, render_height - y])
+                        # event["y"] is already in the coordinate system and
+                        # scale expected by Manim. Do not rescale it.
+                        #
+                        # The pointer tracker gives us the actual visual
+                        # position. The difference between that position and
+                        # rendercanvas's event coordinate is a pure translation.
+                        visual_y = client_y - float(rect.top)
+                        offset = visual_y - float(event["y"])
+
+                        return np.array([
+                            float(event["x"]),
+                            float(event["y"]) + offset,
+                        ])
 
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
