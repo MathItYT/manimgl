@@ -42,7 +42,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from manimlib.typing import Vect3
 
-
 SELECT_KEY = manim_config.key_bindings.select
 UNSELECT_KEY = manim_config.key_bindings.unselect
 GRAB_KEY = manim_config.key_bindings.grab
@@ -50,85 +49,51 @@ X_GRAB_KEY = manim_config.key_bindings.x_grab
 Y_GRAB_KEY = manim_config.key_bindings.y_grab
 Z_GRAB_KEY = manim_config.key_bindings.z_grab
 GRAB_KEYS = [GRAB_KEY, X_GRAB_KEY, Y_GRAB_KEY, Z_GRAB_KEY]
-RESIZE_KEY = manim_config.key_bindings.resize  # TODO
+RESIZE_KEY = manim_config.key_bindings.resize
 COLOR_KEY = manim_config.key_bindings.color
 INFORMATION_KEY = manim_config.key_bindings.information
 CURSOR_KEY = manim_config.key_bindings.cursor
-
-# For keyboard interactions
-
 ARROW_SYMBOLS: list[int] = [Keys.LEFT, Keys.UP, Keys.RIGHT, Keys.DOWN]
 
-# Note, a lot of the functionality here is still buggy and very much a work in progress.
-
-
 class InteractiveScene(Scene):
-    """
-    To select mobjects on screen, hold ctrl and move the mouse to highlight a region,
-    or just tap ctrl to select the mobject under the cursor.
-
-    Pressing command + t will toggle between modes where you either select top level
-    mobjects part of the scene, or low level pieces.
-
-    Hold 'g' to grab the selection and move it around
-    Hold 'h' to drag it constrained in the horizontal direction
-    Hold 'v' to drag it constrained in the vertical direction
-    Hold 't' to resize selection, adding 'shift' to resize with respect to a corner
-
-    Command + 'c' copies the ids of selections to clipboard
-    Command + 'v' will paste either:
-        - The copied mobject
-        - A Tex mobject based on copied LaTeX
-        - A Text mobject based on copied Text
-    Command + 'z' restores selection back to its original state
-    Command + 's' saves the selected mobjects to file
-    """
-    corner_dot_config = dict(
-        color=WHITE,
-        radius=0.05,
-        glow_factor=2.0,
-    )
+    corner_dot_config = dict(color=WHITE, radius=0.05, glow_factor=2.0)
     selection_rectangle_stroke_color = WHITE
     selection_rectangle_stroke_width = 1.0
     palette_colors = MANIM_COLORS
     selection_nudge_size = 0.05
-    cursor_location_config = dict(
-        font_size=24,
-        fill_color=GREY_C,
-        num_decimal_places=3,
-    )
-    time_label_config = dict(
-        font_size=24,
-        fill_color=GREY_C,
-        num_decimal_places=1,
-    )
+    cursor_location_config = dict(font_size=24, fill_color=GREY_C, num_decimal_places=3)
+    time_label_config = dict(font_size=24, fill_color=GREY_C, num_decimal_places=1)
     crosshair_width = 0.2
-    crosshair_style = dict(
-        stroke_color=GREY_A,
-        stroke_width=[3, 0, 3],
-    )
+    crosshair_style = dict(stroke_color=GREY_A, stroke_width=[3, 0, 3])
 
     def setup(self):
         self.selection = Group()
         self.selection_highlight = self.get_selection_highlight()
         self.selection_rectangle = self.get_selection_rectangle()
         self.crosshair = self.get_crosshair()
-        self.information_label = self.get_information_label()
-        self.color_palette = self.get_color_palette()
+
+        # DecimalNumber/Text creation is asynchronous in the browser. The
+        # interactive information overlay is not required by the web editor,
+        # so keep it disabled there instead of constructing it synchronously.
+        if sys.platform == "emscripten":
+            self.information_label = Group()
+            self.color_palette = Group()
+        else:
+            self.information_label = self.get_information_label()
+            self.color_palette = self.get_color_palette()
+
         self.unselectables = [
             self.selection,
             self.selection_highlight,
             self.selection_rectangle,
             self.crosshair,
             self.information_label,
-            self.camera.frame
+            self.camera.frame,
         ]
         self.select_top_level_mobs = True
         self.regenerate_selection_search_set()
-
         self.is_selecting = False
         self.is_grabbing = False
-
         self.add(self.selection_highlight)
 
     def get_selection_rectangle(self):
@@ -145,9 +110,8 @@ class InteractiveScene(Scene):
         p1 = rect.fixed_corner
         p2 = self.frame.to_fixed_frame_point(self.mouse_point.get_center())
         rect.set_points_as_corners([
-            p1, np.array([p2[0], p1[1], 0]),
-            p2, np.array([p1[0], p2[1], 0]),
-            p1,
+            p1, np.array([p2[0], p1[1], 0]), p2,
+            np.array([p1[0], p2[1], 0]), p1,
         ])
         return rect
 
@@ -160,18 +124,14 @@ class InteractiveScene(Scene):
     def update_selection_highlight(self, highlight: Mobject):
         if set(highlight.tracked_mobjects) == set(self.selection):
             return
-
-        # Otherwise, refresh contents of highlight
         highlight.tracked_mobjects = list(self.selection)
         highlight.set_submobjects([
-            self.get_highlight(mob)
-            for mob in self.selection
+            self.get_highlight(mob) for mob in self.selection
         ])
         try:
             index = min((
                 i for i, mob in enumerate(self.mobjects)
-                for sm in self.selection
-                if sm in mob.get_family()
+                for sm in self.selection if sm in mob.get_family()
             ))
             self.mobjects.remove(highlight)
             self.mobjects.insert(index - 1, highlight)
@@ -183,7 +143,6 @@ class InteractiveScene(Scene):
         lines[0].set_points([LEFT, ORIGIN, RIGHT])
         lines[1].set_points([UP, ORIGIN, DOWN])
         crosshair = VGroup(*lines)
-
         crosshair.set_width(self.crosshair_width)
         crosshair.set_style(**self.crosshair_style)
         crosshair.set_animating_status(True)
@@ -204,10 +163,8 @@ class InteractiveScene(Scene):
 
     def get_information_label(self):
         loc_label = VGroup(*(
-            DecimalNumber(**self.cursor_location_config)
-            for n in range(3)
+            DecimalNumber(**self.cursor_location_config) for n in range(3)
         ))
-
         def update_coords(loc_label):
             for mob, coord in zip(loc_label, self.mouse_point.get_location()):
                 mob.set_value(coord)
@@ -215,22 +172,16 @@ class InteractiveScene(Scene):
             loc_label.to_corner(DR, buff=SMALL_BUFF)
             loc_label.fix_in_frame()
             return loc_label
-
         loc_label.add_updater(update_coords)
-
         time_label = DecimalNumber(0, **self.time_label_config)
         time_label.to_corner(DL, buff=SMALL_BUFF)
         time_label.fix_in_frame()
         time_label.add_updater(lambda m, dt: m.increment_value(dt))
-
         return VGroup(loc_label, time_label)
 
-    # Overrides
     def get_state(self):
         return SceneState(self, ignore=[
-            self.selection_highlight,
-            self.selection_rectangle,
-            self.crosshair,
+            self.selection_highlight, self.selection_rectangle, self.crosshair,
         ])
 
     def restore_state(self, scene_state: SceneState):
@@ -245,11 +196,9 @@ class InteractiveScene(Scene):
         super().remove(*mobjects)
         self.regenerate_selection_search_set()
 
-    def remove_all_except(self, *mobjects_to_keep : Mobject):
+    def remove_all_except(self, *mobjects_to_keep: Mobject):
         super().remove_all_except(*mobjects_to_keep)
         self.regenerate_selection_search_set()
-
-    # Related to selection
 
     def toggle_selection_mode(self):
         self.select_top_level_mobs = not self.select_top_level_mobs
@@ -260,16 +209,12 @@ class InteractiveScene(Scene):
         return self.selection_search_set
 
     def regenerate_selection_search_set(self):
-        selectable = list(filter(
-            lambda m: m not in self.unselectables,
-            self.mobjects
-        ))
+        selectable = list(filter(lambda m: m not in self.unselectables, self.mobjects))
         if self.select_top_level_mobs:
             self.selection_search_set = selectable
         else:
             self.selection_search_set = [
-                submob
-                for mob in selectable
+                submob for mob in selectable
                 for submob in mob.family_members_with_points()
             ]
 
@@ -277,16 +222,13 @@ class InteractiveScene(Scene):
         curr = list(self.selection)
         if self.select_top_level_mobs:
             self.selection.set_submobjects([
-                mob
-                for mob in self.mobjects
+                mob for mob in self.mobjects
                 if any(sm in mob.get_family() for sm in curr)
             ])
             self.selection.refresh_bounding_box(recurse_down=True)
         else:
             self.selection.set_submobjects(
-                extract_mobject_family_members(
-                    curr, exclude_pointless=True,
-                )
+                extract_mobject_family_members(curr, exclude_pointless=True)
             )
 
     def get_corner_dots(self, mobject: Mobject) -> Mobject:
@@ -297,18 +239,14 @@ class InteractiveScene(Scene):
         else:
             vects = np.array(list(it.product(*3 * [[-1, 1]])))
         dots.add_updater(lambda d: d.set_points([
-            mobject.get_corner(v) + v * radius
-            for v in vects
+            mobject.get_corner(v) + v * radius for v in vects
         ]))
         return dots
 
     def get_highlight(self, mobject: Mobject) -> Mobject:
         if isinstance(mobject, VMobject) and mobject.has_points() and not self.select_top_level_mobs:
             length = max([mobject.get_height(), mobject.get_width()])
-            result = VHighlight(
-                mobject,
-                max_stroke_addition=min([50 * length, 10]),
-            )
+            result = VHighlight(mobject, max_stroke_addition=min([50 * length, 10]))
             result.add_updater(lambda m: m.replace(mobject, stretch=True))
             return result
         elif isinstance(mobject, DotCloud):
@@ -355,8 +293,6 @@ class InteractiveScene(Scene):
                     self.unselectables.remove(sm)
         self.regenerate_selection_search_set()
 
-    # Functions for keyboard actions
-
     def copy_selection(self):
         names = []
         shell = get_ipython()
@@ -372,22 +308,17 @@ class InteractiveScene(Scene):
 
     def paste_selection(self):
         clipboard_str = pyperclip.paste()
-        # Try pasting a mobject
         try:
             ids = map(int, clipboard_str.split(","))
             mobs = map(self.id_to_mobject, ids)
             mob_copies = [m.copy() for m in mobs if m is not None]
             self.clear_selection()
-            self.play(*(
-                FadeIn(mc, run_time=0.5, scale=1.5)
-                for mc in mob_copies
-            ), register=False)
+            self.play(*(FadeIn(mc, run_time=0.5, scale=1.5) for mc in mob_copies), register=False)
             self.add_to_selection(*mob_copies)
             return
         except ValueError:
             pass
-        # Otherwise, treat as tex or text
-        if set("\\^=+").intersection(clipboard_str):  # Proxy to text for LaTeX
+        if set("\^=+").intersection(clipboard_str):
             try:
                 new_mob = Tex(clipboard_str)
             except LatexError:
@@ -405,9 +336,7 @@ class InteractiveScene(Scene):
     def enable_selection(self):
         self.is_selecting = True
         self.add(self.selection_rectangle)
-        self.selection_rectangle.fixed_corner = self.frame.to_fixed_frame_point(
-            self.mouse_point.get_center()
-        )
+        self.selection_rectangle.fixed_corner = self.frame.to_fixed_frame_point(self.mouse_point.get_center())
 
     def gather_new_selection(self):
         self.is_selecting = False
@@ -477,12 +406,9 @@ class InteractiveScene(Scene):
         self.add_to_selection(*pieces)
 
     def nudge_selection(self, vect: np.ndarray, large: bool = False):
-        nudge = self.selection_nudge_size
-        if large:
-            nudge *= 10
+        nudge = self.selection_nudge_size * (10 if large else 1)
         self.selection.shift(nudge * vect)
 
-    # Key actions
     def on_key_press(self, symbol: int, modifiers: int) -> None:
         super().on_key_press(symbol, modifiers)
         try:
@@ -531,7 +457,6 @@ class InteractiveScene(Scene):
                 vect=[LEFT, UP, RIGHT, DOWN][ARROW_SYMBOLS.index(symbol)],
                 large=(modifiers & Mods.SHIFT),
             )
-        # Adding crosshair
         if char == CURSOR_KEY:
             if self.crosshair in self.mobjects:
                 self.remove(self.crosshair)
@@ -539,8 +464,6 @@ class InteractiveScene(Scene):
                 self.add(self.crosshair)
         if char == SELECT_KEY:
             self.add(self.crosshair)
-
-        # Conditions for saving state
         if char in [GRAB_KEY, X_GRAB_KEY, Y_GRAB_KEY, Z_GRAB_KEY, RESIZE_KEY]:
             self.save_state()
 
@@ -555,14 +478,13 @@ class InteractiveScene(Scene):
         elif symbol == Keys.SHIFT and self.window.is_key_pressed(ord(RESIZE_KEY)):
             self.prepare_resizing(about_corner=False)
 
-    # Mouse actions
     def handle_grabbing(self, point: Vect3):
         diff = point - self.mouse_to_selection
         if self.window.is_key_pressed(ord(GRAB_KEY)):
             self.selection.move_to(diff)
         elif self.window.is_key_pressed(ord(X_GRAB_KEY)):
             self.selection.set_x(diff[0])
-        elif self.window.is_key_pressed(ord(Y_GRAB_KEY)):
+        elif self.window.is_key_pressed(ord(Y_GRAB_KEY):
             self.selection.set_y(diff[1])
         elif self.window.is_key_pressed(ord(Z_GRAB_KEY)):
             self.selection.set_z(diff[2])
@@ -576,31 +498,20 @@ class InteractiveScene(Scene):
                 scalar = vect[i] / self.scale_ref_vect[i]
                 self.selection.rescale_to_fit(
                     scalar * [self.scale_ref_width, self.scale_ref_height][i],
-                    dim=i,
-                    about_point=self.scale_about_point,
-                    stretch=True,
+                    dim=i, about_point=self.scale_about_point, stretch=True,
                 )
         else:
             scalar = get_norm(vect) / get_norm(self.scale_ref_vect)
-            self.selection.set_width(
-                scalar * self.scale_ref_width,
-                about_point=self.scale_about_point
-            )
+            self.selection.set_width(scalar * self.scale_ref_width, about_point=self.scale_about_point)
 
     def handle_sweeping_selection(self, point: Vect3):
-        mob = self.point_to_mobject(
-            point,
-            search_set=self.get_selection_search_set(),
-            buff=SMALL_BUFF
-        )
+        mob = self.point_to_mobject(point, search_set=self.get_selection_search_set(), buff=SMALL_BUFF)
         if mob is not None:
             self.add_to_selection(mob)
 
     def choose_color(self, point: Vect3):
-        # Search through all mobject on the screen, not just the palette
         to_search = [
-            sm
-            for mobject in self.mobjects
+            sm for mobject in self.mobjects
             for sm in mobject.family_members_with_points()
             if mobject not in self.unselectables
         ]
@@ -619,13 +530,7 @@ class InteractiveScene(Scene):
         elif self.window.is_key_pressed(ord(SELECT_KEY)) and self.window.is_key_pressed(Keys.SHIFT):
             self.handle_sweeping_selection(point)
 
-    def on_mouse_drag(
-        self,
-        point: Vect3,
-        d_point: Vect3,
-        buttons: int,
-        modifiers: int
-    ) -> None:
+    def on_mouse_drag(self, point: Vect3, d_point: Vect3, buttons: int, modifiers: int) -> None:
         super().on_mouse_drag(point, d_point, buttons, modifiers)
         self.crosshair.move_to(self.frame.to_fixed_frame_point(point))
 
@@ -636,13 +541,11 @@ class InteractiveScene(Scene):
         else:
             self.clear_selection()
 
-    # Copying code to recreate state
     def copy_frame_positioning(self):
         frame = self.frame
         center = frame.get_center()
         height = frame.get_height()
         angles = frame.get_euler_angles()
-
         call = "reorient("
         call += "%d, %d, %d" % tuple(angles / DEG)
         if any(center != 0):
