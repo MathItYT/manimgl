@@ -179,6 +179,10 @@ class _BrowserTransformer(ast.NodeTransformer):
                 node.func.attr = 'add_numbers_async'
                 self.changed = True
                 return ast.copy_location(ast.Await(node), node)
+            if node.func.attr == 'add_coordinates':
+                node.func.attr = 'add_coordinates_async'
+                self.changed = True
+                return ast.copy_location(ast.Await(node), node)
             if node.func.attr == 'add_coordinate_labels':
                 node.func.attr = 'add_coordinate_labels_async'
                 self.changed = True
