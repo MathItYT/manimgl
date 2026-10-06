@@ -157,6 +157,8 @@ emcc \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s EXPORTED_FUNCTIONS='["_manim_pango_text_to_svg","_manim_pango_register_font","_manim_pango_free"]' \
     -s EXPORTED_RUNTIME_METHODS='["ccall","UTF8ToString","FS"]' \
+    --preload-file "$FONT_ASSETS/etc/fonts@/etc/fonts" \
+    --preload-file "$FONT_ASSETS/fonts@/fonts" \
     -o "$OUT/pango_text.js"
 
 cat > "$OUT/pango_text_loader.js" <<'EOF'
