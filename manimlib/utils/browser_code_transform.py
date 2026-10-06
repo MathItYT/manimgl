@@ -78,6 +78,10 @@ class _BrowserTransformer(ast.NodeTransformer):
                 function.__class__ = ast.AsyncFunctionDef
         async_names = self.async_functions
         class AwaitCalls(ast.NodeTransformer):
+            def visit_Await(self, node):
+                node.value = self.generic_visit(node.value)
+                return node
+
             def visit_Call(self, call):
                 call = self.generic_visit(call)
                 if isinstance(call.func, ast.Name) and call.func.id in async_names and call.func.id != 'construct':
