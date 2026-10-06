@@ -151,8 +151,17 @@ class Window(object):
     async def create_for_pyodide(cls, canvas_id: str = "canvas", **kwargs):
         if sys.platform != "emscripten":
             raise RuntimeError("create_for_pyodide() is only available in Pyodide.")
+
+        from js import document
+
+        def status(message: str) -> None:
+            document.getElementById("status").textContent = message
+
+        status("DEBUG 1A: solicitando WebGPU adapter…")
         adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
+        status("DEBUG 1B: adapter obtenido; solicitando device…")
         device = await adapter.request_device_async()
+        status("DEBUG 1C: device obtenido; creando Window…")
         return cls(canvas_id=canvas_id, adapter=adapter, device=device, **kwargs)
 
     @property
