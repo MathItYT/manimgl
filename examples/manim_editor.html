@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ManimGL — Monaco Web Editor</title>
+  <script src="./coi-serviceworker.js"></script>
+  <style>
+    :root { color-scheme: dark; --bg:#0b0e14; --panel:#111620; --line:#252c38; --text:#e5e7eb; --muted:#8e9aae; --accent:#477dff; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; width:100%; height:100%; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; overflow:hidden; }
+    body { display:flex; flex-direction:column; }
+    #toolbar { height:48px; min-height:48px; display:flex; align-items:center; gap:10px; padding:7px 10px; background:var(--panel); border-bottom:1px solid var(--line); }
+    button { border:0; border-radius:6px; padding:7px 13px; background:#2b3342; color:#fff; font-weight:600; cursor:pointer; }
+    button.primary { background:var(--accent); }
+    button:disabled { opacity:.45; cursor:default; }
+    #status { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font:12px monospace; }
+    #main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(380px, 46%) 1fr; }
+    #editor-wrap { min-width:0; min-height:0; border-right:1px solid var(--line); position:relative; }
+    #editor { position:absolute; inset:0; }
+    #preview-wrap { min-width:0; min-height:0; display:flex; flex-direction:column; }
+    #preview { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:16px; }
+    #manim-canvas { display:block; width:min(100%, calc((100vh - 48px) * 16 / 9)); height:auto; max-height:100%; aspect-ratio:16/9; object-fit:contain; outline:none; background:#000; }
+    #web-code { max-height:28%; overflow:auto; margin:0 12px 12px; padding:10px; border:1px solid var(--line); border-radius:7px; background:#0e121a; color:#aeb9ca; font:11px/1.45 ui-monospace,monospace; white-space:pre-wrap; }
+    #errors { max-height:25%; overflow:auto; margin:0 12px 12px; padding:10px; border:1px solid #512b36; border-radius:7px; background:#1b1015; color:#ff9cac; font:12px/1.45 ui-monospace,monospace; white-space:pre-wrap; display:none; }
+    #loading { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(4,6,10,.82); }
+    #loading-box { padding:18px 24px; border:1px solid #30394a; border-radius:9px; background:#151b27; font:13px monospace; }
+    .label { color:#667287; font:11px monospace; margin:0 12px 5px; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="run" class="primary" disabled>▶ Ejecutar</button>
+    <button id="stop" disabled>■ Detener</button>
+    <button id="format">Transformar a web</button>
+    <div id="status">Inicializando Pyodide…</div>
+  </div>
+  <div id="main">
+    <section id="editor-wrap"><div id="editor"></div></section>
+    <section id="preview-wrap">
+      <div id="preview"><canvas id="manim-canvas" width="1920" height="1080"></canvas></div>
+      <div class="label">Código web generado</div>
+      <pre id="web-code"></pre>
+      <pre id="errors"></pre>
+    </section>
+  </div>
+  <div id="loading"><div id="loading-box">Cargando…</div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js"></script>
+  <script type="module">
+    import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
+
+    const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
+    const WHEEL_MANIFEST = "./browser_wasm/dist/wheels/wheels.json";
+
+    const initialSource = `from manimlib import *
+
+class Demo(Scene):
+    def construct(self):
+        title = Text("Hola desde ManimGL")
+        subtitle = Tex(r"f(x) = x^2 + 1")
+
+        title.to_edge(UP)
+        subtitle.next_to(title, DOWN)
+
+        self.add(title, subtitle)
+        self.play(
+            FadeIn(title),
+            FadeIn(subtitle),
+        )
+        self.wait(1)
+
+        plane = NumberPlane()
+        self.play(Create(plane))
+        self.wait(1)
+`;
+
+    let editor;
+    let pyodide = null;
+    let running = false;
+    let runToken = 0;
+
+    const status = document.getElementById("status");
+    const loading = document.getElementById("loading");
+    const loadingBox = document.getElementById("loading-box");
+    const webCode = document.getElementById("web-code");
+    const errors = document.getElementById("errors");
+    const runButton = document.getElementById("run");
+    const stopButton = document.getElementById("stop");
+
+    function setStatus(value) { status.textContent = String(value); }
+    function setLoading(value, message) {
+      loading.style.display = value ? "flex" : "none";
+      if (message) loadingBox.textContent = message;
+    }
+    function showError(error) {
+      errors.style.display = "block";
+      errors.textContent = String(error?.stack || error);
+    }
+    function clearError() {
+      errors.style.display = "none";
+      errors.textContent = "";
+    }
+
+    function loadMonaco() {
+      return new Promise((resolve, reject) => {
+        require.config({ paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs" } });
+        require(["vs/editor/editor.main"], () => resolve(), reject);
+      });
+    }
+
+    async function transformSource(source) {
+      const result = await pyodide.runPythonAsync(
+        "from manimlib.utils.browser_code_transform import transform_browser_source\n"
+        + "transform_browser_source(" + JSON.stringify(source) + ")"
+      );
+      return String(result);
+    }
+
+    function buildRunner(transformed, token) {
+      return `
+import sys
+import traceback
+from manimlib import *
+from manimlib.utils.browser_code_transform import transform_browser_source
+
+async def _browser_add_number_line_numbers(line):
+    await line.add_numbers_async(excluding=line.numbers_to_exclude)
+    return line
+
+if globals().get("_editor_scene") is not None:
+    try:
+        globals()["_editor_scene"].tear_down()
+    except Exception:
+        pass
+    globals()["_editor_scene"] = None
+
+_exec_before = {
+    id(value)
+    for value in globals().values()
+    if isinstance(value, type)
+    and issubclass(value, Scene)
+    and value is not Scene
+}
+
+exec(${JSON.stringify(transformed)}, globals(), globals())
+
+_candidates = [
+    value
+    for value in globals().values()
+    if isinstance(value, type)
+    and issubclass(value, Scene)
+    and value is not Scene
+    and id(value) not in _exec_before
+]
+
+if not _candidates:
+    raise RuntimeError("El código no define una clase que herede de Scene.")
+
+_scene_class = _candidates[-1]
+_editor_scene = _scene_class(window=await Window.create_for_pyodide("manim-canvas"))
+_editor_scene_token = ${token}
+
+await _editor_scene.build_async()
+await _editor_scene.update_frame_async(force_draw=True)
+await _editor_scene.playback_async(repeat=False)
+`;
+    }
+
+    async function runScene() {
+      if (!pyodide || running) return;
+      running = true;
+      const token = ++runToken;
+      runButton.disabled = true;
+      stopButton.disabled = false;
+      clearError();
+
+      try {
+        setStatus("Transformando código nativo → web…");
+        const source = editor.getValue();
+        const transformed = await transformSource(source);
+        webCode.textContent = transformed;
+
+        setStatus("Construyendo y reproduciendo escena…");
+        await pyodide.runPythonAsync(buildRunner(transformed, token));
+        setStatus("Escena terminada.");
+      } catch (error) {
+        showError(error);
+        setStatus("Error al ejecutar la escena.");
+      } finally {
+        running = false;
+        runButton.disabled = false;
+        stopButton.disabled = true;
+      }
+    }
+
+    async function transformOnly() {
+      if (!pyodide) return;
+      clearError();
+      try {
+        const transformed = await transformSource(editor.getValue());
+        webCode.textContent = transformed;
+        setStatus("Código transformado.");
+      } catch (error) {
+        showError(error);
+        setStatus("No se pudo transformar el código.");
+      }
+    }
+
+    async function stopScene() {
+      if (!pyodide || !running) return;
+      try {
+        await pyodide.runPythonAsync(
+          "scene = globals().get('_editor_scene')\n"
+          "scene.should_end_playing = True if scene is not None else False"
+        );
+      } catch (_) {}
+    }
+
+    runButton.addEventListener("click", runScene);
+    stopButton.addEventListener("click", stopScene);
+    document.getElementById("format").addEventListener("click", transformOnly);
+
+    async function initialize() {
+      try {
+        setLoading(true, "Cargando Monaco…");
+        await loadMonaco();
+        editor = monaco.editor.create(document.getElementById("editor"), {
+          value: initialSource,
+          language: "python",
+          theme: "vs-dark",
+          automaticLayout: true,
+          fontSize: 14,
+          tabSize: 4,
+          insertSpaces: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          wordWrap: "off",
+          bracketPairColorization: { enabled: true },
+        });
+
+        setLoading(true, "Cargando backends WASM…");
+        await initializeBrowserWasm();
+
+        const pango = await import("./browser_wasm/dist/pango_text_loader.js");
+        await pango.initializePangoText();
+
+        setLoading(true, "Cargando Pyodide…");
+        const { loadPyodide } = await import(PYODIDE_URL);
+        pyodide = await loadPyodide();
+
+        setStatus("Instalando dependencias Python…");
+        await pyodide.loadPackage([
+          "micropip", "numpy", "scipy", "pillow", "sympy",
+          "matplotlib", "pygments", "pyyaml", "tqdm", "fonttools",
+        ]);
+
+        const manifestUrl = new URL(WHEEL_MANIFEST, document.baseURI);
+        const manifest = await fetch(manifestUrl, { cache: "no-store" }).then(r => {
+          if (!r.ok) throw new Error("No se pudo cargar wheels.json: " + r.status);
+          return r.json();
+        });
+        const wheelBase = new URL(".", manifestUrl).href;
+
+        await pyodide.runPythonAsync(`
+import micropip
+await micropip.install(${JSON.stringify(new URL(manifest.wgpu, wheelBase).href)})
+await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).href)})
+`);
+
+        setLoading(false);
+        runButton.disabled = false;
+        setStatus("Listo. Ejecuta la escena con ▶ Ejecutar.");
+        await transformOnly();
+      } catch (error) {
+        showError(error);
+        setLoading(false);
+        setStatus("Error de inicialización.");
+      }
+    }
+
+    initialize();
+  </script>
+</body>
+</html>
