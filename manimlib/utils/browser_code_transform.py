@@ -23,7 +23,7 @@ def latex_to_typst(source: str) -> str:
         result = re.sub(pattern, replacement, result)
     result = re.sub(r'\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}', r'frac(\1, \2)', result)
     result = re.sub(r'\\sqrt\s*\{([^{}]*)\}', r'sqrt(\1)', result)
-    result = re.sub(r'\\text\s*\{([^{}]*)\}', r'#text[\1]', result)
+    result = re.sub(r'#text\[[^]]*\]', protect_text, result)
     result = re.sub(r'\\mathrm\s*\{([^{}]*)\}', r'\1', result)
     result = re.sub(r'\\mathbf\s*\{([^{}]*)\}', r'bold(\1)', result)
     result = re.sub(r'\\mathbb\s*\{([^{}]*)\}', r'bb(\1)', result)
