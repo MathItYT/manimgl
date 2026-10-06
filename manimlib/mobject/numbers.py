@@ -163,9 +163,13 @@ class DecimalNumber(VMobject):
         # to the same nominal size as a digit.
         submob_templates = []
         for index in range(len(self.num_string)):
-            part = number_mob.get_part_by_typst(self.num_string[index], index)
-            if len(part) > 0:
-                submob_templates.append(part)
+            indices = number_mob.find_submobject_indices_by_span(
+                (index, index + 1)
+            )
+            if indices:
+                submob_templates.append(
+                    VGroup(*(number_mob.submobjects[i] for i in indices))
+                )
 
         if self.show_ellipsis:
             dots = await Typst.create(
