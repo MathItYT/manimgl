@@ -270,7 +270,18 @@ class DecimalNumber(VMobject):
         self.set_style(**style)
         for submob in self.get_family():
             submob.uniforms.update(self.uniforms)
-        # Digits are laid out in a row a buff apart, so they usually share a draw
+        self.draw_fills_together_if_disjoint()
+        return self
+
+    async def set_value_async(self, number: float | complex) -> Self:
+        """Browser-safe asynchronous counterpart of set_value."""
+        move_to_point = self.get_edge_center(self.edge_to_fix)
+        style = self.family_members_with_points()[0].get_style()
+        await self.set_submobjects_from_number_async(number)
+        self.move_to(move_to_point, self.edge_to_fix)
+        self.set_style(**style)
+        for submob in self.get_family():
+            submob.uniforms.update(self.uniforms)
         self.draw_fills_together_if_disjoint()
         return self
 
