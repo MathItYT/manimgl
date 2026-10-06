@@ -89,7 +89,14 @@ class _BrowserTransformer(ast.NodeTransformer):
                     return ast.copy_location(ast.Await(call), call)
                 return call
         for function in self.function_nodes.values():
-            function.body = AwaitCalls().visit(function.body)
+            # NodeTransformer.visit() accepts an AST node, not a statement list.
+            # Visit each statement and preserve the FunctionDef.body list.
+            transformer = AwaitCalls()
+            function.body = [
+                transformed
+                for statement in function.body
+                for transformed in ([transformer.visit(statement)] if isinstance(transformer.visit(statement), ast.stmt) else transformer.visit(statement))
+            ]
 
     def visit_Await(self, node):
         previous = self.in_await
