@@ -50,7 +50,7 @@ def main() -> None:
     server = http.server.ThreadingHTTPServer((args.host, args.port), handler)
 
     print(f"Serving {directory}")
-    print(f"http://{args.host}:{args.port}/pyodide_manim.html")
+    print(f"http://{args.host}:{args.port}/manim_editor.html")
     print("Cache-Control: no-store")
     print("Cross-Origin-Opener-Policy: same-origin")
     print("Cross-Origin-Embedder-Policy: require-corp")
