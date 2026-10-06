@@ -188,20 +188,23 @@ class DecimalNumber(VMobject):
             )
             submob_templates.append(unit)
 
-        # Typst compilation is asynchronous. An animation may move this
-        # object while the browser is awaiting the SVG. Capture the anchor
-        # immediately before replacing the glyph hierarchy.
+        # Typst compilation is asynchronous. An animation may move or
+        # restyle this object while the browser is awaiting the SVG.
+        # Capture both pieces of state immediately before replacing the
+        # glyph hierarchy, not before the await above.
         anchor = self.get_edge_center(self.edge_to_fix)
+        style = self.get_style()
 
         self.set_submobjects([
             smt.copy()
             for smt in submob_templates
         ])
 
-        # Typst glyphs carry their own default fill color (black).  The
-        # DecimalNumber color must still be inherited by the extracted
-        # glyphs, just like the synchronous implementation does.
-        self.set_color(self.color)
+        # Typst glyphs carry their own default fill color (black), so the
+        # DecimalNumber style must be restored after replacing the SVG
+        # hierarchy. Use the DecimalNumber's own style rather than a
+        # particular glyph, because the glyphs are freshly created.
+        self.set_style(**style)
 
         digit_buff = self.digit_buff_per_font_unit * font_size
         self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
@@ -315,15 +318,12 @@ class DecimalNumber(VMobject):
 
     async def set_value_async(self, number: float | complex) -> Self:
         """Browser-safe asynchronous counterpart of set_value."""
-        style = self.family_members_with_points()[0].get_style()
-
-        # Position is preserved by set_submobjects_from_number_async().
-        # The anchor is captured after Typst finishes rendering, so an
-        # animation can move this object while the browser is awaiting it
-        # without the async replacement snapping back to an old position.
+        # Position and style are preserved by
+        # set_submobjects_from_number_async(). The state is captured after
+        # Typst finishes rendering, so animations can move or fade the
+        # object while the browser is awaiting the SVG.
         await self.set_submobjects_from_number_async(number)
 
-        self.set_style(**style)
         for submob in self.get_family():
             submob.uniforms.update(self.uniforms)
         self.draw_fills_together_if_disjoint()
