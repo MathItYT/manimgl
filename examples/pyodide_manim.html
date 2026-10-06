@@ -117,7 +117,6 @@ class BrowserScene(Scene):
         circle = Circle(radius=1.5)
         circle.set_color(BLUE)
         self.add(title, circle)
-        await self.browser_present()
 
         await self.play_async(circle.animate.shift(RIGHT * 2), run_time=1.5)
 
@@ -125,7 +124,6 @@ class BrowserScene(Scene):
         formula = await Typst.create("x^2 + y^2 = r^2")
         formula.next_to(circle, DOWN)
         self.add(formula)
-        await self.browser_present()
 
 await run_scene_from_class(BrowserScene, "manim-canvas")
 `);
