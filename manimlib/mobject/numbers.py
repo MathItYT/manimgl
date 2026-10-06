@@ -192,6 +192,12 @@ class DecimalNumber(VMobject):
             smt.copy()
             for smt in submob_templates
         ])
+
+        # Typst glyphs carry their own default fill color (black).  The
+        # DecimalNumber color must still be inherited by the extracted
+        # glyphs, just like the synchronous implementation does.
+        self.set_color(self.color)
+
         digit_buff = self.digit_buff_per_font_unit * font_size
         self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
 
