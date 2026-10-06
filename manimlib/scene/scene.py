@@ -193,11 +193,16 @@ class Scene(object):
             self.file_writer.ended_with_interrupt = True
         return self
 
-    async def build_async(self):
-        """Construct and prepare the scene timeline without blocking the browser."""
+    async def run_live(self):
+        """Run a browser scene directly, keeping computation and rendering live."""
         if sys.platform != "emscripten":
-            return self.build()
-        self._begin_build()
+            return self.run()
+
+        self.virtual_animation_start_time = 0
+        self.real_animation_start_time = time.time()
+        self.file_writer.begin()
+        self.setup()
+
         try:
             result = self.construct()
             if inspect.isawaitable(result):
@@ -207,11 +212,8 @@ class Scene(object):
         except KeyboardInterrupt:
             print("", end="\r")
             self.file_writer.ended_with_interrupt = True
-        self.stop_sound_processes()
-        self.stop_skipping()
-        self.file_writer.finish()
-        self.seek(0.0, sync_audio=False)
-        return self
+
+        await self.browser_interaction_loop()
 
     def playback(self) -> None:
         if sys.platform == "emscripten":
@@ -822,6 +824,7 @@ class Scene(object):
         last_t = 0.0
         fps = self.camera.fps
         for t in np.arange(0, duration, 1 / fps) + 1 / fps:
+            self.window.poll_events()
             if self.should_end_playing:
                 self.should_end_playing = False
                 break
@@ -853,6 +856,7 @@ class Scene(object):
             self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), [], duration, None))
         last_t = 0.0
         for t in np.arange(0, duration, 1 / self.camera.fps) + 1 / self.camera.fps:
+            self.window.poll_events()
             dt = float(t - last_t)
             last_t = float(t)
             self.update_frame(dt, force_draw=True)
@@ -866,6 +870,7 @@ class Scene(object):
             self.update_frame(force_draw=True)
             return
         self.update_frame(force_draw=True)
+        self.window.poll_events()
         await self._browser_frame()
 
     def wait(
