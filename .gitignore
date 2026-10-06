@@ -173,7 +173,6 @@ tests/assets/
 *.task
 *.txt
 !requirements.txt
-example.py
 analysis.py
 __marimo__/*
 emsdk/
