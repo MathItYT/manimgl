@@ -598,6 +598,20 @@ class ThreeDAxes(Axes):
             axis.add(label)
         self.axis_labels = labels
 
+    async def add_axis_labels_async(self, x_tex="x", y_tex="y", z_tex="z", font_size=24, buff=0.2):
+        from manimlib.mobject.svg.typst_mobject import Typst
+        labels = VGroup(*[
+            await Typst.create(text, font_size=font_size)
+            for text in [x_tex, y_tex, z_tex]
+        ])
+        z_label = labels[2]
+        z_label.rotate(PI / 2, RIGHT)
+        for label, axis in zip(labels, self):
+            label.next_to(axis, normalize(np.round(axis.get_vector()), 2), buff=buff)
+            axis.add(label)
+        self.axis_labels = labels
+        return self
+
     def get_graph(
         self,
         func,
