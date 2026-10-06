@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import inspect
 
 from manimlib.mobject.mobject import _AnimationBuilder
 from manimlib.mobject.mobject import Mobject
@@ -59,6 +60,13 @@ class Animation(object):
 
     def __str__(self) -> str:
         return self.name
+
+    @classmethod
+    async def create(cls, *args, **kwargs):
+        """Asynchronously construct an animation and any awaited arguments."""
+        args = await resolve_async(args)
+        kwargs = await resolve_async(kwargs)
+        return cls(*args, **kwargs)
 
     def begin(self) -> None:
         # This is called right as an animation is being
@@ -234,6 +242,22 @@ class Animation(object):
         return self.remover
 
 
+async def resolve_async(value):
+    """Recursively await async scene objects before constructing animations."""
+    if inspect.isawaitable(value):
+        return await resolve_async(await value)
+    if isinstance(value, tuple):
+        return tuple([await resolve_async(item) for item in value])
+    if isinstance(value, list):
+        return [await resolve_async(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: await resolve_async(item)
+            for key, item in value.items()
+        }
+    return value
+
+
 def prepare_animation(anim: Animation | _AnimationBuilder):
     if isinstance(anim, _AnimationBuilder):
         return anim.build()
@@ -242,3 +266,8 @@ def prepare_animation(anim: Animation | _AnimationBuilder):
         return anim
 
     raise TypeError(f"Object {anim} cannot be converted to an animation")
+
+
+async def prepare_animation_async(anim):
+    anim = await resolve_async(anim)
+    return prepare_animation(anim)
