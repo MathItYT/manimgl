@@ -1174,7 +1174,19 @@ class Scene(object):
             return
 
         if char == manim_config.key_bindings.reset:
-            self.play(self.camera.frame.animate.to_default_state(), register=False)
+            if sys.platform == "emscripten":
+                import asyncio
+                task = getattr(self, "_browser_animation_task", None)
+                if task is not None and not task.done():
+                    task.cancel()
+                self._browser_animation_task = asyncio.create_task(
+                    self.play_async(
+                        self.camera.frame.animate.to_default_state(),
+                        register=False,
+                    )
+                )
+            else:
+                self.play(self.camera.frame.animate.to_default_state(), register=False)
         elif char == "z" and (modifiers & Mods.CTRL_OR_CMD):
             self.undo()
         elif char == "z" and (modifiers & (Mods.CTRL_OR_CMD | Mods.SHIFT)):
