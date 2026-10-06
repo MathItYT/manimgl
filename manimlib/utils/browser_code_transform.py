@@ -43,7 +43,8 @@ class _BrowserTransformer(ast.NodeTransformer):
         self.changed = False
         self.function_nodes = {}
         self.function_calls = {}
-        self.async_functions = set()\n        self.in_await = False
+        self.async_functions = set()
+        self.in_await = False
 
     def visit_Module(self, node):
         self._collect_functions(node)
