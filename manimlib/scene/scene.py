@@ -792,8 +792,6 @@ class Scene(object):
         self.draw_frame(force_draw=True)
         self.should_begin_animations = False
 
-    @affects_mobject_list
-
     async def seek_async(self, t: float, sync_audio: bool = True) -> None:
         if sys.platform != "emscripten":
             self.seek(t, sync_audio=sync_audio)
@@ -901,7 +899,7 @@ class Scene(object):
             for animation in animations:
                 animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
                 animation.interpolate(float(t) / animation.run_time)
-            self.update_mobjects(dt)
+            await self.update_mobjects_async(dt)
             self.draw_frame(dt, force_draw=True)
             self.emit_frame()
         self.finish_animations(animations)
@@ -917,7 +915,7 @@ class Scene(object):
             return self.wait(duration=duration, register=register)
         duration = self.default_wait_time if duration is None else duration
         self.pre_play()
-        self.update_mobjects(0)
+        await self.update_mobjects_async(0)
         if register:
             self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), [], duration, None))
         last_t = 0.0
@@ -925,7 +923,7 @@ class Scene(object):
             self.window.poll_events()
             dt = float(t - last_t)
             last_t = float(t)
-            self.update_frame(dt, force_draw=True)
+            await self.update_frame_async(dt, force_draw=True)
             self.emit_frame()
             await self._browser_frame()
         self.post_play()
