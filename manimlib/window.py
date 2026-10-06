@@ -438,7 +438,7 @@ class Window(object):
                                 * render_width
                                 / width
                             )
-                            return np.array([x, y - render_height / ASPECT_RATIO])
+                            return np.array([x, y - render_height / 2])
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
 
