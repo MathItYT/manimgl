@@ -530,7 +530,9 @@ class Axes(VGroup, CoordinateSystem):
             labels = axis.add_numbers(values, excluding=excluding, **kwargs)
             self.coordinate_labels.add(labels)
         return self.coordinate_labels
-\n    async def add_coordinate_labels_async(
+
+
+    async def add_coordinate_labels_async(
         self,
         x_values: Iterable[float] | None = None,
         y_values: Iterable[float] | None = None,
