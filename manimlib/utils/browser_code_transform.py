@@ -92,11 +92,14 @@ class _BrowserTransformer(ast.NodeTransformer):
             # NodeTransformer.visit() accepts an AST node, not a statement list.
             # Visit each statement and preserve the FunctionDef.body list.
             transformer = AwaitCalls()
-            function.body = [
-                transformed
-                for statement in function.body
-                for transformed in ([transformer.visit(statement)] if isinstance(transformer.visit(statement), ast.stmt) else transformer.visit(statement))
-            ]
+            new_body = []
+            for statement in function.body:
+                transformed = transformer.visit(statement)
+                if isinstance(transformed, list):
+                    new_body.extend(transformed)
+                else:
+                    new_body.append(transformed)
+            function.body = new_body
 
     def visit_Await(self, node):
         previous = self.in_await
