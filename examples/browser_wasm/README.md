@@ -74,8 +74,8 @@ A local development server should provide these headers as well.
 
 The Python API is asynchronous in Pyodide:
 
-    title = await Text.create("Hello")
-    formula = await Typst.create("x^2")
+    title = Text.create("Hello")          # synchronous in the browser backend
+    formula = await Typst.create("x^2")     # asynchronous WASM compiler
 
 The synchronous native APIs remain unchanged.
 
@@ -96,3 +96,12 @@ The branch also contains `examples/manim_editor.html`, a browser editor backed b
     python examples/browser_wasm/serve.py
 
 Then open `/manim_editor.html`.
+
+### Browser `.create(...)` constructors
+
+The editor's source transformer follows the actual web API:
+
+- **Synchronous:** `Text.create(...)`, `MarkupText.create(...)`, `Code.create(...)`.
+- **Asynchronous:** `Typst.create(...)`, `TypstText.create(...)`, `DecimalNumber.create(...)`, `Integer.create(...)`.
+
+Native direct construction of those classes is rewritten to the corresponding `.create(...)` form. `NumberLine(include_numbers=True)` is rewritten to construct without numbers and then await `add_numbers_async(...)`.
