@@ -791,12 +791,12 @@ class Scene(object):
         self.finish_animations(animations)
         self.post_play()
 
-    async def _browser_frame(self) -> None:
-        """Yield to the browser so the canvas can present the current frame."""
+    async def _browser_frame(self) -> float | None:
+        """Yield to the browser and return the frame timestamp in seconds."""
         if sys.platform != "emscripten":
-            return
+            return None
         from manimlib.utils.browser_scheduler import next_animation_frame
-        await next_animation_frame()
+        return await next_animation_frame()
 
     async def play_async(
         self,
