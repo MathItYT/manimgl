@@ -122,7 +122,7 @@ class Demo(Scene):
 import sys
 import traceback
 from manimlib import *
-from manimlib.utils.browser_code_transform import transform_browser_source
+from manimlib.window import run_scene_from_class
 
 async def _browser_add_number_line_numbers(line):
     await line.add_numbers_async(excluding=line.numbers_to_exclude)
@@ -159,18 +159,8 @@ if not _candidates:
 
 _scene_class = _candidates[-1]
 
-from js import document
-def _editor_status(message):
-    document.getElementById("status").textContent = message
-
-_editor_status("DEBUG 1: creando Window…")
-_editor_scene = _scene_class(window=await Window.create_for_pyodide("manim-canvas"))
-_editor_status("DEBUG 2: Window creada; iniciando build_async…")
-_editor_scene_token = ${token}
-
-_editor_status("DEBUG 3: entrando en build_async…")
-await _editor_scene.build_async()
-_editor_status("DEBUG 4: build_async terminó.")`;
+_editor_scene = await run_scene_from_class(_scene_class, "manim-canvas")
+_editor_scene_token = ${token}`;
     }
 
     async function runScene() {
@@ -293,6 +283,7 @@ next(str(pathlib.Path(path) / "manimlib") for path in site.getsitepackages() if 
           "manimlib/mobject/svg/typst_mobject.py",
           "manimlib/scene/scene.py",
           "manimlib/utils/browser_code_transform.py",
+          "manimlib/window.py",
         ];
         for (const relativePath of sourceOverlay) {
           const response = await fetch(
