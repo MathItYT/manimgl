@@ -781,7 +781,7 @@ class Scene(object):
         if len(proto_animations) == 0:
             log.warning("Called Scene.play with no animations")
             return
-        animations = [await prepare_animation_async(anim) for anim in proto_animations]
+        animations = list(map(prepare_animation, proto_animations))
         for anim in animations:
             anim.update_rate_info(run_time, rate_func, lag_ratio)
         self.pre_play()
@@ -819,7 +819,7 @@ class Scene(object):
         if not proto_animations:
             log.warning("Called Scene.play_async with no animations")
             return
-        animations = list(map(prepare_animation, proto_animations))
+        animations = [await prepare_animation_async(anim) for anim in proto_animations]
         for anim in animations:
             anim.update_rate_info(run_time, rate_func, lag_ratio)
         self.pre_play()
