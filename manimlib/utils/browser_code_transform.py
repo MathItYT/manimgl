@@ -9,6 +9,9 @@ TEX_NAMES = {'Tex', 'TexText'}
 
 
 def latex_to_typst(source: str) -> str:
+    def protect_text(match: re.Match) -> str:
+        protected_text.append(match.group(0))
+        return f'¤{len(protected_text) - 1}¤'
     replacements = {
         r'\\cdot': 'dot', r'\\times': 'times', r'\\pm': 'plus.minus',
         r'\\mp': 'minus.plus', r'\\leq': '<=', r'\\geq': '>=',
@@ -50,9 +53,6 @@ def latex_to_typst(source: str) -> str:
 
     protected_text = []
 
-    def protect_text(match: re.Match) -> str:
-        protected_text.append(match.group(0))
-        return f'¤{len(protected_text) - 1}¤'
 
     def split_math_identifiers(match: re.Match) -> str:
         word = match.group(0)
