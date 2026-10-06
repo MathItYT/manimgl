@@ -530,6 +530,20 @@ class Axes(VGroup, CoordinateSystem):
             labels = axis.add_numbers(values, excluding=excluding, **kwargs)
             self.coordinate_labels.add(labels)
         return self.coordinate_labels
+\n    async def add_coordinate_labels_async(
+        self,
+        x_values: Iterable[float] | None = None,
+        y_values: Iterable[float] | None = None,
+        excluding: Iterable[float] = [0],
+        **kwargs
+    ) -> VGroup:
+        """Asynchronously create coordinate labels in browser/Pyodide."""
+        axes = self.get_axes()
+        self.coordinate_labels = VGroup()
+        for axis, values in zip(axes, [x_values, y_values]):
+            labels = await axis.add_numbers_async(values, excluding=excluding, **kwargs)
+            self.coordinate_labels.add(labels)
+        return self.coordinate_labels
 
 
 class ThreeDAxes(Axes):
