@@ -1020,7 +1020,7 @@ class Scene(object):
             raise RuntimeError("browser_playback_loop() is only available in Pyodide")
         from manimlib.utils.browser_scheduler import next_animation_frame
         while not self.is_window_closing():
-            self.seek(0.0)
+            await self.seek_async(0.0)
             started_at = await next_animation_frame()
             while not self.is_window_closing():
                 frame_time = await next_animation_frame()
@@ -1043,7 +1043,7 @@ class Scene(object):
         while not self.is_window_closing():
             self.window.poll_events()
             if self.window.has_undrawn_event():
-                self.update_frame(force_draw=True)
+                await self.update_frame_async(force_draw=True)
             await next_animation_frame()
 
     # Helpers for interactive development
