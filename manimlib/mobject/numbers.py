@@ -188,6 +188,11 @@ class DecimalNumber(VMobject):
             )
             submob_templates.append(unit)
 
+        # Typst compilation is asynchronous. An animation may move this
+        # object while the browser is awaiting the SVG. Capture the anchor
+        # immediately before replacing the glyph hierarchy.
+        anchor = self.get_edge_center(self.edge_to_fix)
+
         self.set_submobjects([
             smt.copy()
             for smt in submob_templates
@@ -200,6 +205,7 @@ class DecimalNumber(VMobject):
 
         digit_buff = self.digit_buff_per_font_unit * font_size
         self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
+        self.move_to(anchor, self.edge_to_fix)
 
         for i, c in enumerate(self.num_string):
             if c == "–" and len(self.num_string) > i + 1:
@@ -309,24 +315,19 @@ class DecimalNumber(VMobject):
 
     async def set_value_async(self, number: float | complex) -> Self:
         """Browser-safe asynchronous counterpart of set_value."""
-        # Preserve the anchor before rebuilding the glyph hierarchy.  The
-        # async Typst path can change both the number of submobjects and its
-        # bounding box, so positioning the rebuilt object with move_to() alone
-        # is fragile.
-        anchor = self.get_bounding_box_point(self.edge_to_fix)
         style = self.family_members_with_points()[0].get_style()
 
+        # Position is preserved by set_submobjects_from_number_async().
+        # The anchor is captured after Typst finishes rendering, so an
+        # animation can move this object while the browser is awaiting it
+        # without the async replacement snapping back to an old position.
         await self.set_submobjects_from_number_async(number)
-
-        new_anchor = self.get_bounding_box_point(self.edge_to_fix)
-        self.shift(anchor - new_anchor)
 
         self.set_style(**style)
         for submob in self.get_family():
             submob.uniforms.update(self.uniforms)
         self.draw_fills_together_if_disjoint()
         return self
-
     def _handle_scale_side_effects(self, scale_factor: float) -> Self:
         self.font_size *= scale_factor
         return self
