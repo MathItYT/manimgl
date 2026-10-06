@@ -796,18 +796,8 @@ class Mobject(object):
         self._has_time_based_updaters_in_family: Optional[bool] = False
         self.updating_suspended: bool = False
 
-    def update(
-        self,
-        dt: float = 0,
-        recurse: bool = True,
-        frame_rate: float | None = None
-    ) -> Self:
-        """
-        Calls all updaters in the family. Passing in a frame_rate accounts for
-        the possibility that dt spans multiple frames, as happens when
-        animations are being skipped, in which case time based updaters are
-        called once for each frame that dt stands in for.
-        """
+    def update(self, dt: float = 0, recurse: bool = True, frame_rate: float | None = None) -> Self:
+        """Synchronously run the updater tree."""
         if not self.has_updaters() or self.updating_suspended:
             return self
         if recurse:
@@ -817,13 +807,24 @@ class Mobject(object):
             updater(self, dt, frame_rate)
         return self
 
+    async def update_async(self, dt: float = 0, recurse: bool = True, frame_rate: float | None = None) -> Self:
+        """Run synchronous and asynchronous updaters without blocking WASM."""
+        if not self.has_updaters() or self.updating_suspended:
+            return self
+        if recurse:
+            for submob in self.submobjects:
+                await submob.update_async(dt, recurse, frame_rate)
+        for updater in self.updaters:
+            await updater.call_async(self, dt, frame_rate)
+        return self
+
     def get_updaters(self) -> list[UpdateFunction]:
         return [updater.func for updater in self.updaters]
 
     def add_updater(self, update_func: UpdateFunction, call: bool = True) -> Self:
         self.updaters.append(Updater(update_func))
         self.refresh_has_updater_status()
-        if call:
+        if call and not (sys.platform == "emscripten" and inspect.iscoroutinefunction(update_func)):
             self.update(dt=0)
         return self
 
@@ -2311,3 +2312,12 @@ class _FunctionalUpdaterBuilder:
             )
             return self
         return add_updater
+    async def call_async(self, mobject: Mobject, dt: float = 0, frame_rate: float | None = None) -> None:
+        """Invoke an updater and await its result when it is asynchronous."""
+        n_steps = 1 if frame_rate is None else max(int(dt * frame_rate), 1)
+        step_dt = dt / n_steps
+        for _ in range(n_steps):
+            result = self.func(mobject) if not self.takes_dt else self.func(mobject, step_dt)
+            if inspect.isawaitable(result):
+                await result
+
