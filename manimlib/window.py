@@ -100,6 +100,7 @@ class Window(object):
         device=None,
     ):
         self.scene: Optional[Scene] = None
+        self.canvas_id = canvas_id
         self.frame_view = None
         self.pressed_keys: set[int] = set()
         self.pointer_position = np.zeros(2)
@@ -199,7 +200,7 @@ class Window(object):
             return
         from js import document
 
-        canvas = document.getElementById(self.canvas._canvas_id)
+        canvas = document.getElementById(self.canvas_id)
         if canvas is None:
             raise RuntimeError("Could not find the browser canvas element.")
         canvas.width = int(width)
