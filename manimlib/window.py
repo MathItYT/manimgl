@@ -529,18 +529,9 @@ if sys.platform == "emscripten":
         window = await Window.create_for_pyodide(canvas_id)
         scene = scene_class(window=window)
 
-        # Execute the scene itself as the awaited operation.  The browser
-        # interaction loop must not be awaited here: it is intentionally
-        # long-lived and would make the "Execute" coroutine never resolve.
-        await scene.build_async()
-        await scene.update_frame_async(force_draw=True)
-
-        # Keep pointer/keyboard redraws alive after execution, but leave the
-        # scene runner free to return the completed scene to the editor.
-        # build_async() is the complete execution boundary for the editor.
-        # Do not start browser_interaction_loop() here: that loop is
-        # intentionally infinite and would keep Pyodide's async execution
-        # alive after the scene itself has finished.
+        # Execute the scene itself as the awaited operation. The browser
+        # interaction loop is intentionally not awaited here because it is
+        # long-lived and would prevent the scene runner from returning.
         await scene.build_async()
         await scene.update_frame_async(force_draw=True)
         return scene
