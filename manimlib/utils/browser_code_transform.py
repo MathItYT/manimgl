@@ -107,10 +107,20 @@ class _BrowserTransformer(ast.NodeTransformer):
                 node.args[0].value = latex_to_typst(node.args[0].value)
             self.changed = True
             return ast.copy_location(ast.Await(node), node)
-        if isinstance(node.func, ast.Attribute) and node.func.attr == 'add_numbers':
-            node.func.attr = 'add_numbers_async'
-            self.changed = True
-            return ast.copy_location(ast.Await(node), node)
+        if isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == 'self':
+                if node.func.attr == 'play':
+                    node.func.attr = 'play_async'
+                    self.changed = True
+                    return ast.copy_location(ast.Await(node), node)
+                if node.func.attr == 'wait':
+                    node.func.attr = 'wait_async'
+                    self.changed = True
+                    return ast.copy_location(ast.Await(node), node)
+            if node.func.attr == 'add_numbers':
+                node.func.attr = 'add_numbers_async'
+                self.changed = True
+                return ast.copy_location(ast.Await(node), node)
         if name == 'NumberLine':
             for keyword in node.keywords:
                 if keyword.arg == 'include_numbers' and _is_true_constant(keyword.value):
