@@ -400,11 +400,14 @@ class Window(object):
 
     def event_position(self, event: dict) -> np.ndarray:
         """
-        Convert a browser pointer position to Manim render-pixel coordinates.
+        Convert the pointer position to Manim render-pixel coordinates.
 
-        rendercanvas's browser coordinates can be based on the canvas layout
-        position rather than its transformed visual position. Use the actual
-        viewport pointer position and the canvas's visual bounding rectangle.
+        rendercanvas already gives us coordinates in the same pixel space used
+        by the rest of the window event handling. The browser-specific problem
+        is only the vertical origin when the canvas is visually offset by CSS.
+
+        Keep the original event scale and correct only that origin offset. This
+        is important because the center of the canvas is already correct.
         """
         if sys.platform == "emscripten":
             from js import document
@@ -414,21 +417,21 @@ class Window(object):
                 pointer = getattr(canvas, "__manimPointer", None)
                 if pointer is not None:
                     try:
-                        client_x = float(pointer.clientX)
                         client_y = float(pointer.clientY)
                     except (AttributeError, TypeError, ValueError):
-                        client_x = client_y = None
+                        client_y = None
 
-                    if client_x is not None and client_y is not None:
+                    if client_y is not None:
                         rect = canvas.getBoundingClientRect()
-                        width = float(rect.width)
-                        height = float(rect.height)
-                        render_width, render_height = self.render_size
 
-                        if width > 0 and height > 0:
-                            x = (client_x - float(rect.left)) * render_width / width
-                            y = (client_y - float(rect.top)) * render_height / height
-                            return np.array([x, render_height - y])
+                        # event["y"] uses the rendercanvas coordinate scale.
+                        # Only translate its origin by the visual CSS offset.
+                        # The scale must NOT be recomputed from rect.height.
+                        y_offset = float(rect.top)
+                        return np.array([
+                            float(event["x"]),
+                            float(event["y"]) - y_offset,
+                        ])
 
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
