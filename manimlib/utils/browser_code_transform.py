@@ -43,7 +43,7 @@ class _BrowserTransformer(ast.NodeTransformer):
         self.changed = False
         self.function_nodes = {}
         self.function_calls = {}
-        self.async_functions = set()
+        self.async_functions = set()\n        self.in_await = False
 
     def visit_Module(self, node):
         self._collect_functions(node)
@@ -85,6 +85,13 @@ class _BrowserTransformer(ast.NodeTransformer):
                 return call
         for function in self.function_nodes.values():
             function.body = AwaitCalls().visit(function.body)
+
+    def visit_Await(self, node):
+        previous = self.in_await
+        self.in_await = True
+        node.value = self.visit(node.value)
+        self.in_await = previous
+        return node
 
     def visit_ClassDef(self, node):
         node = self.generic_visit(node)
