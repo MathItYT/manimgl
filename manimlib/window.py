@@ -367,29 +367,29 @@ class Window(object):
 
     def event_position(self, event: dict) -> np.ndarray:
         """
-        Convert a pointer position from the canvas' local CSS coordinates
-        into the logical render coordinates used by Manim.
+        Convert the browser pointer position to Manim render-pixel coordinates.
 
-        rendercanvas supplies pointer coordinates as offsetX/offsetY, i.e.
-        relative to the canvas itself. Therefore the canvas' position in the
-        viewport (including DataCut's flex centering) is already removed by
-        the browser before this method runs. We only need to compensate for
-        the CSS scaling between the displayed canvas and its intrinsic render
-        size.
+        rendercanvas provides offsetX/offsetY, which are local to the canvas CSS
+        layout box. Do not use getBoundingClientRect() here: its dimensions
+        include CSS transforms. With a CSS transform scale, using the bounding
+        rect would apply the transform a second time.
+
+        clientWidth/clientHeight describe the untransformed CSS layout box.
+        The canvas position in the page is irrelevant because offsetX/offsetY
+        are already relative to the canvas.
         """
         if sys.platform == "emscripten":
             from js import document
 
             canvas = document.getElementById(self.canvas_id)
             if canvas is not None:
-                rect = canvas.getBoundingClientRect()
-                display_width = float(rect.width)
-                display_height = float(rect.height)
+                css_width = float(canvas.clientWidth)
+                css_height = float(canvas.clientHeight)
                 render_width, render_height = self.render_size
 
-                if display_width > 0 and display_height > 0:
-                    x = float(event["x"]) * render_width / display_width
-                    y = float(event["y"]) * render_height / display_height
+                if css_width > 0 and css_height > 0:
+                    x = float(event["x"]) * render_width / css_width
+                    y = float(event["y"]) * render_height / css_height
                     return np.array([x, render_height - y])
 
         _, height = self.canvas.get_logical_size()
