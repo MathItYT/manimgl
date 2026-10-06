@@ -102,7 +102,11 @@ class _BrowserTransformer(ast.NodeTransformer):
             self.changed = True
             return ast.copy_location(ast.Await(node), node) if name in ASYNC_CREATE_MOBJECTS else node
         if name in TEX_NAMES:
-            node.func = ast.Name(id='Typst', ctx=ast.Load())
+            node.func = ast.Attribute(
+                value=ast.Name(id='Typst', ctx=ast.Load()),
+                attr='create',
+                ctx=ast.Load(),
+            )
             if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
                 node.args[0].value = latex_to_typst(node.args[0].value)
             self.changed = True
