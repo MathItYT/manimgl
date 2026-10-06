@@ -12,10 +12,17 @@ static unsigned long manim_svg_counter = 0;
 
 static void configure_browser_fontconfig(void) {
     // Fontconfig normally discovers /etc/fonts/fonts.conf from the host OS.
-    // The browser WASM filesystem has no host /etc, so the build embeds a
-    // small self-contained config and the bundled fonts at these paths.
+    // The browser WASM filesystem has no host /etc. The build therefore
+    // preloads a self-contained config and the bundled font directory.
     g_setenv("FONTCONFIG_FILE", "/etc/fonts/fonts.conf", TRUE);
     g_setenv("FONTCONFIG_PATH", "/etc/fonts", TRUE);
+    FcConfig *config = FcConfigGetCurrent();
+    if (!config) {
+        config = FcInitLoadConfigAndFonts();
+    }
+    if (config) {
+        FcConfigSetCurrent(config);
+    }
 }
 
 static char *read_file(const char *path) {
