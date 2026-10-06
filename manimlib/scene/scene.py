@@ -181,12 +181,27 @@ class Scene(object):
         self.setup()
 
     def build(self):
-        """Construct and prepare the scene timeline synchronously."""
         if sys.platform == "emscripten":
             raise RuntimeError("Use await build_async() in Pyodide")
         self._begin_build()
         try:
             self.construct()
+        except EndScene:
+            pass
+        except KeyboardInterrupt:
+            print("", end="\r")
+            self.file_writer.ended_with_interrupt = True
+        return self
+
+    async def build_async(self):
+        """Construct a browser scene without blocking the event loop."""
+        if sys.platform != "emscripten":
+            return self.build()
+        self._begin_build()
+        try:
+            result = self.construct()
+            if inspect.isawaitable(result):
+                await result
         except EndScene:
             pass
         except KeyboardInterrupt:
@@ -362,6 +377,13 @@ class Scene(object):
             self.update_mobjects(dt)
         self.draw_frame(dt, force_draw)
 
+    async def update_frame_async(self, dt: float = 0, force_draw: bool = False) -> None:
+        if not self.paused:
+            self.increment_time(dt)
+            self.progress_current_checkpoint(dt)
+            await self.update_mobjects_async(dt)
+        self.draw_frame(dt, force_draw)
+
     def draw_frame(self, dt: float = 0, force_draw: bool = False) -> None:
         if self.skip_animations and not force_draw:
             return
@@ -392,10 +414,11 @@ class Scene(object):
 
     def update_mobjects(self, dt: float) -> None:
         for mobject in self.mobjects:
-            # The frame rate is passed in so that if dt spans multiple frames,
-            # as it does when animations are skipped, time based updaters are
-            # still called once per frame that would have been rendered
             mobject.update(dt, frame_rate=self.camera.fps)
+
+    async def update_mobjects_async(self, dt: float) -> None:
+        for mobject in self.mobjects:
+            await mobject.update_async(dt, frame_rate=self.camera.fps)
 
     def should_update_mobjects(self) -> bool:
         return self.always_update_mobjects or any(
@@ -770,6 +793,38 @@ class Scene(object):
         self.should_begin_animations = False
 
     @affects_mobject_list
+
+    async def seek_async(self, t: float, sync_audio: bool = True) -> None:
+        if sys.platform != "emscripten":
+            self.seek(t, sync_audio=sync_audio)
+            return
+        t = float(np.clip(t, 0.0, self.max_time))
+        if self.current_checkpoint is None:
+            self.should_end_playing = True
+        idx = None
+        for i in range(len(self.checkpoints) - 1, -1, -1):
+            if self.checkpoints[i][0].time <= t:
+                idx = i
+                break
+        if idx is None:
+            return
+        self.stop_sound_processes()
+        self.current_checkpoint = idx
+        state, animations, duration, _ = self.checkpoints[idx]
+        self.restore_state(state)
+        if animations:
+            alpha = (t - state.time) / duration if duration > 0 else 1.0
+            for anim in animations:
+                anim.interpolate(float(np.clip(alpha, 0.0, 1.0)))
+        self.time = t
+        await self.update_mobjects_async(t - state.time)
+        self.virtual_animation_start_time = self.time
+        self.real_animation_start_time = time.time()
+        if sync_audio:
+            browser_audio.seek(self.time, self._interactive_sound_events)
+        self.draw_frame(force_draw=True)
+        self.should_begin_animations = False
+
     def play(
         self,
         *proto_animations: Animation | _AnimationBuilder,
@@ -973,9 +1028,9 @@ class Scene(object):
                 frame_time = await next_animation_frame()
                 elapsed = frame_time - started_at
                 if elapsed >= self.max_time:
-                    self.seek(self.max_time, sync_audio=False)
+                    await self.seek_async(self.max_time, sync_audio=False)
                     break
-                self.seek(elapsed, sync_audio=False)
+                await self.seek_async(elapsed, sync_audio=False)
                 browser_audio.sync(elapsed, self._interactive_sound_events)
             if not repeat:
                 break
