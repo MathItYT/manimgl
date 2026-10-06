@@ -65,6 +65,7 @@ class DecimalNumber(VMobject):
         self.edge_to_fix = edge_to_fix
         self.font_size = font_size
         self.text_config = dict(text_config)
+        skip_text_render = kwargs.pop("_skip_text_render", False)
 
         super().__init__(
             color=color,
@@ -74,7 +75,8 @@ class DecimalNumber(VMobject):
             **kwargs
         )
 
-        self.set_submobjects_from_number(number)
+        if not skip_text_render:
+            self.set_submobjects_from_number(number)
         self.init_colors()
         self.draw_fills_together_if_disjoint()
 
@@ -118,6 +120,55 @@ class DecimalNumber(VMobject):
         if self.unit and self.unit.startswith("^"):
             self[-1].align_to(self, UP)
 
+        if self.include_background_rectangle:
+            self.add_background_rectangle()
+
+    @classmethod
+    async def create(cls, number: float | complex = 0, **kwargs):
+        """Asynchronously construct a DecimalNumber in browser/Pyodide."""
+        import sys
+        if sys.platform != "emscripten":
+            return cls(number, **kwargs)
+
+        obj = cls(number, _skip_text_render=True, **kwargs)
+        await obj.set_submobjects_from_number_async(number)
+        obj.draw_fills_together_if_disjoint()
+        return obj
+
+    async def set_submobjects_from_number_async(self, number: float | complex) -> None:
+        """Browser-safe counterpart of set_submobjects_from_number."""
+        self.number = number
+        self.num_string = self.get_num_string(number)
+
+        async def make_mob(char: str):
+            if "\\\\" in char or char == "i":
+                return Tex(char, **self.text_config)
+            return await Text.create(char, **self.text_config)
+
+        submob_templates = [await make_mob(char) for char in self.num_string]
+        if self.show_ellipsis:
+            dots = await Text.create("...", **self.text_config)
+            dots.arrange(RIGHT, buff=2 * dots[0].get_width())
+            submob_templates.append(dots)
+        if self.unit is not None:
+            submob_templates.append(await make_mob(self.unit))
+
+        font_size = self.get_font_size()
+        self.set_submobjects([
+            smt.copy().scale(font_size / smt.font_size)
+            for smt in submob_templates
+        ])
+        digit_buff = self.digit_buff_per_font_unit * font_size
+        self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
+
+        for i, c in enumerate(self.num_string):
+            if c == "–" and len(self.num_string) > i + 1:
+                self[i].align_to(self[i + 1], UP)
+                self[i].shift(self[i + 1].get_height() * DOWN / 2)
+            elif c == ",":
+                self[i].shift(self[i].get_height() * DOWN / 2)
+        if self.unit and self.unit.startswith("^"):
+            self[-1].align_to(self, UP)
         if self.include_background_rectangle:
             self.add_background_rectangle()
 
