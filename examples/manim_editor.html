@@ -158,14 +158,19 @@ if not _candidates:
     raise RuntimeError("El código no define una clase que herede de Scene.")
 
 _scene_class = _candidates[-1]
+
+from js import document
+def _editor_status(message):
+    document.getElementById("status").textContent = message
+
+_editor_status("DEBUG 1: creando Window…")
 _editor_scene = _scene_class(window=await Window.create_for_pyodide("manim-canvas"))
+_editor_status("DEBUG 2: Window creada; iniciando build_async…")
 _editor_scene_token = ${token}
 
+_editor_status("DEBUG 3: entrando en build_async…")
 await _editor_scene.build_async()
-# build_async() already renders every play/wait frame and leaves the final
-# frame on the canvas. Do not redraw here: a second camera capture after the
-# asynchronous build can keep the browser render backend busy unnecessarily.
-`;
+_editor_status("DEBUG 4: build_async terminó.")`;
     }
 
     async function runScene() {
