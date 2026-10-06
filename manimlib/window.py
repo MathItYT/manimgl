@@ -421,8 +421,8 @@ class Window(object):
                     if client_y is not None:
                         rect = canvas.getBoundingClientRect()
                         width = float(rect.width)
+                        height = float(rect.height)
                         render_width, render_height = self.render_size
-                        height = width / ASPECT_RATIO
 
                         if width > 0 and height > 0:
                             # Use the visual canvas position to establish the
@@ -430,7 +430,7 @@ class Window(object):
                             # render-pixel scale; do not derive a new Y scale
                             # from the CSS height.
                             y = (
-                                client_y - height / 2.0
+                                client_y - float(rect.top)
                             ) * render_height / height
                             y = y + render_height / 2.0
 
