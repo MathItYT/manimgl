@@ -200,6 +200,28 @@ class DecimalNumber(VMobject):
             for smt in submob_templates
         ])
 
+        # set_submobjects() detaches the old glyph family. Group VFX such as
+        # Glow are bound to the concrete family members by add_vfx(), so the
+        # freshly created Typst glyphs must be rebound after every async
+        # rebuild. Keep the effect itself on DecimalNumber and only restore
+        # the family binding here.
+        group_effects = [
+            effect
+            for effect in self.get_vfx_list()
+            if getattr(effect, "is_group_effect", False)
+            or getattr(effect, "name", "") in (
+                "Glow",
+                "Mask",
+                "LiquidGlass",
+                "DropShadow",
+                "GaussianBlur",
+                "Vignette",
+            )
+        ]
+        if group_effects:
+            for mob in self.get_family():
+                mob._vfx_group = self
+
         # Typst glyphs carry their own default fill color (black), so the
         # DecimalNumber style must be restored after replacing the SVG
         # hierarchy. Use the DecimalNumber's own style rather than a
