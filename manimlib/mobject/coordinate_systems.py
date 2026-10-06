@@ -281,6 +281,16 @@ class CoordinateSystem(ABC):
             graph.add_updater(lambda g: g.make_smooth(approx=True))
         return graph
 
+    async def get_axis_labels_async(self, x_label_tex="x", y_label_tex="y", **kwargs):
+        from manimlib.mobject.svg.typst_mobject import Typst
+        self.axis_labels = VGroup(
+            await Typst.create(x_label_tex, **kwargs),
+            await Typst.create(y_label_tex, **kwargs),
+        )
+        self.axis_labels[0].next_to(self.get_x_axis(), UP)
+        self.axis_labels[1].next_to(self.get_y_axis(), UP)
+        return self.axis_labels
+
     def get_graph_label(
         self,
         graph: ParametricCurve,
