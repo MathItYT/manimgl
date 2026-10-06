@@ -248,7 +248,14 @@ class LinearNumberSlider(ControlMobject):
         self.slider_axis.set_opacity(0.0)
         self.slider.move_to(self.slider_axis)
 
+        # Register the drag interaction on the track as well as on the knob.
+        # In the browser the user naturally starts a drag by pressing anywhere
+        # on the visible slider, not necessarily exactly on the knob. A drag
+        # listener only on the knob therefore makes the control appear inert
+        # when the bar is grabbed.
         self.slider.add_mouse_drag_listner(self.slider_on_mouse_drag)
+        self.bar.add_mouse_press_listner(self.bar_on_mouse_press)
+        self.bar.add_mouse_drag_listner(self.slider_on_mouse_drag)
 
         super().__init__(value, self.bar, self.slider, self.slider_axis, **kwargs)
 
@@ -258,6 +265,11 @@ class LinearNumberSlider(ControlMobject):
     def set_value_anim(self, value: float) -> None:
         prop = (value - self.min_value) / (self.max_value - self.min_value)
         self.slider.move_to(self.slider_axis.point_from_proportion(prop))
+
+    def bar_on_mouse_press(self, mob, event_data: dict[str, np.ndarray]) -> bool:
+        # Clicking the track immediately moves the knob to the clicked value.
+        self.set_value(self.get_value_from_point(event_data["point"]))
+        return False
 
     def slider_on_mouse_drag(self, mob, event_data: dict[str, np.ndarray]) -> bool:
         self.set_value(self.get_value_from_point(event_data["point"]))
