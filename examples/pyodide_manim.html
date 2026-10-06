@@ -8,12 +8,31 @@
     html, body { margin: 0; width: 100%; height: 100%; background: #111; color: #ddd; font-family: sans-serif; }
     body { display: flex; flex-direction: column; }
     #status { padding: 10px 14px; font-family: monospace; white-space: pre-wrap; }
-    #manim-canvas { flex: 1; width: 100%; min-height: 0; display: block; outline: none; aspect-ratio: 16 / 9; }
+    #canvas-container {
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #manim-canvas {
+      display: block;
+      width: min(100%, calc((100vh - 42px) * 16 / 9));
+      height: auto;
+      max-height: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      outline: none;
+    }
   </style>
 </head>
 <body>
   <div id="status">Loading Pyodide…</div>
-  <canvas id="manim-canvas" width="1920" height="1080" tabindex="0"></canvas>
+  <div id="canvas-container">
+    <canvas id="manim-canvas" width="1920" height="1080" tabindex="0"></canvas>
+  </div>
   <script type="module">
     import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
 
