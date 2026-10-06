@@ -105,10 +105,11 @@ class Window(object):
         self.pressed_keys: set[int] = set()
         self.pointer_position = np.zeros(2)
         self.undrawn_event = True
+        self.render_size = DEFAULT_RESOLUTION if sys.platform == "emscripten" else None
 
         if sys.platform == "emscripten":
             self.canvas = PyodideRenderCanvas(canvas_id, update_mode="manual")
-            self.set_render_size(*DEFAULT_RESOLUTION)
+            self.set_render_size(*self.render_size)
             self.canvas.request_draw(self.draw)
             self.context = self.canvas.get_context("wgpu")
             self.gpu = Gpu(adapter=adapter, device=device)
@@ -191,6 +192,8 @@ class Window(object):
         self.device = self.gpu.device
         preferred = self.context.get_preferred_format(self.gpu.adapter)
         self.format = preferred.removesuffix("-srgb")
+        if sys.platform == "emscripten":
+            self.set_render_size(*self.render_size)
         self.context.configure(device=self.device, format=self.format)
         self.init_present_resources()
 
@@ -203,11 +206,14 @@ class Window(object):
         canvas = document.getElementById(self.canvas_id)
         if canvas is None:
             raise RuntimeError("Could not find the browser canvas element.")
-        canvas.width = int(width)
-        canvas.height = int(height)
+        self.render_size = (int(width), int(height))
+        canvas.width = self.render_size[0]
+        canvas.height = self.render_size[1]
 
     def get_size(self) -> tuple[int, int]:
-        """How many pixels there are to draw, which is not the size in screen coordinates"""
+        """How many pixels there are to draw, which is not the size in screen coordinates."""
+        if sys.platform == "emscripten":
+            return self.render_size
         return self.canvas.get_physical_size()
 
     def show(self, frame_view) -> None:
@@ -221,6 +227,8 @@ class Window(object):
         self.poll_events()
 
     def draw(self) -> None:
+        if sys.platform == "emscripten":
+            self.set_render_size(*self.render_size)
         self.present(self.context.get_current_texture().create_view())
 
     def init_present_resources(self) -> None:
