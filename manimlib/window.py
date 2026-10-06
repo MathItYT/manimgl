@@ -433,7 +433,7 @@ class Window(object):
 
                 if width > 0 and height > 0:
                     x = float(event["x"]) * render_width / width
-                    y = float(event["y"]) * render_height / height
+                    y = float(event["y"]) * render_height / height - render_height / 2
                     return np.array([x, render_height - y])
 
         _, height = self.canvas.get_logical_size()
