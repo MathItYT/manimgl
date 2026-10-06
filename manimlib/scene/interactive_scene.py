@@ -484,7 +484,7 @@ class InteractiveScene(Scene):
             self.selection.move_to(diff)
         elif self.window.is_key_pressed(ord(X_GRAB_KEY)):
             self.selection.set_x(diff[0])
-        elif self.window.is_key_pressed(ord(Y_GRAB_KEY):
+        elif self.window.is_key_pressed(ord(Y_GRAB_KEY)):
             self.selection.set_y(diff[1])
         elif self.window.is_key_pressed(ord(Z_GRAB_KEY)):
             self.selection.set_z(diff[2])
