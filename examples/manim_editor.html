@@ -274,8 +274,8 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         // without requiring a new wheel for every editor iteration.
         setLoading(true, "Aplicando código Python de la rama personal…");
         const packageRoot = String(await pyodide.runPythonAsync(`
-import pathlib, manimlib
-str(pathlib.Path(manimlib.__file__).parent)
+import pathlib, site
+next(str(pathlib.Path(path) / "manimlib") for path in site.getsitepackages() if (pathlib.Path(path) / "manimlib").is_dir())
 `));
         const sourceOverlay = [
           "manimlib/__init__.py",
