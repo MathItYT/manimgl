@@ -178,3 +178,4 @@ analysis.py
 __marimo__/*
 emsdk/
 pango-cairo-wasm/
+!examples/browser_wasm/dist/
