@@ -82,6 +82,7 @@ from manimlib.scene.scene import *
 from manimlib.renderer.shader_source import get_colormap_code
 from manimlib.renderer.uniform_block import *
 
+from manimlib.utils.vfx_presets import *
 from manimlib.utils.browser_fonts import *
 from manimlib.utils.bezier import *
 from manimlib.utils.cache import *
