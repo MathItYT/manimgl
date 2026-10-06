@@ -365,9 +365,30 @@ class Window(object):
 
     def event_position(self, event: dict) -> np.ndarray:
         """
-        Where in the window something happened, measuring y upwards from the bottom the way
-        the scene does, where an event measures it downwards from the top.
+        Convert a pointer position from the canvas' displayed CSS coordinates
+        into the logical render coordinates used by Manim.
+
+        In the browser the canvas has a fixed intrinsic render size (e.g.
+        1920x1080), but DataCut scales it with CSS to fit the available
+        viewport. Pointer events are reported in the displayed canvas
+        coordinates, so using get_logical_size() directly makes mouse_point
+        drift from the actual cursor whenever the canvas is scaled.
         """
+        if sys.platform == "emscripten":
+            from js import document
+
+            canvas = document.getElementById(self.canvas_id)
+            if canvas is not None:
+                rect = canvas.getBoundingClientRect()
+                display_width = float(rect.width)
+                display_height = float(rect.height)
+                render_width, render_height = self.render_size
+
+                if display_width > 0 and display_height > 0:
+                    x = float(event["x"]) * render_width / display_width
+                    y = float(event["y"]) * render_height / display_height
+                    return np.array([x, render_height - y])
+
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
 
