@@ -31,6 +31,30 @@ def latex_to_typst(source: str) -> str:
     result = result.replace(r'\,', ' ').replace(r'\;', ' ').replace(r'\!', '')
     result = re.sub(r'\^\{([^{}]*)\}', r'^\1', result)
     result = re.sub(r'_\{([^{}]*)\}', r'_\1', result)
+
+    # Typst treats a contiguous ASCII word in math mode as a single
+    # identifier/token. Native TeX treats ordinary letters as independent
+    # variables, so xy means x * y. Preserve Typst math keywords/functions.
+    typst_words = {
+        'dot', 'times', 'plus', 'minus', 'infinity',
+        'pi', 'theta', 'alpha', 'beta', 'gamma', 'delta',
+        'Delta', 'Sigma', 'Omega', 'sum', 'product', 'integral',
+        'frac', 'sqrt', 'bold', 'bb',
+        'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
+        'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh',
+        'log', 'ln', 'exp', 'lim', 'max', 'min', 'mod', 'gcd',
+        'epsilon', 'varepsilon', 'phi', 'varphi', 'psi', 'lambda',
+        'mu', 'nu', 'xi', 'rho', 'sigma', 'tau', 'upsilon', 'chi', 'omega',
+        'Gamma', 'Lambda', 'Xi', 'Pi', 'Phi', 'Psi', 'Theta', 'Upsilon', 'Chi',
+    }
+
+    def split_math_identifiers(match: re.Match) -> str:
+        word = match.group(0)
+        if word in typst_words:
+            return word
+        return ' '.join(word)
+
+    result = re.sub(r'[A-Za-z]+', split_math_identifiers, result)
     return result
 
 
