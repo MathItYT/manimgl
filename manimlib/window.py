@@ -454,6 +454,5 @@ if sys.platform == "emscripten":
         """Run a Manim scene directly in an HTML canvas under Pyodide."""
         window = await Window.create_for_pyodide(canvas_id)
         scene = scene_class(window=window)
-        await scene.build_async()
-        await scene.browser_interaction_loop()
+        await scene.run_live()
         return scene
