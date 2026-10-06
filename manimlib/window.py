@@ -402,41 +402,42 @@ class Window(object):
         """
         Convert browser pointer coordinates to Manim render-pixel coordinates.
 
-        rendercanvas's event coordinates have the correct local scale. The
-        browser-specific bug is only a vertical origin offset, so that offset
-        is corrected before applying the original CSS-to-render scale.
+        rendercanvas gives us offsetX/offsetY. Those coordinates have the
+        correct scale, but CSS centering can move the canvas's visual origin
+        away from its layout origin. Correct that translation only; never
+        rescale the event coordinates.
         """
         if sys.platform == "emscripten":
             from js import document
 
             canvas = document.getElementById(self.canvas_id)
             if canvas is not None:
-                pointer = getattr(canvas, "__manimPointer", None)
-                if pointer is not None:
-                    try:
-                        client_y = float(pointer.clientY)
-                    except (AttributeError, TypeError, ValueError):
-                        client_y = None
+                try:
+                    event_y = float(event["y"])
+                    event_x = float(event["x"])
 
-                    if client_y is not None:
-                        rect = canvas.getBoundingClientRect()
-                        width = float(rect.width)
-                        render_width, render_height = self.render_size
-                        height = width / ASPECT_RATIO
+                    # offsetY is measured from the canvas's layout origin.
+                    # Find that origin in viewport coordinates by walking the
+                    # offsetParent chain. getBoundingClientRect().top is the
+                    # actual visual origin after CSS centering/transforms.
+                    layout_top = float(canvas.offsetTop)
+                    parent = canvas.offsetParent
+                    while parent is not None:
+                        layout_top += float(parent.offsetTop)
+                        parent = parent.offsetParent
 
-                        if width > 0 and height > 0:
-                            event_y = float(event["y"])
+                    rect = canvas.getBoundingClientRect()
 
-                            # Compute only the translation between the
-                            # rendercanvas event origin and the visual canvas
-                            # origin. Do not use this value as a scale factor.
-                            visual_y = client_y - float(rect.top)
-                            y_offset = visual_y - event_y
-                            corrected_y = event_y + y_offset
+                    # If the canvas is visually translated down by CSS, the
+                    # same pointer produces a larger offsetY. Move it back by
+                    # exactly that translation. This is an offset correction,
+                    # not a scale correction.
+                    visual_offset = float(rect.top) - layout_top
+                    corrected_y = event_y - visual_offset
 
-                            x = float(event["x"]) * render_width / width
-                            y = corrected_y * render_height / height
-                            return np.array([x, render_height - y])
+                    return np.array([event_x, corrected_y])
+                except (AttributeError, TypeError, ValueError):
+                    pass
 
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
