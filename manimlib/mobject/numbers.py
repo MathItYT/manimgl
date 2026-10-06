@@ -102,10 +102,13 @@ class DecimalNumber(VMobject):
                 sm.become(smt)
                 sm.scale(font_size / smt.font_size)
         else:
-            self.set_submobjects([
-                smt.copy().scale(font_size / smt.font_size)
-                for smt in submob_templates
-            ])
+            submobjects = []
+            for char, smt in zip(self.num_string, submob_templates):
+                mob = smt.copy().scale(font_size / smt.font_size)
+                if char == ".":
+                    mob.scale(0.5)
+                submobjects.append(mob)
+            self.set_submobjects(submobjects)
 
         digit_buff = self.digit_buff_per_font_unit * font_size
         self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
@@ -160,10 +163,13 @@ class DecimalNumber(VMobject):
             submob_templates.append(await make_mob(self.unit))
 
         font_size = self.get_font_size()
-        self.set_submobjects([
-            smt.copy().scale(font_size / smt.font_size)
-            for smt in submob_templates
-        ])
+        submobjects = []
+        for char, smt in zip(self.num_string, submob_templates):
+            mob = smt.copy().scale(font_size / smt.font_size)
+            if char == ".":
+                mob.scale(0.5)
+            submobjects.append(mob)
+        self.set_submobjects(submobjects)
         digit_buff = self.digit_buff_per_font_unit * font_size
         self.arrange(RIGHT, buff=digit_buff, aligned_edge=DOWN)
 
