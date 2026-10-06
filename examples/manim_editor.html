@@ -163,7 +163,6 @@ _editor_scene_token = ${token}
 
 await _editor_scene.build_async()
 await _editor_scene.update_frame_async(force_draw=True)
-await _editor_scene.playback_async(repeat=False)
 `;
     }
 
@@ -181,7 +180,7 @@ await _editor_scene.playback_async(repeat=False)
         const transformed = await transformSource(source);
         webCode.textContent = transformed;
 
-        setStatus("Construyendo y reproduciendo escena…");
+        setStatus("Construyendo escena…");
         await pyodide.runPythonAsync(buildRunner(transformed, token));
         setStatus("Escena terminada.");
       } catch (error) {
