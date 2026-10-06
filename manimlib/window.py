@@ -536,7 +536,11 @@ if sys.platform == "emscripten":
 
         # Keep pointer/keyboard redraws alive after execution, but leave the
         # scene runner free to return the completed scene to the editor.
-        task = asyncio.create_task(scene.browser_interaction_loop())
-        scene._browser_interaction_task = task
+        # build_async() is the complete execution boundary for the editor.
+        # Do not start browser_interaction_loop() here: that loop is
+        # intentionally infinite and would keep Pyodide's async execution
+        # alive after the scene itself has finished.
+        await scene.build_async()
+        await scene.update_frame_async(force_draw=True)
         return scene
 
