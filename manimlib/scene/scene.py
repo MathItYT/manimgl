@@ -15,6 +15,7 @@ import numpy as np
 from tqdm.auto import tqdm as ProgressDisplay
 
 from manimlib.animation.animation import prepare_animation
+from manimlib.animation.animation import prepare_animation_async
 from manimlib.camera.camera import Camera
 from manimlib.camera.camera_frame import CameraFrame
 from manimlib.config import manim_config
@@ -780,7 +781,7 @@ class Scene(object):
         if len(proto_animations) == 0:
             log.warning("Called Scene.play with no animations")
             return
-        animations = list(map(prepare_animation, proto_animations))
+        animations = [await prepare_animation_async(anim) for anim in proto_animations]
         for anim in animations:
             anim.update_rate_info(run_time, rate_func, lag_ratio)
         self.pre_play()
