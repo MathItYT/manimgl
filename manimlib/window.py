@@ -534,5 +534,12 @@ if sys.platform == "emscripten":
         # long-lived and would prevent the scene runner from returning.
         await scene.build_async()
         await scene.update_frame_async(force_draw=True)
+
+        # Keep browser input and redraws alive after construction without
+        # blocking the caller that awaits the completed scene.
+        import asyncio
+        scene._browser_interaction_task = asyncio.create_task(
+            scene.browser_interaction_loop()
+        )
         return scene
 
