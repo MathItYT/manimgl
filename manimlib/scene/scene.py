@@ -1021,8 +1021,12 @@ class Scene(object):
         from manimlib.utils.browser_scheduler import next_animation_frame
         while not self.is_window_closing():
             await self.seek_async(0.0)
+            self.should_end_playing = False
             started_at = await next_animation_frame()
             while not self.is_window_closing():
+                if self.should_end_playing:
+                    self.should_end_playing = False
+                    break
                 frame_time = await next_animation_frame()
                 elapsed = frame_time - started_at
                 if elapsed >= self.max_time:
