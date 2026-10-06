@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, TYPE_CHECKING
 
+from manimlib.config import manim_config
 from manimlib.constants import WHITE
 from manimlib.mobject.svg.string_mobject import StringMobject
 from manimlib.mobject.svg.tex_mobject import get_tex_mob_scale_factor
@@ -85,7 +86,7 @@ class SingleStringTypst(StringMobject):
                 from manimlib.mobject.svg.svg_mobject import get_svg_content_height
                 svg_height = get_svg_content_height(self.svg_string)
                 if svg_height > 0:
-                    scale = self.font_size / (10.0 * svg_height)
+                    scale = self.font_size / (manim_config.tex.font_size_for_unit_height * svg_height)
                     self.scale(scale)
                     self.scale_stroke_widths(scale)
             else:
