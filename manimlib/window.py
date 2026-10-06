@@ -403,8 +403,9 @@ class Window(object):
         Convert a pointer position to Manim render-pixel coordinates.
 
         rendercanvas's event coordinates already have the correct scale.
-        For the browser canvas, only compensate for the visual vertical
-        translation introduced by CSS centering/scaling.
+        The browser-specific correction is therefore a translation only:
+        compensate for the vertical offset between rendercanvas's event
+        origin and the canvas's visual origin, without rescaling Y.
         """
         if sys.platform == "emscripten":
             from js import document
@@ -420,19 +421,19 @@ class Window(object):
 
                     if client_y is not None:
                         rect = canvas.getBoundingClientRect()
+                        event_y = float(event["y"])
 
-                        # event["y"] is already in the coordinate system and
-                        # scale expected by Manim. Do not rescale it.
-                        #
-                        # The pointer tracker gives us the actual visual
-                        # position. The difference between that position and
-                        # rendercanvas's event coordinate is a pure translation.
+                        # Both values use the same CSS-pixel scale. Their
+                        # difference is the translation caused by the visual
+                        # positioning of the canvas. Never multiply event_y
+                        # by a scale factor here.
                         visual_y = client_y - float(rect.top)
-                        offset = visual_y - float(event["y"])
+                        y_offset = visual_y - event_y
+                        corrected_y = event_y + y_offset
 
                         return np.array([
                             float(event["x"]),
-                            float(event["y"]) + offset,
+                            float(rect.height) - corrected_y,
                         ])
 
         _, height = self.canvas.get_logical_size()
