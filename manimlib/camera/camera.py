@@ -127,6 +127,8 @@ class Camera(object):
     ):
         self.window = window
         self.default_pixel_shape = resolution  # Rename?
+        if self.window is not None and sys.platform == "emscripten":
+            self.window.set_render_size(*resolution)
         self.fps = fps
         self.light_source_position = light_source_position
         self.samples = samples
