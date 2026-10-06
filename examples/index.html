@@ -1,152 +1,2582 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="es">
+
 <head>
-  <!-- GitHub Pages cannot set COOP/COEP headers. This service worker
-       enables cross-origin isolation so Pyodide can use SharedArrayBuffer. -->
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Manim — Neural Network Demo</title>
+
   <script src="./coi-serviceworker.js"></script>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>ManimGL + Pyodide + WebGPU</title>
+
   <style>
-    html, body { margin: 0; width: 100%; height: 100%; background: #111; color: #ddd; font-family: sans-serif; }
-    body { display: flex; flex-direction: column; }
-    #status { padding: 10px 14px; font-family: monospace; white-space: pre-wrap; }
-    #canvas-container {
-      flex: 1;
-      min-height: 0;
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #0b0e14;
+      color: #e5e7eb;
+      font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #toolbar {
+      height: 48px;
+      min-height: 48px;
+
+      display: flex;
+      align-items: center;
+
+      gap: 12px;
+
+      padding: 7px 12px;
+
+      background: #111620;
+      border-bottom: 1px solid #252c38;
+    }
+
+    #upload-button {
+      border: 0;
+      border-radius: 7px;
+
+      padding: 7px 13px;
+
+      background: #477dff;
+      color: white;
+
+      font-size: 13px;
+      font-weight: 600;
+
+      cursor: pointer;
+    }
+
+    #upload-button:hover {
+      filter: brightness(1.1);
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    #status {
       min-width: 0;
+      flex: 1;
+
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+
+      font-family: monospace;
+      font-size: 12px;
+
+      color: #8e9aae;
+    }
+
+    #content {
+      flex: 1;
+
+      min-height: 0;
+
+      display: flex;
+
+      overflow: hidden;
+    }
+
+    #sidebar {
+      width: 300px;
+      min-width: 300px;
+
+      padding: 16px;
+
+      background: #0e121a;
+
+      border-right: 1px solid #252c38;
+
+      overflow-y: auto;
+    }
+
+    .section-title {
+      margin-bottom: 10px;
+
+      font-size: 12px;
+      font-weight: 700;
+
+      color: #aeb9ca;
+
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    #preview {
+      width: 100%;
+      aspect-ratio: 1;
+
       display: flex;
       align-items: center;
       justify-content: center;
+
+      overflow: hidden;
+
+      border: 1px solid #293243;
+      border-radius: 9px;
+
+      background: #121722;
+    }
+
+    #preview img {
+      width: 100%;
+      height: 100%;
+
+      object-fit: contain;
+
+      display: none;
+    }
+
+    #preview-placeholder {
+      padding: 25px;
+
+      text-align: center;
+
+      color: #596579;
+
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    #results {
+      margin-top: 16px;
+
+      display: flex;
+      flex-direction: column;
+
+      gap: 8px;
+    }
+
+    .prediction {
+      display: grid;
+
+      grid-template-columns:
+        25px
+        minmax(0, 1fr)
+        auto;
+
+      gap: 7px;
+
+      align-items: center;
+
+      font-size: 12px;
+    }
+
+    .prediction-rank {
+      color: #5e6b7f;
+      font-family: monospace;
+    }
+
+    .prediction-label {
+      overflow: hidden;
+
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .prediction-probability {
+      color: #91adff;
+      font-family: monospace;
+    }
+
+    #canvas-container {
+      flex: 1;
+
+      min-width: 0;
+      min-height: 0;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
       overflow: hidden;
     }
+
     #manim-canvas {
       display: block;
-      width: min(100%, calc((100vh - 42px) * 16 / 9));
+
+      width:
+        min(
+          100%,
+          calc((100vh - 48px) * 16 / 9)
+        );
+
       height: auto;
+
       max-height: 100%;
+
       aspect-ratio: 16 / 9;
+
       object-fit: contain;
+
       outline: none;
+    }
+
+    #loading {
+      position: fixed;
+
+      inset: 0;
+
+      z-index: 100;
+
+      display: none;
+
+      align-items: center;
+      justify-content: center;
+
+      background: rgba(4, 6, 10, 0.72);
+    }
+
+    #loading-box {
+      padding: 18px 24px;
+
+      border-radius: 9px;
+
+      border: 1px solid #30394a;
+
+      background: #151b27;
+
+      font-family: monospace;
+      font-size: 13px;
     }
   </style>
 </head>
+
+
 <body>
-  <div id="status">Loading Pyodide…</div>
-  <div id="canvas-container">
-    <canvas id="manim-canvas" width="1920" height="1080" tabindex="0"></canvas>
+
+  <div id="toolbar">
+
+    <button id="upload-button">
+      Subir imagen
+    </button>
+
+    <input
+      id="file-input"
+      type="file"
+      accept="image/png,image/jpeg,image/webp"
+    >
+
+    <div id="status">
+      Inicializando...
+    </div>
+
   </div>
+
+
+  <div id="content">
+
+    <aside id="sidebar">
+
+      <div class="section-title">
+        Entrada
+      </div>
+
+      <div id="preview">
+
+        <img
+          id="preview-image"
+          alt="Imagen"
+        >
+
+        <div id="preview-placeholder">
+          Sube una fotografía para que
+          SqueezeNet la clasifique.
+        </div>
+
+      </div>
+
+
+      <div
+        class="section-title"
+        style="margin-top: 18px;"
+      >
+        Top 5
+      </div>
+
+      <div id="results"></div>
+
+    </aside>
+
+
+    <main id="canvas-container">
+
+      <canvas
+        id="manim-canvas"
+        width="1920"
+        height="1080"
+      ></canvas>
+
+    </main>
+
+  </div>
+
+
+  <div id="loading">
+
+    <div id="loading-box">
+      Cargando...
+    </div>
+
+  </div>
+
+
+  <!-- ============================================================
+       ONNX RUNTIME WEB
+       ============================================================ -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.min.js"
+  ></script>
+
+  <!-- ============================================================
+       ESCENA PYTHON
+       ============================================================ -->
+
+  <script
+    type="text/plain"
+    id="neural-network-scene"
+  >
+
+from manimlib import *
+import numpy as np
+
+
+class NeuralNetworkDemoScene(Scene):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.prediction_data = prediction_data
+
+
+    async def construct(self):
+
+        self.camera.background_rgba = (
+            color_to_rgba(
+                "#080b12",
+                1.0
+            )
+        )
+
+
+        predictions = (
+            self.prediction_data
+            .get(
+                "predictions",
+                []
+            )
+        )
+
+
+        # ---------------------------------------------------------
+        # TITLE
+        # ---------------------------------------------------------
+
+        title = Text.create(
+            "Una red neuronal clasifica una imagen"
+        )
+
+        title.scale(0.68)
+
+        title.to_edge(
+            UP,
+            buff=0.32
+        )
+
+        self.add(title)
+
+
+        subtitle = Text.create(
+            "SqueezeNet 1.1 · ImageNet"
+        )
+
+        subtitle.scale(0.34)
+
+        subtitle.set_color(
+            "#7f8ba0"
+        )
+
+        subtitle.next_to(
+            title,
+            DOWN,
+            buff=0.10
+        )
+
+        self.add(subtitle)
+
+
+        # ---------------------------------------------------------
+        # LAYERS
+        # ---------------------------------------------------------
+
+        layer_x = [
+            -5.7,
+            -3.0,
+            -0.3,
+            2.4,
+            5.0
+        ]
+
+        layer_counts = [
+            5,
+            7,
+            9,
+            7,
+            5
+        ]
+
+
+        layers = []
+
+
+        for x, count in zip(
+            layer_x,
+            layer_counts
+        ):
+
+            nodes = VGroup()
+
+
+            ys = np.linspace(
+                -2.0,
+                2.0,
+                count
+            )
+
+
+            for y in ys:
+
+                node = Circle(
+                    radius=0.105
+                )
+
+                node.set_fill(
+                    "#18243b",
+                    opacity=1
+                )
+
+                node.set_stroke(
+                    "#6f8fd8",
+                    width=2
+                )
+
+                node.move_to(
+                    np.array([
+                        x,
+                        y,
+                        0
+                    ])
+                )
+
+                nodes.add(node)
+
+
+            layers.append(nodes)
+
+            self.add(nodes)
+
+
+        # ---------------------------------------------------------
+        # CONNECTIONS
+        # ---------------------------------------------------------
+
+        connections = VGroup()
+
+
+        for left, right in zip(
+            layers[:-1],
+            layers[1:]
+        ):
+
+            for a in left:
+
+                for b in right:
+
+                    line = Line(
+                        a.get_center(),
+                        b.get_center()
+                    )
+
+                    line.set_stroke(
+                        "#28344b",
+                        width=0.7,
+                        opacity=0.35
+                    )
+
+                    connections.add(
+                        line
+                    )
+
+
+        self.add(connections)
+
+
+        # ---------------------------------------------------------
+        # LABELS
+        # ---------------------------------------------------------
+
+        labels = [
+            "entrada",
+            "features",
+            "features",
+            "features",
+            "clases"
+        ]
+
+
+        for x, label in zip(
+            layer_x,
+            labels
+        ):
+
+            text = Text.create(
+                label
+            )
+
+            text.scale(0.28)
+
+            text.set_color(
+                "#78859a"
+            )
+
+            text.move_to(
+                np.array([
+                    x,
+                    -2.65,
+                    0
+                ])
+            )
+
+            self.add(text)
+
+
+        # ---------------------------------------------------------
+        # ACTIVATION
+        # ---------------------------------------------------------
+
+        if layers:
+
+            activation = Dot(
+                radius=0.085
+            )
+
+            activation.set_color(
+                "#ffffff"
+            )
+
+            activation.move_to(
+                layers[0][2]
+            )
+
+            self.add(
+                activation
+            )
+
+
+            for left, right in zip(layers[:-1], layers[1:]):
+                for _ in range(1):
+                    target = right[len(right) // 2]
+
+                    await self.play_async(
+                        MoveAlongPath(
+                            activation,
+                            Line(
+                                activation.get_center(),
+                                target.get_center(),
+                            ),
+                        ),
+                        run_time=0.25,
+                    )
+
+
+        # ---------------------------------------------------------
+        # PREDICTIONS
+        # ---------------------------------------------------------
+
+        panel = RoundedRectangle(
+            width=5.7,
+            height=3.0,
+            corner_radius=0.16
+        )
+
+        panel.set_fill(
+            "#101722",
+            opacity=1
+        )
+
+        panel.set_stroke(
+            "#344158",
+            width=1.5
+        )
+
+        panel.to_corner(
+            UR,
+            buff=0.30
+        )
+
+        self.add(panel)
+
+
+        prediction_title = Text.create(
+            "Predicción"
+        )
+
+        prediction_title.scale(
+            0.40
+        )
+
+        prediction_title.set_color(
+            "#b8c5da"
+        )
+
+        prediction_title.move_to(
+            panel.get_top()
+            + DOWN * 0.40
+        )
+
+        self.add(
+            prediction_title
+        )
+
+
+        rows = VGroup()
+
+
+        for i, prediction in enumerate(
+            predictions[:5]
+        ):
+
+            label = str(
+                prediction.get(
+                    "label",
+                    "?"
+                )
+            )
+
+            probability = float(
+                prediction.get(
+                    "probability",
+                    0
+                )
+            )
+
+
+            row = Text.create(
+                f"{i + 1}. "
+                f"{label}   "
+                f"{probability * 100:.2f}%"
+            )
+
+            row.scale(0.27)
+
+            row.set_color(
+                "#ffffff"
+                if i == 0
+                else "#7f8ba0"
+            )
+
+            rows.add(row)
+
+
+        if len(rows) > 0:
+
+            rows.arrange(
+                DOWN,
+                aligned_edge=LEFT,
+                buff=0.16
+            )
+
+            rows.move_to(
+                panel.get_center()
+                + DOWN * 0.05
+            )
+
+            self.add(rows)
+
+
+        # ---------------------------------------------------------
+        # FOOTER
+        # ---------------------------------------------------------
+
+        footer = Text.create(
+            "imagen; convoluciones; representación; probabilidades"
+        )
+
+        footer.scale(0.29)
+
+        footer.set_color(
+            "#69758a"
+        )
+
+        footer.to_edge(
+            DOWN,
+            buff=0.28
+        )
+
+        self.add(
+            footer
+        )
+
+
+        await self.wait_async(
+            1
+        )
+  </script>
+
+  
+  <!-- ============================================================
+  MANIM BROWSER RUNTIME
+  ============================================================ -->
+  
   <script type="module">
-    import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
+import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
 
-    const params = new URLSearchParams(location.search);
-    const pyodideUrl = params.get("pyodide") || "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
-    const wheelManifestUrl = new URL(
-      params.get("wheels") || "./browser_wasm/dist/wheels/wheels.json",
-      document.baseURI,
-    ).href;
 
-    // Wheel filenames contain a unique PEP 440 build id. Always fetch the
-    // manifest with cache disabled so GitHub Pages or the COI service worker
-    // can never leave the browser pointing at an older wheel.
-    const wheelManifestRequest = new Request(wheelManifestUrl, {
-      cache: "no-store",
+/* ==========================================================================
+ * CONFIGURATION
+ * ========================================================================== */
+
+const params = new URLSearchParams(location.search);
+
+const pyodideUrl =
+  params.get("pyodide") ||
+  "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
+
+const wheelManifestUrl = new URL(
+  params.get("wheels") ||
+    "./browser_wasm/dist/wheels/wheels.json",
+  document.baseURI,
+).href;
+
+
+/* ==========================================================================
+ * DOM
+ * ========================================================================== */
+
+const status =
+  document.getElementById("status");
+
+const canvas =
+  document.getElementById("manim-canvas");
+
+const fileInput =
+  document.getElementById("file-input");
+
+const uploadButton =
+  document.getElementById("upload-button");
+
+const previewImage =
+  document.getElementById("preview-image");
+
+const previewPlaceholder =
+  document.getElementById("preview-placeholder");
+
+const resultsContainer =
+  document.getElementById("results");
+
+const loading =
+  document.getElementById("loading");
+
+const loadingBox =
+  document.getElementById("loading-box");
+
+const sceneSourceElement =
+  document.getElementById("neural-network-scene");
+
+
+/* ==========================================================================
+ * RUNTIME STATE
+ * ========================================================================== */
+
+let pyodide = null;
+
+let onnxSession = null;
+let imagenetLabels = null;
+
+let sceneStarted = false;
+let sceneRunnerPromise = null;
+
+let imageProcessingQueue =
+  Promise.resolve();
+
+let reconstructionRequestId = 0;
+
+let reconstructionQueue = [];
+
+
+/* ==========================================================================
+ * UI
+ * ========================================================================== */
+
+function setStatus(message) {
+  if (status) {
+    status.textContent =
+      String(message);
+  }
+}
+
+
+function setLoading(
+  isLoading,
+  message = "Cargando...",
+) {
+  if (!loading) {
+    return;
+  }
+
+  loading.style.display =
+    isLoading
+      ? "flex"
+      : "none";
+
+  if (loadingBox) {
+    loadingBox.textContent =
+      message;
+  }
+}
+
+
+/* ==========================================================================
+ * IMAGE DECODING
+ *
+ * IMPORTANT:
+ *
+ * File
+ *   ↓
+ * ImageBitmap
+ *   ├── preview
+ *   └── ONNX preprocessing
+ *
+ * La imagen se decodifica UNA sola vez.
+ * ========================================================================== */
+
+async function decodeImageFile(file) {
+  if (!(file instanceof File)) {
+    throw new TypeError(
+      "decodeImageFile() esperaba un File.",
+    );
+  }
+
+  if (
+    !file.type ||
+    !file.type.startsWith("image/")
+  ) {
+    throw new Error(
+      "El archivo seleccionado no es una imagen.",
+    );
+  }
+
+  const bitmap =
+    await createImageBitmap(file);
+
+  if (
+    !bitmap.width ||
+    !bitmap.height
+  ) {
+    bitmap.close();
+
+    throw new Error(
+      "La imagen no tiene dimensiones válidas.",
+    );
+  }
+
+  return bitmap;
+}
+
+
+/* ==========================================================================
+ * PREVIEW
+ * ========================================================================== */
+
+function updateImagePreview(
+  bitmap,
+) {
+  if (!previewImage) {
+    throw new Error(
+      "No existe #preview-image.",
+    );
+  }
+
+  if (!(bitmap instanceof ImageBitmap)) {
+    throw new TypeError(
+      "updateImagePreview() esperaba un ImageBitmap.",
+    );
+  }
+
+  /*
+   * El preview usa exactamente el mismo ImageBitmap
+   * que posteriormente recibirá el pipeline de ONNX.
+   */
+
+  const width =
+    bitmap.width;
+
+  const height =
+    bitmap.height;
+
+  /*
+   * Dibujamos a un canvas temporal.
+   *
+   * Esto evita:
+   *
+   *   FileReader
+   *   Blob URLs
+   *   <img> decoding
+   *   carreras de src
+   *
+   * El <img> recibe una imagen PNG ya generada.
+   */
+
+  const previewCanvas =
+    document.createElement(
+      "canvas",
+    );
+
+  previewCanvas.width =
+    width;
+
+  previewCanvas.height =
+    height;
+
+  const context =
+    previewCanvas.getContext(
+      "2d",
+    );
+
+  if (!context) {
+    throw new Error(
+      "No se pudo crear el contexto 2D del preview.",
+    );
+  }
+
+  context.drawImage(
+    bitmap,
+    0,
+    0,
+    width,
+    height,
+  );
+
+  /*
+   * Asignar el src reemplaza completamente
+   * la imagen anterior.
+   */
+
+  previewImage.src =
+    previewCanvas.toDataURL(
+      "image/png",
+    );
+
+  /*
+   * El CSS original tiene display:none.
+   * Lo hacemos explícitamente visible.
+   */
+
+  previewImage.style.display =
+    "block";
+
+  previewImage.hidden =
+    false;
+
+  if (previewPlaceholder) {
+    previewPlaceholder.style.display =
+      "none";
+
+    previewPlaceholder.hidden =
+      true;
+  }
+}
+
+
+/* ==========================================================================
+ * IMAGE PREPROCESSING
+ *
+ * ImageNet / SqueezeNet:
+ *
+ * 1. RGB
+ * 2. Resize del lado menor a 256
+ * 3. Center crop 224x224
+ * 4. /255
+ * 5. ImageNet mean/std
+ * 6. NCHW
+ * ========================================================================== */
+
+function preprocessImageBitmap(
+  bitmap,
+) {
+  if (!(bitmap instanceof ImageBitmap)) {
+    throw new TypeError(
+      "preprocessImageBitmap() esperaba un ImageBitmap.",
+    );
+  }
+
+  const sourceWidth =
+    bitmap.width;
+
+  const sourceHeight =
+    bitmap.height;
+
+  if (
+    !sourceWidth ||
+    !sourceHeight
+  ) {
+    throw new Error(
+      "La imagen no tiene dimensiones válidas.",
+    );
+  }
+
+  const targetSize =
+    224;
+
+  const resizeTarget =
+    256;
+
+  /*
+   * Escalamos manteniendo aspect ratio
+   * de forma que el lado menor mida 256.
+   */
+
+  const scale =
+    resizeTarget /
+    Math.min(
+      sourceWidth,
+      sourceHeight,
+    );
+
+  const resizedWidth =
+    Math.round(
+      sourceWidth * scale,
+    );
+
+  const resizedHeight =
+    Math.round(
+      sourceHeight * scale,
+    );
+
+  const resizedCanvas =
+    document.createElement(
+      "canvas",
+    );
+
+  resizedCanvas.width =
+    resizedWidth;
+
+  resizedCanvas.height =
+    resizedHeight;
+
+  const resizedContext =
+    resizedCanvas.getContext(
+      "2d",
+      {
+        willReadFrequently: true,
+      },
+    );
+
+  if (!resizedContext) {
+    throw new Error(
+      "No se pudo crear el canvas de resize.",
+    );
+  }
+
+  resizedContext.imageSmoothingEnabled =
+    true;
+
+  resizedContext.imageSmoothingQuality =
+    "high";
+
+  resizedContext.drawImage(
+    bitmap,
+    0,
+    0,
+    resizedWidth,
+    resizedHeight,
+  );
+
+  /*
+   * Center crop.
+   */
+
+  const cropX =
+    Math.floor(
+      (resizedWidth -
+        targetSize) /
+        2,
+    );
+
+  const cropY =
+    Math.floor(
+      (resizedHeight -
+        targetSize) /
+        2,
+    );
+
+  const imageData =
+    resizedContext.getImageData(
+      cropX,
+      cropY,
+      targetSize,
+      targetSize,
+    );
+
+  const pixels =
+    imageData.data;
+
+  /*
+   * SqueezeNet / ImageNet normalization.
+   */
+
+  const mean = [
+    0.485,
+    0.456,
+    0.406,
+  ];
+
+  const std = [
+    0.229,
+    0.224,
+    0.225,
+  ];
+
+  /*
+   * NCHW:
+   *
+   * [ RRR... ]
+   * [ GGG... ]
+   * [ BBB... ]
+   */
+
+  const planeSize =
+    targetSize *
+    targetSize;
+
+  const tensor =
+    new Float32Array(
+      3 *
+        planeSize,
+    );
+
+  for (
+    let y = 0;
+    y < targetSize;
+    y++
+  ) {
+    for (
+      let x = 0;
+      x < targetSize;
+      x++
+    ) {
+      const pixelIndex =
+        (
+          y *
+            targetSize +
+          x
+        ) *
+        4;
+
+      const r =
+        pixels[pixelIndex] /
+        255;
+
+      const g =
+        pixels[pixelIndex + 1] /
+        255;
+
+      const b =
+        pixels[pixelIndex + 2] /
+        255;
+
+      const index =
+        y *
+          targetSize +
+        x;
+
+      tensor[index] =
+        (
+          r -
+          mean[0]
+        ) /
+        std[0];
+
+      tensor[
+        planeSize +
+        index
+      ] =
+        (
+          g -
+          mean[1]
+        ) /
+        std[1];
+
+      tensor[
+        2 *
+          planeSize +
+        index
+      ] =
+        (
+          b -
+          mean[2]
+        ) /
+        std[2];
+    }
+  }
+
+  return tensor;
+}
+
+
+/* ==========================================================================
+ * SOFTMAX / TOP K
+ * ========================================================================== */
+
+function softmax(
+  values,
+) {
+  let maxValue =
+    -Infinity;
+
+  for (
+    let i = 0;
+    i < values.length;
+    i++
+  ) {
+    if (
+      values[i] >
+      maxValue
+    ) {
+      maxValue =
+        values[i];
+    }
+  }
+
+  const probabilities =
+    new Float32Array(
+      values.length,
+    );
+
+  let sum = 0;
+
+  for (
+    let i = 0;
+    i < values.length;
+    i++
+  ) {
+    const value =
+      Math.exp(
+        values[i] -
+          maxValue,
+      );
+
+    probabilities[i] =
+      value;
+
+    sum += value;
+  }
+
+  if (sum === 0) {
+    throw new Error(
+      "Softmax produjo una suma cero.",
+    );
+  }
+
+  for (
+    let i = 0;
+    i < probabilities.length;
+    i++
+  ) {
+    probabilities[i] /=
+      sum;
+  }
+
+  return probabilities;
+}
+
+
+function topK(
+  probabilities,
+  k = 5,
+) {
+  const indices =
+    Array.from(
+      {
+        length:
+          probabilities.length,
+      },
+      (_, index) =>
+        index,
+    );
+
+  indices.sort(
+    (a, b) =>
+      probabilities[b] -
+      probabilities[a],
+  );
+
+  return indices.slice(
+    0,
+    k,
+  );
+}
+
+
+/* ==========================================================================
+ * PREDICTION UI
+ * ========================================================================== */
+
+function renderPredictions(
+  predictions,
+) {
+  if (!resultsContainer) {
+    return;
+  }
+
+  resultsContainer.innerHTML =
+    "";
+
+  for (
+    let i = 0;
+    i < predictions.length;
+    i++
+  ) {
+    const prediction =
+      predictions[i];
+
+    const row =
+      document.createElement(
+        "div",
+      );
+
+    row.className =
+      "prediction";
+
+    const rank =
+      document.createElement(
+        "div",
+      );
+
+    rank.className =
+      "prediction-rank";
+
+    rank.textContent =
+      `${i + 1}.`;
+
+    const label =
+      document.createElement(
+        "div",
+      );
+
+    label.className =
+      "prediction-label";
+
+    label.textContent =
+      prediction.label;
+
+    const probability =
+      document.createElement(
+        "div",
+      );
+
+    probability.className =
+      "prediction-probability";
+
+    probability.textContent =
+      `${(
+        prediction.probability *
+        100
+      ).toFixed(2)}%`;
+
+    row.appendChild(
+      rank,
+    );
+
+    row.appendChild(
+      label,
+    );
+
+    row.appendChild(
+      probability,
+    );
+
+    resultsContainer.appendChild(
+      row,
+    );
+  }
+}
+
+
+/* ==========================================================================
+ * IMAGENET LABELS
+ * ========================================================================== */
+
+async function loadLabels() {
+  if (imagenetLabels) {
+    return imagenetLabels;
+  }
+
+  const response =
+    await fetch(
+      "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json",
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "No se pudieron cargar las etiquetas ImageNet: " +
+        response.status,
+    );
+  }
+
+  imagenetLabels =
+    await response.json();
+
+  if (
+    !Array.isArray(
+      imagenetLabels,
+    )
+  ) {
+    throw new Error(
+      "El archivo de etiquetas ImageNet no contiene un array.",
+    );
+  }
+
+  return imagenetLabels;
+}
+
+
+/* ==========================================================================
+ * ONNX / SQUEEZENET
+ * ========================================================================== */
+
+async function loadNeuralNetwork() {
+  if (onnxSession) {
+    return onnxSession;
+  }
+
+  if (!window.ort) {
+    throw new Error(
+      "ONNX Runtime Web no está disponible.",
+    );
+  }
+
+  setStatus(
+    "Loading SqueezeNet model...",
+  );
+
+  ort.env.wasm.wasmPaths =
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/";
+
+  const modelUrl =
+    "https://huggingface.co/onnxmodelzoo/squeezenet1.1-7/resolve/main/squeezenet1.1-7.onnx";
+
+  const response =
+    await fetch(
+      modelUrl,
+    );
+
+  if (!response.ok) {
+    throw new Error(
+      "No se pudo cargar SqueezeNet: " +
+        response.status,
+    );
+  }
+
+  const modelBuffer =
+    await response.arrayBuffer();
+
+  /*
+   * Intentamos WebGPU primero.
+   */
+
+  try {
+    onnxSession =
+      await ort.InferenceSession.create(
+        modelBuffer,
+        {
+          executionProviders: [
+            "webgpu",
+          ],
+          graphOptimizationLevel:
+            "all",
+        },
+      );
+
+    console.log(
+      "SqueezeNet running with WebGPU",
+    );
+  } catch (webgpuError) {
+    console.warn(
+      "WebGPU ONNX falló; usando WASM.",
+      webgpuError,
+    );
+
+    onnxSession =
+      await ort.InferenceSession.create(
+        modelBuffer,
+        {
+          executionProviders: [
+            "wasm",
+          ],
+          graphOptimizationLevel:
+            "all",
+        },
+      );
+
+    console.log(
+      "SqueezeNet running with WASM",
+    );
+  }
+
+  return onnxSession;
+}
+
+
+/* ==========================================================================
+ * CLASSIFY IMAGE
+ *
+ * Recibe ImageBitmap.
+ *
+ * NO vuelve a leer el File.
+ * NO vuelve a decodificar la imagen.
+ * ========================================================================== */
+
+async function classifyImage(
+  bitmap,
+) {
+  const session =
+    await loadNeuralNetwork();
+
+  const labels =
+    await loadLabels();
+
+  const tensorData =
+    preprocessImageBitmap(
+      bitmap,
+    );
+
+  const inputTensor =
+    new ort.Tensor(
+      "float32",
+      tensorData,
+      [
+        1,
+        3,
+        224,
+        224,
+      ],
+    );
+
+  const inputName =
+    session.inputNames[0];
+
+  const outputs =
+    await session.run({
+      [inputName]:
+        inputTensor,
     });
-    const status = document.getElementById("status");
-    const setStatus = (s) => status.textContent = s;
 
-    try {
-      setStatus("Loading browser WASM backends…");
-      await initializeBrowserWasm();
+  const outputName =
+    session.outputNames[0];
 
-      const pango = await import("./browser_wasm/dist/pango_text_loader.js");
-      if (typeof pango.initializePangoText !== "function") {
-        throw new Error("PangoCairo loader does not export initializePangoText()");
+  const outputTensor =
+    outputs[outputName];
+
+  if (
+    !outputTensor ||
+    !outputTensor.data
+  ) {
+    throw new Error(
+      "SqueezeNet no produjo una salida válida.",
+    );
+  }
+
+  const probabilities =
+    softmax(
+      outputTensor.data,
+    );
+
+  const indices =
+    topK(
+      probabilities,
+      5,
+    );
+
+  return indices.map(
+    (index) => ({
+      index,
+
+      label:
+        labels[index] ??
+        `Class ${index}`,
+
+      probability:
+        Number(
+          probabilities[
+            index
+          ],
+        ),
+    }),
+  );
+}
+
+
+/* ==========================================================================
+ * MANIM RECONSTRUCTION QUEUE
+ * ========================================================================== */
+
+function syncReconstructionQueue() {
+  window
+    .manimNeuralNetworkReconstructionQueue =
+    JSON.stringify(
+      reconstructionQueue,
+    );
+}
+
+
+function enqueueSceneReconstruction(
+  predictions,
+) {
+  reconstructionRequestId++;
+
+  reconstructionQueue.push({
+    id:
+      reconstructionRequestId,
+
+    prediction_data: {
+      predictions,
+    },
+  });
+
+  syncReconstructionQueue();
+}
+
+
+/* ==========================================================================
+ * PYTHON SCENE SOURCE
+ * ========================================================================== */
+
+function buildSceneSource(
+  predictions,
+) {
+  if (!sceneSourceElement) {
+    throw new Error(
+      "No existe #neural-network-scene.",
+    );
+  }
+
+  const source =
+    sceneSourceElement.textContent.trim();
+
+  if (!source) {
+    throw new Error(
+      "#neural-network-scene está vacío.",
+    );
+  }
+
+  const predictionData =
+    JSON.stringify({
+      predictions,
+    });
+
+  return `
+import json
+
+prediction_data = json.loads(
+    ${JSON.stringify(
+      predictionData,
+    )}
+)
+
+${source}
+`;
+}
+
+
+/* ==========================================================================
+ * START PERSISTENT MANIM SCENE
+ * ========================================================================== */
+
+async function startManimScene(
+  predictions,
+) {
+  if (sceneStarted) {
+    return;
+  }
+
+  if (!pyodide) {
+    throw new Error(
+      "Pyodide todavía no está inicializado.",
+    );
+  }
+
+  sceneStarted = true;
+
+  /*
+   * La primera imagen forma parte de la construcción inicial.
+   */
+
+  const sceneSource =
+    buildSceneSource(
+      predictions,
+    );
+
+  /*
+   * MUY IMPORTANTE:
+   *
+   * Después de iniciar este runPythonAsync NO ejecutamos
+   * ningún otro runPythonAsync para preguntar por el estado.
+   *
+   * Todo Python relacionado con la Scene vive dentro de
+   * este único runner persistente.
+   */
+
+  const runnerSource = `
+${sceneSource}
+
+
+_original_construct = NeuralNetworkDemoScene.construct
+
+
+async def _browser_construct(self):
+
+    from js import window
+
+    globals()["scene"] = self
+
+    window.manimSceneReady = True
+
+    self.clear()
+    result = _original_construct(
+        self
+    )
+
+    if hasattr(
+        result,
+        "__await__",
+    ):
+        await result
+
+
+async def _browser_interaction_loop(self):
+
+    from manimlib.utils.browser_scheduler import (
+        next_animation_frame
+    )
+
+    from js import window
+
+    import json
+
+
+    while not self.is_window_closing():
+
+        self.window.poll_events()
+
+
+        if self.window.has_undrawn_event():
+
+            self.update_frame(
+                force_draw=True
+            )
+
+
+        queue_text = str(
+            getattr(
+                window,
+                "manimNeuralNetworkReconstructionQueue",
+                "[]",
+            )
+        )
+
+
+        try:
+
+            queue = json.loads(
+                queue_text
+            )
+
+        except Exception:
+
+            queue = []
+
+
+        if queue:
+
+            request = queue[0]
+
+            /*
+             * No dejamos la solicitud en la cola mientras
+             * construct() está ejecutándose.
+             *
+             * Esto garantiza que nuevas imágenes queden
+             * detrás de la reconstrucción actual.
+             */
+
+            queue = queue[1:]
+
+            window.manimNeuralNetworkReconstructionQueue = (
+                json.dumps(queue)
+            )
+
+
+            self.prediction_data = (
+                request[
+                    "prediction_data"
+                ]
+            )
+
+
+            self.clear()
+
+
+            result = self.construct()
+
+
+            if hasattr(
+                result,
+                "__await__",
+            ):
+
+                await result
+
+
+            self.update_frame(
+                force_draw=True
+            )
+
+
+            self.window.poll_events()
+
+
+        await next_animation_frame()
+
+
+NeuralNetworkDemoScene.construct = (
+    _browser_construct
+)
+
+
+NeuralNetworkDemoScene.browser_interaction_loop = (
+    _browser_interaction_loop
+)
+
+
+await run_scene_from_class(
+    NeuralNetworkDemoScene,
+    "manim-canvas",
+)
+`;
+
+  /*
+   * Corregimos el comentario anterior porque el código
+   * anterior es Python, no JavaScript.
+   *
+   * El reemplazo se hace antes de ejecutarlo.
+   */
+
+  const fixedRunnerSource =
+    runnerSource.replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    );
+
+  window.manimSceneReady =
+    false;
+
+  sceneRunnerPromise =
+    pyodide.runPythonAsync(
+      fixedRunnerSource,
+    );
+
+  sceneRunnerPromise.catch(
+    (error) => {
+      console.error(
+        "Persistent Manim scene failed:",
+        error,
+      );
+
+      sceneStarted =
+        false;
+
+      window.manimSceneReady =
+        false;
+
+      setStatus(
+        "Manim scene failed:\n" +
+          String(error),
+      );
+    },
+  );
+
+  /*
+   * Esperamos exclusivamente mediante JS.
+   *
+   * NO llamamos runPythonAsync().
+   */
+
+  for (
+    let i = 0;
+    i < 1200;
+    i++
+  ) {
+    if (
+      window.manimSceneReady
+    ) {
+      setStatus(
+        "Scene ready — persistent Manim scene running.",
+      );
+
+      return;
+    }
+
+    /*
+     * Si el runner ya terminó con error,
+     * no seguimos esperando.
+     */
+
+    if (
+      sceneRunnerPromise &&
+      typeof sceneRunnerPromise.then ===
+        "function"
+    ) {
+      /*
+       * El estado de ready lo controla Python.
+       * Simplemente esperamos el siguiente frame.
+       */
+    }
+
+    await new Promise(
+      (resolve) =>
+        requestAnimationFrame(
+          resolve,
+        ),
+    );
+  }
+
+  throw new Error(
+    "Timeout esperando a que Manim inicialice la Scene.",
+  );
+}
+
+
+/* ==========================================================================
+ * MANIM REBUILD
+ * ========================================================================== */
+
+async function rebuildManimScene(
+  predictions,
+) {
+  /*
+   * Primera imagen:
+   *
+   * crea la Scene y su Window/GPU.
+   */
+
+  if (!sceneStarted) {
+    await startManimScene(
+      predictions,
+    );
+
+    return;
+  }
+
+  /*
+   * Imágenes posteriores:
+   *
+   * NO llamamos Python.
+   * NO creamos otra Scene.
+   * NO llamamos run_scene_from_class().
+   *
+   * Simplemente agregamos la reconstrucción
+   * a la cola que consume browser_interaction_loop().
+   */
+
+  enqueueSceneReconstruction(
+    predictions,
+  );
+}
+
+
+/* ==========================================================================
+ * IMAGE PROCESSING QUEUE
+ * ========================================================================== */
+
+function enqueueImageProcessing(
+  file,
+) {
+  /*
+   * Cada imagen espera a que termine completamente
+   * la anterior:
+   *
+   * decode
+   * preview
+   * ONNX
+   * render
+   * Manim enqueue
+   */
+
+  imageProcessingQueue =
+    imageProcessingQueue.then(
+      () =>
+        processImageFile(
+          file,
+        ),
+    ).catch(
+      (error) => {
+        console.error(
+          "Image processing failed:",
+          error,
+        );
+
+        setStatus(
+          "Error:\n" +
+            String(error),
+        );
+      },
+    );
+
+  return imageProcessingQueue;
+}
+
+
+/* ==========================================================================
+ * PROCESS ONE IMAGE
+ * ========================================================================== */
+
+async function processImageFile(
+  file,
+) {
+  if (!(file instanceof File)) {
+    return;
+  }
+
+  if (
+    !file.type ||
+    !file.type.startsWith(
+      "image/",
+    )
+  ) {
+    setStatus(
+      "El archivo seleccionado no es una imagen.",
+    );
+
+    return;
+  }
+
+  let bitmap =
+    null;
+
+  setLoading(
+    true,
+    "Procesando imagen...",
+  );
+
+  try {
+    /*
+     * ==============================================================
+     * 1. DECODIFICACIÓN ÚNICA
+     * ==============================================================
+     */
+
+    setStatus(
+      "Decodificando imagen...",
+    );
+
+    bitmap =
+      await decodeImageFile(
+        file,
+      );
+
+
+    /*
+     * ==============================================================
+     * 2. PREVIEW
+     * ==============================================================
+     *
+     * Usa el MISMO ImageBitmap.
+     */
+
+    setStatus(
+      "Actualizando preview...",
+    );
+
+    updateImagePreview(
+      bitmap,
+    );
+
+
+    /*
+     * ==============================================================
+     * 3. ONNX
+     * ==============================================================
+     *
+     * Usa el MISMO ImageBitmap.
+     */
+
+    setStatus(
+      "Clasificando imagen...",
+    );
+
+    const predictions =
+      await classifyImage(
+        bitmap,
+      );
+
+
+    /*
+     * ==============================================================
+     * 4. RESULTADOS HTML
+     * ==============================================================
+     */
+
+    renderPredictions(
+      predictions,
+    );
+
+
+    /*
+     * ==============================================================
+     * 5. MANIM
+     * ==============================================================
+     */
+
+    setStatus(
+      "Actualizando escena Manim...",
+    );
+
+    await rebuildManimScene(
+      predictions,
+    );
+
+
+    /*
+     * Si llegamos aquí, todo terminó correctamente.
+     */
+
+    setStatus(
+      "Imagen procesada correctamente.",
+    );
+
+  } catch (error) {
+    console.error(
+      "Error procesando imagen:",
+      error,
+    );
+
+    setStatus(
+      "Error:\n" +
+        String(error),
+    );
+
+  } finally {
+    /*
+     * El ImageBitmap se libera SOLAMENTE ahora.
+     *
+     * Para este momento:
+     *
+     * preview ya lo dibujó
+     * ONNX ya terminó
+     * Manim ya recibió sus predicciones
+     */
+
+    if (bitmap) {
+      bitmap.close();
+      bitmap = null;
+    }
+
+    setLoading(
+      false,
+    );
+  }
+}
+
+
+/* ==========================================================================
+ * FILE INPUT
+ * ========================================================================== */
+
+if (
+  uploadButton &&
+  fileInput
+) {
+  uploadButton.addEventListener(
+    "click",
+    () => {
+      fileInput.click();
+    },
+  );
+
+
+  fileInput.addEventListener(
+    "change",
+    (event) => {
+      const file =
+        event.target.files?.[0];
+
+      /*
+       * Limpiamos inmediatamente el input.
+       *
+       * Esto permite seleccionar otra vez
+       * exactamente el mismo archivo.
+       */
+
+      event.target.value =
+        "";
+
+      if (!file) {
+        return;
       }
-      await pango.initializePangoText();
-      if (typeof window.manimPangoTextToSvg !== "function") {
-        throw new Error("PangoCairo WASM initialized, but window.manimPangoTextToSvg was not installed");
+
+      enqueueImageProcessing(
+        file,
+      );
+    },
+  );
+}
+
+
+/* ==========================================================================
+ * CLIPBOARD / PASTE
+ * ========================================================================== */
+
+document.addEventListener(
+  "paste",
+  (event) => {
+    const items =
+      event.clipboardData?.items;
+
+    if (!items) {
+      return;
+    }
+
+    for (
+      const item of items
+    ) {
+      if (
+        item.kind !== "file" ||
+        !item.type.startsWith(
+          "image/",
+        )
+      ) {
+        continue;
       }
 
-      // Download a real TTF and register it in the WASM Fontconfig instance.
-      // PangoCairo renders from Fontconfig, so the raw font bytes must be
-      // registered with Pango; CSS FontFace alone is not sufficient.
-      setStatus("Loading browser font…");
-      const fontUrl = "https://raw.githubusercontent.com/openmaptiles/fonts/refs/heads/master/roboto/Roboto-Regular.ttf";
-      const fontResponse = await fetch(fontUrl);
-      if (!fontResponse.ok) {
-        throw new Error("Failed to load browser font: " + fontResponse.status);
-      }
-      const fontBytes = await fontResponse.arrayBuffer();
+      const file =
+        item.getAsFile();
 
-      const registeredFont = await window.manimRegisterPangoFont(
+      if (!file) {
+        continue;
+      }
+
+      event.preventDefault();
+
+      enqueueImageProcessing(
+        file,
+      );
+
+      return;
+    }
+  },
+);
+
+
+/* ==========================================================================
+ * INITIALIZATION
+ * ========================================================================== */
+
+async function initialize() {
+  try {
+    /*
+     * ---------------------------------------------------------------
+     * Browser WASM
+     * ---------------------------------------------------------------
+     */
+
+    setStatus(
+      "Loading browser WASM backends...",
+    );
+
+    await initializeBrowserWasm();
+
+
+    /*
+     * ---------------------------------------------------------------
+     * Pango
+     * ---------------------------------------------------------------
+     */
+
+    const pango =
+      await import(
+        "./browser_wasm/dist/pango_text_loader.js"
+      );
+
+    if (
+      typeof pango.initializePangoText !==
+      "function"
+    ) {
+      throw new Error(
+        "PangoCairo loader does not export initializePangoText().",
+      );
+    }
+
+    await pango.initializePangoText();
+
+    if (
+      typeof window.manimPangoTextToSvg !==
+      "function"
+    ) {
+      throw new Error(
+        "PangoCairo WASM initialized, but window.manimPangoTextToSvg was not installed.",
+      );
+    }
+
+
+    /*
+     * ---------------------------------------------------------------
+     * Browser font
+     * ---------------------------------------------------------------
+     */
+
+    setStatus(
+      "Loading browser font...",
+    );
+
+    const fontUrl =
+      "https://raw.githubusercontent.com/openmaptiles/fonts/refs/heads/master/roboto/Roboto-Regular.ttf";
+
+    const fontResponse =
+      await fetch(
+        fontUrl,
+      );
+
+    if (!fontResponse.ok) {
+      throw new Error(
+        "Failed to load browser font: " +
+          fontResponse.status,
+      );
+    }
+
+    const fontBytes =
+      await fontResponse.arrayBuffer();
+
+    const registeredFont =
+      await window.manimRegisterPangoFont(
         fontBytes,
         "Roboto-Regular.ttf",
       );
-      window.manimBrowserFontFamily = String(registeredFont.family);
-      setStatus("Browser font registered: " + window.manimBrowserFontFamily);
 
-      setStatus("Loading Pyodide…");
-      const { loadPyodide } = await import(pyodideUrl);
-      const pyodide = await loadPyodide();
+    window.manimBrowserFontFamily =
+      String(
+        registeredFont.family,
+      );
 
-      setStatus("Installing Python/WebGPU dependencies…");
-      await pyodide.loadPackage(["micropip", "numpy", "scipy", "pillow", "sympy", "matplotlib", "pygments", "pyyaml", "tqdm", "fonttools"]);
 
-      const wheelManifest = await fetch(wheelManifestRequest).then((response) => {
-        if (!response.ok) {
-          throw new Error("Failed to load wheel manifest: " + response.status);
-        }
-        return response.json();
-      });
+    /*
+     * ---------------------------------------------------------------
+     * Pyodide
+     * ---------------------------------------------------------------
+     */
 
-      const wheelBase = new URL(".", wheelManifestUrl).href;
-      const wgpuWheel = new URL(wheelManifest.wgpu, wheelBase).href;
-      const manimWheel = new URL(wheelManifest.manimgl, wheelBase).href;
+    setStatus(
+      "Loading Pyodide...",
+    );
 
-      await pyodide.runPythonAsync(`
+    const {
+      loadPyodide,
+    } = await import(
+      pyodideUrl
+    );
+
+    pyodide =
+      await loadPyodide();
+
+
+    /*
+     * ---------------------------------------------------------------
+     * Python dependencies
+     * ---------------------------------------------------------------
+     */
+
+    setStatus(
+      "Installing Python/WebGPU dependencies...",
+    );
+
+    await pyodide.loadPackage([
+      "micropip",
+      "numpy",
+      "scipy",
+      "pillow",
+      "sympy",
+      "matplotlib",
+      "pygments",
+      "pyyaml",
+      "tqdm",
+      "fonttools",
+    ]);
+
+
+    /*
+     * ---------------------------------------------------------------
+     * Wheels
+     * ---------------------------------------------------------------
+     */
+
+    const wheelManifestRequest =
+      new Request(
+        wheelManifestUrl,
+        {
+          cache: "no-store",
+        },
+      );
+
+    const wheelManifest =
+      await fetch(
+        wheelManifestRequest,
+      ).then(
+        async (response) => {
+          if (!response.ok) {
+            throw new Error(
+              "Failed to load wheel manifest: " +
+                response.status,
+            );
+          }
+
+          return response.json();
+        },
+      );
+
+    const wheelBase =
+      new URL(
+        ".",
+        wheelManifestUrl,
+      ).href;
+
+    const wgpuWheel =
+      new URL(
+        wheelManifest.wgpu,
+        wheelBase,
+      ).href;
+
+    const manimWheel =
+      new URL(
+        wheelManifest.manimgl,
+        wheelBase,
+      ).href;
+
+
+    await pyodide.runPythonAsync(`
 import micropip
-await micropip.install("${wgpuWheel}")
-await micropip.install("${manimWheel}")
+
+await micropip.install(
+    ${JSON.stringify(
+      wgpuWheel,
+    )}
+)
+
+await micropip.install(
+    ${JSON.stringify(
+      manimWheel,
+    )}
+)
 `);
 
-      setStatus("Starting Manim scene…");
-      await pyodide.runPythonAsync(`
-from manimlib import *
-from js import window
 
-class BrowserScene(Scene):
-    async def construct(self):
-        # The font was registered from JavaScript before Python started.
-        title = Text.create(
-            "ManimGL + Pyodide = Love",
-            font=str(window.manimBrowserFontFamily),
-        )
-        title.scale(1.5)
+    /*
+     * ---------------------------------------------------------------
+     * ONNX Runtime
+     * ---------------------------------------------------------------
+     *
+     * El <script> ya está en el HTML.
+     * Solamente verificamos que haya cargado.
+     * ---------------------------------------------------------------
+     */
 
-        await self.play_async(Write(title), run_time=1.5)
+    setStatus(
+      "Loading ONNX Runtime...",
+    );
 
-        circle = Circle(radius=1.5)
-        circle.set_color(BLUE)
-        self.add(circle)
-
-        await self.play_async(ShowCreation(circle), run_time=1.5)
-        await self.play_async(circle.animate.shift(RIGHT * 2), run_time=1.5)
-
-        # Typst is also asynchronous in Pyodide.
-        formula = await Typst.create("x^2 + y^2 = r^2")
-        formula.scale(1.5)
-        formula.next_to(circle, DOWN)
-        await self.play_async(GrowFromCenter(formula), run_time=1.5)
-
-await run_scene_from_class(BrowserScene, "manim-canvas")
-`);
-      setStatus("Scene ready — the canvas is owned by Manim.");
-      document.getElementById("manim-canvas").focus();
-    } catch (error) {
-      console.error(error);
-      setStatus("Failed to start Manim:\n" + error);
+    if (!window.ort) {
+      throw new Error(
+        "ONNX Runtime Web no cargó.",
+      );
     }
-  </script>
+
+    await loadNeuralNetwork();
+
+    await loadLabels();
+
+
+    /*
+     * ---------------------------------------------------------------
+     * Reconstruction queue
+     * ---------------------------------------------------------------
+     */
+
+    reconstructionQueue =
+      [];
+
+    reconstructionRequestId =
+      0;
+
+    window.manimNeuralNetworkReconstructionQueue =
+      "[]";
+
+    window.manimSceneReady =
+      false;
+
+
+    /*
+     * ---------------------------------------------------------------
+     * READY
+     * ---------------------------------------------------------------
+     */
+
+    setStatus(
+      "Ready — upload or paste an image.",
+    );
+
+  } catch (error) {
+    console.error(
+      "Initialization failed:",
+      error,
+    );
+
+    setLoading(
+      false,
+    );
+
+    setStatus(
+      "Failed to start:\n" +
+        String(error),
+    );
+  }
+}
+
+
+await initialize();
+
+</script>
 </body>
+
 </html>
