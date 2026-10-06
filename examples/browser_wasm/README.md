@@ -87,3 +87,12 @@ Browser WASM compilers are promise-based and cannot block the browser event loop
     await scene.playback_async()
 
 `build_async()` executes `construct()` and accepts an async `construct()` so WASM-backed text/Typst objects can be awaited. Playback is then driven by the timeline's `seek()` function.
+
+
+## Monaco Manim editor
+
+The branch also contains `examples/manim_editor.html`, a browser editor backed by Monaco and Pyodide. It accepts native synchronous ManimGL scene code and transforms it to the asynchronous browser API before executing it. Start the development server with:
+
+    python examples/browser_wasm/serve.py
+
+Then open `/manim_editor.html`.
