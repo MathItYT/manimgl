@@ -179,9 +179,9 @@ class InteractiveScene(Scene):
         time_label.add_updater(lambda m, dt: m.increment_value(dt))
         return VGroup(loc_label, time_label)
 
-    def get_state(self):
+    def get_state(self, ignore: list[Mobject] | None = None) -> SceneState:
         return SceneState(self, ignore=[
-            self.selection_highlight, self.selection_rectangle, self.crosshair,
+            self.selection_highlight, self.selection_rectangle, self.crosshair, *ignore
         ])
 
     def restore_state(self, scene_state: SceneState):

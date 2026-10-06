@@ -995,7 +995,7 @@ class Scene(object):
 
     # Helpers for interactive development
 
-    def get_state(self, ignore: list[str] | None = None) -> SceneState:
+    def get_state(self, ignore: list[Mobject] | None = None) -> SceneState:
         return SceneState(self, ignore=ignore)
 
     @affects_mobject_list
