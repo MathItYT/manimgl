@@ -455,5 +455,5 @@ if sys.platform == "emscripten":
         window = await Window.create_for_pyodide(canvas_id)
         scene = scene_class(window=window)
         await scene.build_async()
-        await scene.playback_async()
+        await scene.browser_interaction_loop()
         return scene
