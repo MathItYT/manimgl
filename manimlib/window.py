@@ -432,6 +432,7 @@ class Window(object):
 
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
+
     def event_point(self, event: dict) -> np.ndarray:
         return self.pixel_coords_to_space_coords(*self.event_position(event))
 
