@@ -97,6 +97,15 @@ class _BrowserTransformer(ast.NodeTransformer):
     def visit_Call(self, node):
         node = self.generic_visit(node)
         name = node.func.id if isinstance(node.func, ast.Name) else None
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == 'create'
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id in ASYNC_CREATE_MOBJECTS
+        ):
+            self.changed = True
+            return ast.copy_location(ast.Await(node), node)
+
         if name in SYNC_CREATE_MOBJECTS | ASYNC_CREATE_MOBJECTS:
             node.func = ast.Attribute(ast.Name(id=name, ctx=ast.Load()), 'create', ast.Load())
             self.changed = True
