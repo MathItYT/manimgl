@@ -309,10 +309,18 @@ class DecimalNumber(VMobject):
 
     async def set_value_async(self, number: float | complex) -> Self:
         """Browser-safe asynchronous counterpart of set_value."""
-        move_to_point = self.get_edge_center(self.edge_to_fix)
+        # Preserve the anchor before rebuilding the glyph hierarchy.  The
+        # async Typst path can change both the number of submobjects and its
+        # bounding box, so positioning the rebuilt object with move_to() alone
+        # is fragile.
+        anchor = self.get_bounding_box_point(self.edge_to_fix)
         style = self.family_members_with_points()[0].get_style()
+
         await self.set_submobjects_from_number_async(number)
-        self.move_to(move_to_point, self.edge_to_fix)
+
+        new_anchor = self.get_bounding_box_point(self.edge_to_fix)
+        self.shift(anchor - new_anchor)
+
         self.set_style(**style)
         for submob in self.get_family():
             submob.uniforms.update(self.uniforms)
