@@ -53,7 +53,7 @@ export async function initializeBrowserWasm(options = {}) {
 
     const fontBase = options.typstFontBase || "https://cdn.jsdelivr.net/npm/@typst-wasm/fonts@1.0.0/dist/files/";
     const fontUrls = [
-      fontBase + "LibertinusSerif-Regular.otf",
+      fontBase + "NewCM10-Regular.otf",
       fontBase + "NewCMMath-Regular.otf",
     ];
     await window.manimTypstCompiler.addFonts(
