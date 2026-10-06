@@ -110,10 +110,32 @@ class _BrowserTransformer(ast.NodeTransformer):
 
     def visit_ClassDef(self, node):
         node = self.generic_visit(node)
-        if any((isinstance(base, ast.Name) and base.id == 'Scene') or (isinstance(base, ast.Attribute) and base.attr == 'Scene') for base in node.bases):
+
+        # Browser scenes must always have an async construct().  The generated
+        # code replaces synchronous Scene.play()/wait() calls with their async
+        # counterparts, so construct itself has to be awaitable as well.
+        #
+        # Do not restrict this to a class whose base is literally named
+        # Scene.  Manim has many Scene subclasses (ThreeDScene,
+        # MovingCameraScene, InteractiveScene, and user-defined Scene
+        # subclasses), and their construct() methods need the same treatment.
+        is_scene_class = any(
+            (
+                isinstance(base, ast.Name)
+                and (base.id == 'Scene' or base.id.endswith('Scene'))
+            )
+            or (
+                isinstance(base, ast.Attribute)
+                and (base.attr == 'Scene' or base.attr.endswith('Scene'))
+            )
+            for base in node.bases
+        )
+
+        if is_scene_class:
             for child in node.body:
                 if isinstance(child, ast.FunctionDef) and child.name == 'construct':
                     child.__class__ = ast.AsyncFunctionDef
+
         return node
 
     def visit_Call(self, node):
