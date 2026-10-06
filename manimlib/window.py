@@ -428,8 +428,8 @@ class Window(object):
                 # accounted for by offsetX/offsetY.
                 rect = canvas.getBoundingClientRect()
                 width = float(rect.width)
-                height = float(rect.height)
                 render_width, render_height = self.render_size
+                height = width / ASPECT_RATIO
 
                 if width > 0 and height > 0:
                     x = float(event["x"]) * render_width / width
