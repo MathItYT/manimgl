@@ -353,7 +353,9 @@ class Window(object):
         if self.scene is None or not hasattr(self.scene, "frame"):
             return np.zeros(3)
 
-        pixel_shape = np.array(self.canvas.get_logical_size())
+        pixel_shape = np.array(
+            self.render_size if sys.platform == "emscripten" else self.canvas.get_logical_size()
+        )
         fixed_frame_shape = np.array(FRAME_SHAPE)
         frame = self.scene.frame
 
