@@ -231,7 +231,7 @@ class Scene(object):
 
         # Present the final live scene automatically. Explicit browser_present()
         # calls are no longer required from user scenes.
-        self.update_frame(force_draw=True)
+        await self.update_frame_async(force_draw=True)
         self.window.poll_events()
         await self._browser_frame()
         await self.browser_interaction_loop()
