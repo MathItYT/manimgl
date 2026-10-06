@@ -179,3 +179,4 @@ __marimo__/*
 emsdk/
 pango-cairo-wasm/
 !examples/browser_wasm/dist/
+!examples/browser_wasm/dist/wheels
