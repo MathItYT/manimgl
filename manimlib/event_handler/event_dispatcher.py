@@ -44,6 +44,10 @@ class EventDispatcher(object):
         elif event_type == EventType.KeyReleaseEvent:
             self.pressed_keys.difference_update({event_data["symbol"]})  # Modifiers?
         elif event_type == EventType.MousePressEvent:
+            # The press event itself is authoritative. Do not rely on a
+            # preceding mouse-motion event: on touch/pointer devices and in
+            # the browser a press may be the first event we receive.
+            self.mouse_point = event_data["point"]
             self.draggable_object_listners = [
                 listner
                 for listner in self.event_listners[EventType.MouseDragEvent]
