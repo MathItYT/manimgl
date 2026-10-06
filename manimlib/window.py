@@ -430,7 +430,7 @@ class Window(object):
                             # render-pixel scale; do not derive a new Y scale
                             # from the CSS height.
                             y = (
-                                client_y - float(rect.top)
+                                client_y - max(0.0, (float(rect.height) - height) / 2.0)
                             ) * render_height / height
 
                             x = (
