@@ -2282,6 +2282,16 @@ class Updater(object):
             self.func(mobject, dt / n_steps)
 
 
+    async def call_async(self, mobject: Mobject, dt: float = 0, frame_rate: float | None = None) -> None:
+        """Invoke an updater and await its result when it is asynchronous."""
+        n_steps = 1 if frame_rate is None else max(int(dt * frame_rate), 1)
+        step_dt = dt / n_steps
+        for _ in range(n_steps):
+            result = self.func(mobject) if not self.takes_dt else self.func(mobject, step_dt)
+            if inspect.isawaitable(result):
+                await result
+
+
 class _UpdaterBuilder:
     def __init__(self, mobject: Mobject):
         self.mobject = mobject
@@ -2312,12 +2322,3 @@ class _FunctionalUpdaterBuilder:
             )
             return self
         return add_updater
-    async def call_async(self, mobject: Mobject, dt: float = 0, frame_rate: float | None = None) -> None:
-        """Invoke an updater and await its result when it is asynchronous."""
-        n_steps = 1 if frame_rate is None else max(int(dt * frame_rate), 1)
-        step_dt = dt / n_steps
-        for _ in range(n_steps):
-            result = self.func(mobject) if not self.takes_dt else self.func(mobject, step_dt)
-            if inspect.isawaitable(result):
-                await result
-
