@@ -213,6 +213,11 @@ class Scene(object):
             print("", end="\r")
             self.file_writer.ended_with_interrupt = True
 
+        # Present the final live scene automatically. Explicit browser_present()
+        # calls are no longer required from user scenes.
+        self.update_frame(force_draw=True)
+        self.window.poll_events()
+        await self._browser_frame()
         await self.browser_interaction_loop()
 
     def playback(self) -> None:
@@ -868,15 +873,6 @@ class Scene(object):
             self.emit_frame()
             await self._browser_frame()
         self.post_play()
-
-    async def browser_present(self) -> None:
-        """Present the current scene frame and yield once to the browser."""
-        if sys.platform != "emscripten":
-            self.update_frame(force_draw=True)
-            return
-        self.update_frame(force_draw=True)
-        self.window.poll_events()
-        await self._browser_frame()
 
     def wait(
         self,
