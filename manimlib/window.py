@@ -430,7 +430,7 @@ class Window(object):
                             # render-pixel scale; do not derive a new Y scale
                             # from the CSS height.
                             y = (
-                                client_y - float(rect.top) * height / float(rect.height)
+                                float(rect.bottom) - client_y
                             ) * render_height / height
 
                             x = (
@@ -438,8 +438,7 @@ class Window(object):
                                 * render_width
                                 / width
                             )
-                            return np.array([x, render_height - y])
-
+                            return np.array([x, y])
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
 
