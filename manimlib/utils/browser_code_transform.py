@@ -109,7 +109,8 @@ class _BrowserTransformer(ast.NodeTransformer):
         node = self.generic_visit(node)
         name = node.func.id if isinstance(node.func, ast.Name) else None
         if (
-            isinstance(node.func, ast.Attribute)
+            not self.in_await
+            and isinstance(node.func, ast.Attribute)
             and node.func.attr == 'create'
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id in ASYNC_CREATE_MOBJECTS
@@ -117,11 +118,11 @@ class _BrowserTransformer(ast.NodeTransformer):
             self.changed = True
             return ast.copy_location(ast.Await(node), node)
 
-        if name in SYNC_CREATE_MOBJECTS | ASYNC_CREATE_MOBJECTS:
+        if not self.in_await and name in SYNC_CREATE_MOBJECTS | ASYNC_CREATE_MOBJECTS:
             node.func = ast.Attribute(ast.Name(id=name, ctx=ast.Load()), 'create', ast.Load())
             self.changed = True
             return ast.copy_location(ast.Await(node), node) if name in ASYNC_CREATE_MOBJECTS else node
-        if name in TEX_NAMES:
+        if not self.in_await and name in TEX_NAMES:
             node.func = ast.Attribute(
                 value=ast.Name(id='Typst', ctx=ast.Load()),
                 attr='create',
@@ -131,7 +132,7 @@ class _BrowserTransformer(ast.NodeTransformer):
                 node.args[0].value = latex_to_typst(node.args[0].value)
             self.changed = True
             return ast.copy_location(ast.Await(node), node)
-        if isinstance(node.func, ast.Attribute):
+        if not self.in_await and isinstance(node.func, ast.Attribute):
             if isinstance(node.func.value, ast.Name) and node.func.value.id == 'self':
                 if node.func.attr == 'play':
                     node.func.attr = 'play_async'
@@ -157,7 +158,7 @@ class _BrowserTransformer(ast.NodeTransformer):
                 node.func.attr = 'get_axis_labels_async'
                 self.changed = True
                 return ast.copy_location(ast.Await(node), node)
-        if name == 'NumberLine':
+        if not self.in_await and name == 'NumberLine':
             for keyword in node.keywords:
                 if keyword.arg == 'include_numbers' and _is_true_constant(keyword.value):
                     keyword.value = ast.Constant(value=False)
