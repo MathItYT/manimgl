@@ -157,15 +157,15 @@ class DecimalNumber(VMobject):
             **self.text_config,
         )
 
-        # Render the complete number as one Typst expression. This is
-        # important: Typst's glyph metrics preserve the natural relative
-        # size of punctuation (especially the decimal point), whereas
-        # rendering each character separately would normalize "." to the
-        # same height as a digit.
-        submob_templates = [
-            number_mob.get_part_by_typst(char, index)
-            for index, char in enumerate(self.num_string)
-        ]
+        # Keep the complete number in a single Typst expression so that
+        # punctuation uses its natural glyph metrics.  Do not render the
+        # characters independently: that would normalize the decimal point
+        # to the same nominal size as a digit.
+        submob_templates = []
+        for index in range(len(self.num_string)):
+            part = number_mob.get_part_by_typst(self.num_string[index], index)
+            if len(part) > 0:
+                submob_templates.append(part)
 
         if self.show_ellipsis:
             dots = await Typst.create(
