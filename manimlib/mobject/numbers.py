@@ -136,18 +136,24 @@ class DecimalNumber(VMobject):
         return obj
 
     async def set_submobjects_from_number_async(self, number: float | complex) -> None:
-        """Browser-safe counterpart of set_submobjects_from_number."""
+        """Browser-safe counterpart of set_submobjects_from_number.
+
+        Pyodide cannot use the synchronous Text/Tex renderers here because
+        their SVG backend is asynchronous in the browser. Typst.create()
+        provides the same awaitable construction path used by the rest of
+        the browser text backend and defaults to New Computer Modern.
+        """
         self.number = number
         self.num_string = self.get_num_string(number)
 
+        from manimlib.mobject.svg.typst_mobject import Typst
+
         async def make_mob(char: str):
-            if "\\\\" in char:
-                return Tex(char, **self.text_config)
-            return await Text.create(char, **self.text_config)
+            return await Typst.create(char, **self.text_config)
 
         submob_templates = [await make_mob(char) for char in self.num_string]
         if self.show_ellipsis:
-            dots = await Text.create("...", **self.text_config)
+            dots = await Typst.create("...", **self.text_config)
             dots.arrange(RIGHT, buff=2 * dots[0].get_width())
             submob_templates.append(dots)
         if self.unit is not None:
