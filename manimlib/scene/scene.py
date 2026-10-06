@@ -821,23 +821,28 @@ class Scene(object):
         duration = run_time or self.get_run_time(animations)
         if register:
             self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), animations, duration, None))
+        # requestAnimationFrame is the browser clock. The configured render FPS
+        # controls update granularity, not elapsed wall-clock time.
+        start_time = await self._browser_frame()
         last_t = 0.0
-        fps = self.camera.fps
-        for t in np.arange(0, duration, 1 / fps) + 1 / fps:
+        while last_t < duration:
             self.window.poll_events()
             if self.should_end_playing:
                 self.should_end_playing = False
                 break
+            frame_time = await self._browser_frame()
+            t = min(max(frame_time - start_time, 0.0), duration)
             dt = float(t - last_t)
+            if dt <= 0:
+                continue
             last_t = float(t)
             self.increment_time(dt)
             for animation in animations:
-                animation.update_reference_mobjects(dt, frame_rate=fps)
+                animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
                 animation.interpolate(float(t) / animation.run_time)
             self.update_mobjects(dt)
             self.draw_frame(dt, force_draw=True)
             self.emit_frame()
-            await self._browser_frame()
         self.finish_animations(animations)
         self.post_play()
 
