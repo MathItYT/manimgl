@@ -82,17 +82,18 @@ class SingleStringTypst(StringMobject):
 
         if "height" not in kwargs and "width" not in kwargs:
             import sys
-            if sys.platform == "emscripten" and not skip_browser_svg_measurement:
-                from manimlib.mobject.svg.svg_mobject import get_svg_content_height
-                svg_height = get_svg_content_height(self.svg_string)
-                if svg_height > 0:
-                    scale = self.font_size / (manim_config.tex.font_size_for_unit_height * svg_height)
-                    self.scale(scale)
-                    self.scale_stroke_widths(scale)
+            if sys.platform == "emscripten":
+                if not skip_browser_svg_measurement:
+                    from manimlib.mobject.svg.svg_mobject import get_svg_content_height
+                    svg_height = get_svg_content_height(self.svg_string)
+                    if svg_height > 0:
+                        scale = self.font_size / (manim_config.tex.font_size_for_unit_height * svg_height)
+                        self.scale(scale)
+                        self.scale_stroke_widths(scale)
             else:
-                self.scale(get_tex_mob_scale_factor() * self.font_size)
-                self.scale_stroke_widths(get_tex_mob_scale_factor() * self.font_size)
-
+                scale = get_tex_mob_scale_factor() * self.font_size
+                self.scale(scale)
+                self.scale_stroke_widths(scale)
         self._char_to_submob_map = self._build_char_to_submob_map()
 
     @classmethod
