@@ -141,7 +141,7 @@ class DecimalNumber(VMobject):
         self.num_string = self.get_num_string(number)
 
         async def make_mob(char: str):
-            if "\\\\" in char or char == "i":
+            if "\\\\" in char:
                 return Tex(char, **self.text_config)
             return await Text.create(char, **self.text_config)
 
