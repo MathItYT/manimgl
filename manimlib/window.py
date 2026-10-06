@@ -400,12 +400,11 @@ class Window(object):
 
     def event_position(self, event: dict) -> np.ndarray:
         """
-        Convert a pointer position to Manim render-pixel coordinates.
+        Convert browser pointer coordinates to Manim render-pixel coordinates.
 
-        rendercanvas's event coordinates already have the correct scale.
-        The browser-specific correction is therefore a translation only:
-        compensate for the vertical offset between rendercanvas's event
-        origin and the canvas's visual origin, without rescaling Y.
+        rendercanvas's event coordinates have the correct local scale. The
+        browser-specific bug is only a vertical origin offset, so that offset
+        is corrected before applying the original CSS-to-render scale.
         """
         if sys.platform == "emscripten":
             from js import document
@@ -421,20 +420,23 @@ class Window(object):
 
                     if client_y is not None:
                         rect = canvas.getBoundingClientRect()
-                        event_y = float(event["y"])
+                        width = float(rect.width)
+                        render_width, render_height = self.render_size
+                        height = width / ASPECT_RATIO
 
-                        # Both values use the same CSS-pixel scale. Their
-                        # difference is the translation caused by the visual
-                        # positioning of the canvas. Never multiply event_y
-                        # by a scale factor here.
-                        visual_y = client_y - float(rect.top)
-                        y_offset = visual_y - event_y
-                        corrected_y = event_y + y_offset
+                        if width > 0 and height > 0:
+                            event_y = float(event["y"])
 
-                        return np.array([
-                            float(event["x"]),
-                            float(rect.height) - corrected_y,
-                        ])
+                            # Compute only the translation between the
+                            # rendercanvas event origin and the visual canvas
+                            # origin. Do not use this value as a scale factor.
+                            visual_y = client_y - float(rect.top)
+                            y_offset = visual_y - event_y
+                            corrected_y = event_y + y_offset
+
+                            x = float(event["x"]) * render_width / width
+                            y = corrected_y * render_height / height
+                            return np.array([x, render_height - y])
 
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
