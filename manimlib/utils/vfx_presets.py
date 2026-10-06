@@ -1646,9 +1646,11 @@ class MotionBlur(PostProcessEffect):
                 dtype=np.float64,
             )
 
-            # ManimGL's CameraFrame returns the matrix in the same
-            # coordinate convention used by the renderer.
-            camera_point = view.T @ p
+            # CameraFrame.to_fixed_frame_point() applies the view
+            # matrix as p @ view.T, i.e. as view @ p for column vectors.
+            # Using view.T here transposes the camera transform and breaks
+            # screen-space motion tracking when the camera moves.
+            camera_point = view @ p
 
         except Exception:
             # ----------------------------------------------------------
