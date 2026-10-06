@@ -176,3 +176,5 @@ tests/assets/
 example.py
 analysis.py
 __marimo__/*
+emsdk/
+pango-cairo-wasm/
