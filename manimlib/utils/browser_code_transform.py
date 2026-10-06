@@ -48,13 +48,26 @@ def latex_to_typst(source: str) -> str:
         'Gamma', 'Lambda', 'Xi', 'Pi', 'Phi', 'Psi', 'Theta', 'Upsilon', 'Chi',
     }
 
+    protected_text = []
+
+    def protect_text(match: re.Match) -> str:
+        protected_text.append(match.group(0))
+        return f'__BROWSER_TEXT_{len(protected_text) - 1}__'
+
+    # Do not split words inside Typst text blocks. They are prose, not math
+    # identifiers.
+    result = re.sub(r'#text\\[[^]]*\\]', protect_text, result)
+
     def split_math_identifiers(match: re.Match) -> str:
         word = match.group(0)
-        if word in typst_words:
+        if word in typst_words or word.startswith('__BROWSER_TEXT_'):
             return word
         return ' '.join(word)
 
     result = re.sub(r'[A-Za-z]+', split_math_identifiers, result)
+
+    for index, text_block in enumerate(protected_text):
+        result = result.replace(f'__BROWSER_TEXT_{index}__', text_block)
     return result
 
 
