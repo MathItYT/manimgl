@@ -305,8 +305,6 @@ class VideoSource(object):
         except Exception:
             self.frame_rate = Fraction(30, 1)
         finally:
-            if callback_id is not None and hasattr(video, "cancelVideoFrameCallback"):
-                video.cancelVideoFrameCallback(callback_id)
             video.pause()
             video.currentTime = min(
                 original_time,
