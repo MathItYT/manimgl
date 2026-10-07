@@ -146,6 +146,7 @@ class BrowserVideoTexture(Texture):
             usage=(
                 wgpu.TextureUsage.TEXTURE_BINDING
                 | wgpu.TextureUsage.COPY_DST
+                | wgpu.TextureUsage.RENDER_ATTACHMENT
             ),
         )
         super().__init__(
