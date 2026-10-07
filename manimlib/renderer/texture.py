@@ -129,50 +129,6 @@ def stack_view(texture: Any) -> Any:
     return texture.create_view(dimension=wgpu.TextureViewDimension.d2_array)
 
 
-class BrowserVideoTexture(Texture):
-    """GPU texture updated directly from an HTMLVideoElement."""
-
-    def __init__(self, source: TextureSource, gpu: Gpu):
-        self.gpu = gpu
-        self.video = source.video.browser_video
-        self.width = int(source.video.width)
-        self.height = int(source.video.height)
-        self.media_time = -1.0
-        self.texture = gpu.device.create_texture(
-            size=(self.width, self.height, 1),
-            dimension=wgpu.TextureDimension.d2,
-            format=wgpu.TextureFormat.rgba8unorm,
-            usage=(
-                wgpu.TextureUsage.TEXTURE_BINDING
-                | wgpu.TextureUsage.COPY_DST
-                | wgpu.TextureUsage.RENDER_ATTACHMENT
-            ),
-        )
-        super().__init__(
-            source,
-            self.texture.create_view(
-                dimension=wgpu.TextureViewDimension.d2,
-            ),
-        )
-
-    def refresh(self) -> None:
-        current_time = float(self.video.currentTime)
-        if abs(current_time - self.media_time) <= 1e-6:
-            return
-
-        self.gpu.queue.copy_external_image_to_texture(
-            {"source": self.video},
-            {
-                "texture": self.texture,
-                "mip_level": 0,
-                "origin": (0, 0, 0),
-                "color_space": "srgb",
-                "premultiplied_alpha": False,
-            },
-            (self.width, self.height, 1),
-        )
-        self.media_time = current_time
-
 
 class LayeredTexture(Texture):
     """A stack the holding mobject rewrites, see LayeredPixels."""
