@@ -132,8 +132,6 @@
     #assets-panel.drop-active #assets-drop-overlay { display:flex; }
     #editor-wrap { overflow:hidden; }
 
-
-
     @media (max-width: 900px) {
       html, body { overflow:hidden; }
 
@@ -174,7 +172,6 @@
       #preview {
         padding:10px;
       }
-
 
       #web-code { max-height:24%; }
       #errors { max-height:24%; }
@@ -619,7 +616,7 @@ class Demo(Scene):
       return String(result);
     }
 
-    function buildRunner(transformed, token) {
+    function buildRunner(transformed, token, canvasWidth, canvasHeight) {
       return `
 import sys
 import traceback
@@ -660,7 +657,7 @@ if not _candidates:
 
 _scene_class = _candidates[-1]
 
-_editor_scene = await run_scene_from_class(_scene_class, "manim-canvas", size=(1005, 1005 * 9 // 16))
+_editor_scene = await run_scene_from_class(_scene_class, "manim-canvas", size=(${canvasWidth}, ${canvasHeight}))
 _editor_scene_token = ${token}`;
     }
 
@@ -673,13 +670,16 @@ _editor_scene_token = ${token}`;
       clearError();
 
       try {
+        resizeManimCanvas();
         setStatus("Transformando código nativo → web…");
         const source = editor.getValue();
         const transformed = await transformSource(source);
         webCode.textContent = transformed;
 
         setStatus("Construyendo escena…");
-        await pyodide.runPythonAsync(buildRunner(transformed, token));
+        await pyodide.runPythonAsync(
+          buildRunner(transformed, token, canvas.width, canvas.height)
+        );
         setStatus("Escena terminada.");
       } catch (error) {
         showError(error);
@@ -713,7 +713,6 @@ _editor_scene_token = ${token}`;
         );
       } catch (_) {}
     }
-
 
     document.getElementById("assets-toggle").addEventListener("click", () => {
       assetsPanel.classList.toggle("open");
@@ -840,10 +839,6 @@ await micropip.install(${JSON.stringify(new URL(manifest.wgpu, wheelBase).href)}
 await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).href)})
 `);
 
-        // The committed wheel is intentionally treated as the binary dependency
-        // layer. Overlay the pure-Python browser files from this branch so the
-        // editor always exercises the exact source revision being demonstrated,
-        // without requiring a new wheel for every editor iteration.
         setLoading(false);
         runButton.disabled = false;
         ensureAssetDir();
