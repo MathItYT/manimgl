@@ -176,6 +176,8 @@ class VideoSource(object):
         self._browser_requested_index = -1
         self._browser_playing = False
         self._browser_media_time = 0.0
+        self._browser_frame_ready = False
+        self._browser_playback_task = None
 
         # ------------------------------------------------------------------
         # Live capture state
@@ -301,13 +303,24 @@ class VideoSource(object):
         self._browser_media_time = float(self.browser_video.currentTime)
 
     def _on_browser_video_frame(self, now, metadata) -> None:
-        """Consume decoded frames at the cadence supplied by the browser."""
+        """Publish the browser's current media time without seeking."""
         if self.browser_video is None:
             return
-        self._capture_browser_frame()
+
+        self._browser_media_time = float(metadata.mediaTime)
+        self._browser_frame_ready = True
+
         self.browser_video.requestVideoFrameCallback(
             self._on_browser_video_frame
         )
+
+    async def _browser_playback_worker(self) -> None:
+        """Copy each decoded browser frame as it becomes available."""
+        while self._browser_playing and self.browser_video is not None:
+            if self._browser_frame_ready:
+                self._browser_frame_ready = False
+                self._capture_browser_frame()
+            await asyncio.sleep(0)
 
     def start_browser_playback(self, time: float = 0.0) -> None:
         """Start the HTMLVideoElement clock used by interactive playback."""
@@ -322,6 +335,7 @@ class VideoSource(object):
 
         if not self._browser_playing:
             self._browser_playing = True
+            self._browser_frame_ready = False
             if hasattr(video, "requestVideoFrameCallback"):
                 video.requestVideoFrameCallback(
                     self._on_browser_video_frame
