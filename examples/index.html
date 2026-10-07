@@ -296,12 +296,6 @@
         flex:none;
       }
 
-      #manim-canvas {
-        max-width:100%;
-        max-height:100%;
-        width:auto;
-        height:auto;
-      }
     }
 
     @media (max-width: 480px) {
@@ -840,8 +834,37 @@ const status =
 const canvas =
   document.getElementById("manim-canvas");
 
-  canvas.width = 1005;
-  canvas.height = Math.floor(1005 * 9 / 16);
+function resizeManimCanvas() {
+  const container =
+    document.getElementById("canvas-container");
+
+  if (!container) return;
+
+  const rect = container.getBoundingClientRect();
+  const width = Math.max(1, Math.floor(rect.width));
+  const height = Math.max(1, Math.floor(rect.height));
+  const aspect = 16 / 9;
+
+  let canvasWidth = width;
+  let canvasHeight = Math.floor(canvasWidth / aspect);
+
+  if (canvasHeight > height) {
+    canvasHeight = height;
+    canvasWidth = Math.floor(canvasHeight * aspect);
+  }
+
+  canvas.width = Math.max(1, canvasWidth);
+  canvas.height = Math.max(1, canvasHeight);
+}
+
+canvas.width = 1005;
+canvas.height = Math.floor(1005 * 9 / 16);
+
+const canvasResizeObserver =
+  new ResizeObserver(resizeManimCanvas);
+canvasResizeObserver.observe(
+  document.getElementById("canvas-container"),
+);
 
 const fileInput =
   document.getElementById("file-input");
