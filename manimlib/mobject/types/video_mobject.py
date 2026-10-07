@@ -15,7 +15,6 @@ import numpy as np
 from PIL import Image
 
 from manimlib.mobject.types.image_mobject import ImageMobject
-from manimlib.renderer.texture import BrowserVideoTexture
 from manimlib.renderer.texture import LayeredPixels
 from manimlib.renderer.uniform_block import COMMON_UNIFORMS
 from manimlib.renderer.uniform_block import uniform_block_dtype
@@ -934,20 +933,6 @@ class VideoFrames(LayeredPixels):
     def live(self) -> bool:
         return self.video.live
 
-    def kind(self) -> str:
-        if self.video.browser_video is not None:
-            return "2d"
-        return super().kind()
-
-    def realize(self, gpu) -> object:
-        if (
-            self.video.browser_video is not None
-            and hasattr(gpu.queue, "copy_external_image_to_texture")
-        ):
-            self.video._browser_gpu_texture = True
-            return BrowserVideoTexture(self, gpu)
-        return super().realize(gpu)
-
     def copy(self) -> VideoFrames:
         """
         Preloaded stacks are shared.
@@ -1086,9 +1071,6 @@ class VideoMobject(ImageMobject):
         **kwargs,
     ):
         self.loop = loop
-
-        if _browser_source is not None:
-            self.shader_file = "video_browser.wgsl"
 
         # Used by normal video files.
         self._preload = preload
