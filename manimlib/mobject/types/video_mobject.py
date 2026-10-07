@@ -256,15 +256,16 @@ class VideoSource(object):
         self._latest_index = -1
 
     async def _detect_browser_frame_rate(self) -> None:
-        """Estimate the source frame rate from decoded video frame timestamps."""
+        """Estimate FPS without allowing browser media callbacks to block startup."""
         video = self.browser_video
 
         if not hasattr(video, "requestVideoFrameCallback"):
             return
 
-        from js import Promise
+        from js import Promise, window
 
         original_time = float(video.currentTime)
+        callback_id = None
 
         try:
             if abs(original_time) > 1e-6:
@@ -275,30 +276,28 @@ class VideoSource(object):
                     )
                 )
 
-            def collect_frames(resolve, reject):
-                times = []
+            sample_promise = Promise.new(
+                lambda resolve, reject: self._start_browser_fps_sampling(
+                    video, resolve
+                )
+            )
 
-                def callback(now, metadata):
-                    media_time = float(metadata.mediaTime)
-                    if not times or media_time > times[-1] + 1e-6:
-                        times.append(media_time)
+            timeout_promise = Promise.new(
+                lambda resolve, reject: window.setTimeout(resolve, 1000)
+            )
 
-                    if len(times) >= 9:
-                        resolve(times)
-                    else:
-                        video.requestVideoFrameCallback(callback)
+            samples = await Promise.race([
+                sample_promise,
+                timeout_promise,
+            ])
 
-                # Register the callback before starting playback.  Do not
-                # await video.play(): the JS play() promise is not needed
-                # here and awaiting it through Pyodide can stall the Python
-                # coroutine even though the media element is playing.
-                video.requestVideoFrameCallback(callback)
-                video.play()
+            if samples is None:
+                return
 
-            samples = list(await Promise.new(collect_frames))
-
+            samples = list(samples)
             deltas = np.diff(np.asarray(samples, dtype=float))
             deltas = deltas[deltas > 1e-5]
+
             if len(deltas):
                 estimated_fps = 1.0 / float(np.median(deltas))
                 if np.isfinite(estimated_fps) and 1.0 <= estimated_fps <= 240.0:
@@ -306,11 +305,31 @@ class VideoSource(object):
         except Exception:
             self.frame_rate = Fraction(30, 1)
         finally:
+            if callback_id is not None and hasattr(video, "cancelVideoFrameCallback"):
+                video.cancelVideoFrameCallback(callback_id)
             video.pause()
             video.currentTime = min(
                 original_time,
                 max(0.0, self.duration - 1e-6),
             )
+
+    def _start_browser_fps_sampling(self, video, resolve):
+        """Collect a short requestVideoFrameCallback sample while the video plays."""
+        times = []
+
+        def callback(now, metadata):
+            media_time = float(metadata.mediaTime)
+            if not times or media_time > times[-1] + 1e-6:
+                times.append(media_time)
+
+            if len(times) >= 9:
+                resolve(times)
+                return
+
+            video.requestVideoFrameCallback(callback)
+
+        video.requestVideoFrameCallback(callback)
+        video.play()
 
     async def _load_browser_frame(self, index: int) -> None:
         """Seek the HTMLVideoElement and copy its current decoded frame."""
