@@ -402,7 +402,17 @@ class Demo(Scene):
       for (const file of Array.from(files)) {
         if (!file || typeof file.arrayBuffer !== "function") continue;
         const bytes = new Uint8Array(await file.arrayBuffer());
-        pyodide.FS.writeFile(uniqueAssetPath(file.name), bytes);
+        const path = uniqueAssetPath(file.name);
+        pyodide.FS.writeFile(path, bytes);
+
+        const extension = file.name.toLowerCase().split(".").pop();
+        if (["ttf", "otf", "woff", "woff2"].includes(extension)) {
+          await pyodide.runPythonAsync(
+            "from manimlib.utils.browser_fonts import register_browser_font_path\n"
+            + "await register_browser_font_path(" + JSON.stringify(path) + ")"
+          );
+        }
+
         imported++;
       }
 
