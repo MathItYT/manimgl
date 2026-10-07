@@ -424,10 +424,13 @@ class VideoSource(object):
     @property
     def latest_index(self) -> int:
         """
-        Index of the most recently decoded live frame.
+        Index of the most recently decoded frame.
 
-        -1 means that the capture thread has not received a frame yet.
+        Browser-backed sources do not use the native capture lock.
         """
+        if self.browser_video is not None:
+            return self._latest_index
+
         with self._frame_lock:
             return self._latest_index
 
@@ -439,8 +442,11 @@ class VideoSource(object):
 
         Before the first frame arrives, a transparent blank frame is returned.
         """
-        with self._frame_lock:
+        if self.browser_video is not None:
             pixels = self._latest_frame
+        else:
+            with self._frame_lock:
+                pixels = self._latest_frame
 
         if pixels is None:
             return self.blank_frame()
@@ -464,7 +470,11 @@ class VideoSource(object):
             return
 
         self._closed = True
-        self._capture_stop.set()
+        if self._capture_stop is not None:
+            self._capture_stop.set()
+
+        if self._browser_latest_task is not None and not self._browser_latest_task.done():
+            self._browser_latest_task.cancel()
 
         thread = self._capture_thread
 
