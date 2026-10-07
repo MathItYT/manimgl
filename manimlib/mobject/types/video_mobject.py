@@ -268,12 +268,20 @@ class VideoSource(object):
         samples = []
 
         try:
-            video.currentTime = 0
-            await Promise.new(
-                lambda resolve, reject: video.addEventListener(
-                    "seeked", resolve, {"once": True}
+            # requestVideoFrameCallback() advances only when the browser
+            # presents decoded video frames.  The previous implementation
+            # waited for callbacks while the element was paused, which can
+            # wait forever.  Play the muted element briefly so the callbacks
+            # are actually generated.
+            if abs(original_time) > 1e-6:
+                video.currentTime = 0
+                await Promise.new(
+                    lambda resolve, reject: video.addEventListener(
+                        "seeked", resolve, {"once": True}
+                    )
                 )
-            )
+
+            await video.play()
 
             def collect_frames(resolve, reject):
                 times = []
