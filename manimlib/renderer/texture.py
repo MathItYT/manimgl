@@ -148,7 +148,12 @@ class BrowserVideoTexture(Texture):
                 | wgpu.TextureUsage.RENDER_ATTACHMENT
             ),
         )
-        super().__init__(\n            source,\n            self.texture.create_view(\n                dimension=wgpu.TextureViewDimension.d2,\n            ),\n        )
+        super().__init__(
+            source,
+            self.texture.create_view(
+                dimension=wgpu.TextureViewDimension.d2,
+            ),
+        )
 
     def refresh(self) -> None:
         current_time = float(self.video.currentTime)
