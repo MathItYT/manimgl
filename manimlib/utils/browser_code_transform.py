@@ -4,7 +4,7 @@ import ast
 import re
 
 SYNC_CREATE_MOBJECTS = {'Text', 'MarkupText', 'Code'}
-ASYNC_CREATE_MOBJECTS = {'Typst', 'TypstText', 'DecimalNumber', 'Integer'}
+ASYNC_CREATE_MOBJECTS = {'Typst', 'TypstText', 'DecimalNumber', 'Integer', 'VideoMobject', 'Sprite'}
 TEX_NAMES = {'Tex', 'TexText'}
 
 
