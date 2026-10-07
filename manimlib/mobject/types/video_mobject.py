@@ -1170,7 +1170,9 @@ class VideoMobject(ImageMobject):
             return self
 
         if self.source.browser_video is not None:
-            self.source.start_browser_playback(time)
+            self.source.request_frame(
+                round(time * float(self.source.frame_rate))
+            )
             return self
 
         return self.set_frame(
