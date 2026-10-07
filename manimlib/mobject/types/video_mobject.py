@@ -83,8 +83,6 @@ class VideoSource(object):
         if video.readyState < 2:
             await Promise.new(lambda resolve, reject: video.addEventListener("loadeddata", resolve, {"once": True}))
         source = cls(str(path), preload=False, browser_video=video, browser_url=url)
-        await source._detect_browser_frame_rate()
-        source.num_frames = max(1, round(source.duration * float(source.frame_rate)))
         await source._load_browser_frame(0)
         return source
     @classmethod
@@ -256,112 +254,101 @@ class VideoSource(object):
         self._latest_index = -1
 
     async def _detect_browser_frame_rate(self) -> None:
-        """Estimate FPS without allowing browser media callbacks to block startup."""
-        video = self.browser_video
-
-        if not hasattr(video, "requestVideoFrameCallback"):
-            return
-
-        from js import Promise, window
-
-        original_time = float(video.currentTime)
-        callback_id = None
-
-        try:
-            if abs(original_time) > 1e-6:
-                video.currentTime = 0
-                await Promise.new(
-                    lambda resolve, reject: video.addEventListener(
-                        "seeked", resolve, {"once": True}
-                    )
-                )
-
-            sample_promise = Promise.new(
-                lambda resolve, reject: self._start_browser_fps_sampling(
-                    video, resolve
-                )
-            )
-
-            timeout_promise = Promise.new(
-                lambda resolve, reject: window.setTimeout(resolve, 1000)
-            )
-
-            samples = await Promise.race([
-                sample_promise,
-                timeout_promise,
-            ])
-
-            if samples is None:
-                return
-
-            samples = list(samples)
-            deltas = np.diff(np.asarray(samples, dtype=float))
-            deltas = deltas[deltas > 1e-5]
-
-            if len(deltas):
-                estimated_fps = 1.0 / float(np.median(deltas))
-                if np.isfinite(estimated_fps) and 1.0 <= estimated_fps <= 240.0:
-                    self.frame_rate = Fraction(estimated_fps).limit_denominator(1000)
-        except Exception:
-            self.frame_rate = Fraction(30, 1)
-        finally:
-            video.pause()
-            video.currentTime = min(
-                original_time,
-                max(0.0, self.duration - 1e-6),
-            )
-
-    def _start_browser_fps_sampling(self, video, resolve):
-        """Collect a short requestVideoFrameCallback sample while the video plays."""
-        times = []
-
-        def callback(now, metadata):
-            media_time = float(metadata.mediaTime)
-            if not times or media_time > times[-1] + 1e-6:
-                times.append(media_time)
-
-            if len(times) >= 9:
-                resolve(times)
-                return
-
-            video.requestVideoFrameCallback(callback)
-
-        video.requestVideoFrameCallback(callback)
-        video.play()
+        """Browser playback uses the HTMLVideoElement clock; FPS is not required."""
+        return
 
     async def _load_browser_frame(self, index: int) -> None:
-        """Seek the HTMLVideoElement and copy its current decoded frame."""
-        index = int(np.clip(index, 0, self.num_frames - 1))
-        target = min(index / float(self.frame_rate), max(0.0, self.duration - 1e-6))
+        """Seek the HTMLVideoElement for an explicit frame request."""
+        index = int(max(0, index))
+        target = min(
+            index / float(self.frame_rate),
+            max(0.0, self.duration - 1e-6),
+        )
         video = self.browser_video
+
         if abs(float(video.currentTime) - target) > 1e-6:
             from js import Promise
             video.currentTime = target
-            await Promise.new(lambda resolve, reject: video.addEventListener("seeked", resolve, {"once": True}))
-        self.browser_context.drawImage(video, 0, 0, self.width, self.height)
-        image_data = self.browser_context.getImageData(0, 0, self.width, self.height)
-        pixels = np.frombuffer(bytes(image_data.data.to_py()), dtype=np.uint8).reshape(self.height, self.width, 4).copy()
+            await Promise.new(
+                lambda resolve, reject: video.addEventListener(
+                    "seeked", resolve, {"once": True}
+                )
+            )
+
+        self._capture_browser_frame(index)
+
+    def _capture_browser_frame(self, index: int | None = None) -> None:
+        """Copy the frame currently presented by the HTMLVideoElement."""
+        self.browser_context.drawImage(
+            self.browser_video, 0, 0, self.width, self.height
+        )
+        image_data = self.browser_context.getImageData(
+            0, 0, self.width, self.height
+        )
+        pixels = np.frombuffer(
+            bytes(image_data.data.to_py()),
+            dtype=np.uint8,
+        ).reshape(self.height, self.width, 4).copy()
+
+        self._latest_index = (
+            self._latest_index + 1
+            if index is None
+            else int(index)
+        )
         self._latest_frame = pixels
-        self._latest_index = index
+        self._browser_media_time = float(self.browser_video.currentTime)
 
-    async def _browser_frame_worker(self) -> None:
-        """Serialize browser seeks while keeping only the newest request."""
-        while True:
-            index = self._browser_requested_index
-            if index < 0 or index == self._latest_index:
-                return
-            await self._load_browser_frame(index)
-            if self._browser_requested_index == index:
-                return
-
-    def request_frame(self, index: int) -> None:
-        """Schedule a browser decode without blocking Manim rendering."""
+    def _on_browser_video_frame(self, now, metadata) -> None:
+        """Consume decoded frames at the cadence supplied by the browser."""
         if self.browser_video is None:
             return
-        self._browser_requested_index = int(np.clip(index, 0, self.num_frames - 1))
+        self._capture_browser_frame()
+        self.browser_video.requestVideoFrameCallback(
+            self._on_browser_video_frame
+        )
+
+    def start_browser_playback(self, time: float = 0.0) -> None:
+        """Start the HTMLVideoElement clock used by interactive playback."""
+        video = self.browser_video
+        if video is None:
+            return
+
+        video.currentTime = min(
+            max(0.0, float(time)),
+            max(0.0, self.duration - 1e-6),
+        )
+
+        if not self._browser_playing:
+            self._browser_playing = True
+            if hasattr(video, "requestVideoFrameCallback"):
+                video.requestVideoFrameCallback(
+                    self._on_browser_video_frame
+                )
+
+        video.play()
+
+    def stop_browser_playback(self) -> None:
+        """Pause browser video playback."""
+        if self.browser_video is not None:
+            self.browser_video.pause()
+        self._browser_playing = False
+
+    def request_frame(self, index: int) -> None:
+        """Seek the browser video for an explicit frame request."""
+        if self.browser_video is None:
+            return
+
+        self._browser_requested_index = int(max(0, index))
+
+        async def seek_latest():
+            await self._load_browser_frame(self._browser_requested_index)
+
         task = self._browser_latest_task
         if task is None or task.done():
-            self._browser_latest_task = asyncio.create_task(self._browser_frame_worker())
+            self._browser_latest_task = asyncio.create_task(
+                seek_latest()
+            )
+
     def _init_file(self, preload: bool | None) -> None:
         if av is None:
             raise RuntimeError(
