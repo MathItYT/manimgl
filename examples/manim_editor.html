@@ -406,6 +406,7 @@ class Demo(Scene):
           event.stopPropagation();
           pyodide.FS.unlink(path);
           removeAssetObjectUrl(path);
+          assetFontMetadata.delete(path);
           refreshAssets();
         });
         actions.append(insertButton, deleteButton);
