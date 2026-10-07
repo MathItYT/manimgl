@@ -26,9 +26,6 @@ if TYPE_CHECKING:
     from manimlib.scene.scene import Scene
 
 
-# The canvas names a key the way a browser does, manim names it after event_keys.py, and this
-# is where the two meet. A key which types something needs no entry, being named by what it
-# types in both.
 KEY_NAMES: dict[str, int] = {
     "Backspace": Keys.BACKSPACE,
     "Tab": Keys.TAB,
@@ -50,20 +47,12 @@ MOD_NAMES: dict[str, int] = {
     "Alt": Mods.ALT,
     "Meta": Mods.CMD,
 }
-# A wheel is reported in hundredths of a notch, where scroll_sensitivity expects whole ones
 WHEEL_NOTCH = 100.0
-# The shader which puts a finished frame on the surface, see Window.present
 PRESENT_SHADER = "present.wgsl"
-# Where the corner named by a position string sits along each edge of the monitor
 POSITION_STEPS = {"L": 0.0, "U": 0.0, "O": 0.5, "R": 1.0, "D": 1.0}
 
 
 def to_key(name: str) -> Optional[int]:
-    """
-    manim's name for a key, or None for one it has no name for, which is every key nothing
-    can be bound to. A letter comes back the same whether or not shift was held, so that a
-    binding tested while shift is down still matches.
-    """
     if name in KEY_NAMES:
         return KEY_NAMES[name]
     return ord(name.lower()) if len(name) == 1 else None
@@ -77,14 +66,6 @@ class Window(object):
     """
     Where a scene is previewed: somewhere to show a finished frame, and where mouse and key
     events come from.
-
-    manim drives its own loop, self.wait and self.embed being that loop, so a frame is asked
-    for whenever the scene says rather than from a callback the canvas decides when to call.
-    What the canvas is left to own is the surface, kept configured through resizes and whatever
-    the display's scale factor is, and the presenting of a texture onto it.
-
-    That canvas is rendercanvas's glfw one, over a glfw window this reaches for directly in the
-    two places a canvas offers no say, see glfw_window.
     """
 
     def __init__(
@@ -115,8 +96,6 @@ class Window(object):
             self.configure()
             self._install_browser_pointer_tracking()
         else:
-            # Asking about monitors needs glfw started, which creating the canvas would otherwise
-            # be what did
             glfw.init()
             monitor = self.get_monitor(monitor_index)
             self.canvas = RenderCanvas(
@@ -152,44 +131,34 @@ class Window(object):
             raise RuntimeError("create_for_pyodide() is only available in Pyodide.")
 
         adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
+        if adapter is None:
+            raise RuntimeError(
+                "WebGPU no está disponible en este navegador. "
+                "Se necesita un navegador compatible con WebGPU para ejecutar ManimGL."
+            )
+
         device = await adapter.request_device_async()
+        if device is None:
+            raise RuntimeError(
+                "WebGPU no pudo crear un dispositivo en este navegador. "
+                "Comprueba que WebGPU esté habilitado y que el dispositivo sea compatible."
+            )
+
         return cls(canvas_id=canvas_id, adapter=adapter, device=device, **kwargs)
 
     @property
     def glfw_window(self):
-        """
-        The window itself, for the two things a canvas offers no way to say: where on which
-        monitor it opens, and that it should take focus.
-        """
         if sys.platform == "emscripten":
             raise AttributeError("Pyodide windows do not have a GLFW window.")
         return self.canvas._window
 
     def init_for_scene(self, scene: Scene) -> None:
-        """
-        Resets the state and updates the scene associated to this window.
-
-        This is necessary when we want to reuse an *existing* window after a
-        `scene.reload()` was requested, which will create new scene instances.
-        """
         self.pressed_keys.clear()
         self.undrawn_event = True
         self.scene = scene
         self.canvas.set_title(str(scene))
 
     def configure(self) -> None:
-        """
-        Points the surface at the device whose frames it will be showing.
-
-        A surface can be configured for one device only, and a window outlives the scenes
-        shown in it, so the device belongs to the window rather than to any of them: a scene
-        previewed here draws through this one, see Camera.init_renderer. A scene which is
-        being written to file rather than shown brings its own.
-
-        The plain form of whatever format the surface prefers, never the sRGB one. Writing to
-        an sRGB target gamma encodes what the shader returned, and a frame here already holds
-        the color it means: encoding again lightens everything and washes it out.
-        """
         self.device = self.gpu.device
         preferred = self.context.get_preferred_format(self.gpu.adapter)
         self.format = preferred.removesuffix("-srgb")
@@ -197,7 +166,6 @@ class Window(object):
         self.init_present_resources()
 
     def _install_browser_pointer_tracking(self) -> None:
-        """Track viewport pointer coordinates independently of rendercanvas's offsetX/Y."""
         from js import eval
 
         eval(
@@ -229,14 +197,9 @@ class Window(object):
         )
 
     def get_size(self) -> tuple[int, int]:
-        """How many pixels there are to draw, which is not the size in screen coordinates."""
         return self.canvas.get_physical_size()
 
     def show(self, frame_view) -> None:
-        """
-        Puts a finished frame on screen. The canvas presents whatever its draw function drew,
-        so the frame is handed over and then asked for.
-        """
         self.frame_view = frame_view
         self.canvas.force_draw()
         self.undrawn_event = False
@@ -246,14 +209,12 @@ class Window(object):
         self.present(self.context.get_current_texture().create_view())
 
     def init_present_resources(self) -> None:
-        """What a finished frame is read through on its way to the surface, made once"""
         self.present_layout = self.device.create_bind_group_layout(entries=[
             {"binding": 0, "visibility": wgpu.ShaderStage.FRAGMENT,
              "texture": {"sample_type": wgpu.TextureSampleType.float}},
             {"binding": 1, "visibility": wgpu.ShaderStage.FRAGMENT,
              "sampler": {"type": wgpu.SamplerBindingType.filtering}},
         ])
-        # Smoothly, since a window is rarely exactly the size of the frame drawn for it
         self.present_sampler = self.device.create_sampler(
             mag_filter=wgpu.FilterMode.linear, min_filter=wgpu.FilterMode.linear,
         )
@@ -272,10 +233,6 @@ class Window(object):
         )
 
     def present(self, target_view) -> None:
-        """
-        Draws the finished frame onto what the surface gave us, stretched to fill it, see
-        shaders/present.wgsl. A pass of its own, the two textures differing in size and format.
-        """
         bind_group = self.device.create_bind_group(layout=self.present_layout, entries=[
             {"binding": 0, "resource": self.frame_view},
             {"binding": 1, "resource": self.present_sampler},
@@ -294,10 +251,6 @@ class Window(object):
         self.gpu.queue.submit([encoder.finish()])
 
     def poll_events(self) -> None:
-        """
-        Hands whatever the window has to say to the handlers below, and notices if it has been
-        closed. A canvas would do this from its own loop, which manim does not run.
-        """
         self.canvas._process_events()
 
     @property
@@ -319,14 +272,11 @@ class Window(object):
         if sys.platform != "emscripten":
             self.canvas.close()
 
-    # Where it opens
-
     def get_monitor(self, index: int):
         monitors = glfw.get_monitors()
         return monitors[min(index, len(monitors) - 1)] if monitors else None
 
     def get_monitor_area(self, monitor) -> tuple[int, int, int, int]:
-        """Where the monitor's usable area is and how big it is, in screen coordinates"""
         if monitor is None:
             return (0, 0, 1920, 1080)
         return glfw.get_monitor_workarea(monitor)
@@ -338,18 +288,12 @@ class Window(object):
         return (width, int(width / ASPECT_RATIO))
 
     def get_position(self, monitor, position_string: str) -> tuple[int, int]:
-        """
-        Which corner of the monitor to open in, named by a pair of characters as in UR for
-        upper right or OO for the middle, see the window section of default_config.yml.
-        """
         left, top, width, height = self.get_monitor_area(monitor)
         size = self.canvas.get_logical_size()
         return (
             int(left + POSITION_STEPS[position_string[1]] * (width - size[0])),
             int(top + POSITION_STEPS[position_string[0]] * (height - size[1])),
         )
-
-    # Events, translated and handed to the scene
 
     def note_event(self) -> None:
         self.undrawn_event = True
@@ -360,10 +304,6 @@ class Window(object):
         py: float,
         relative: bool = False
     ) -> np.ndarray:
-        """
-        Where in the scene a place in the window is, both measuring y upwards from the
-        bottom, see event_position for where an event's own way round is undone.
-        """
         if self.scene is None or not hasattr(self.scene, "frame"):
             return np.zeros(3)
 
@@ -380,13 +320,6 @@ class Window(object):
         return frame.from_fixed_frame_point(coords, relative)
 
     def event_position(self, event: dict) -> np.ndarray:
-        """
-        Convert browser pointer coordinates to Manim render-pixel coordinates.
-
-        rendercanvas reports offsetX/offsetY. Keep its X/Y scale unchanged;
-        browser-specific handling only accounts for the canvas's visual
-        position.
-        """
         if sys.platform == "emscripten":
             from js import document
 
@@ -405,10 +338,6 @@ class Window(object):
                         render_width, render_height = self.render_size
 
                         if width > 0 and height > 0:
-                            # Use the visual canvas position to establish the
-                            # pointer's local Y coordinate. Keep the same
-                            # render-pixel scale; do not derive a new Y scale
-                            # from the CSS height.
                             y = (
                                 float(event["y"])
                             ) * render_height / height
@@ -435,8 +364,6 @@ class Window(object):
         point = self.pixel_coords_to_space_coords(*position)
         d_point = self.pixel_coords_to_space_coords(*movement, relative=True)
         if event["buttons"]:
-            # A move with a button held is what manim means by a drag; nothing but the
-            # buttons distinguishes the two
             self.scene.on_mouse_drag(
                 point, d_point, event["buttons"], to_mods(event["modifiers"]),
             )
@@ -502,22 +429,15 @@ class Window(object):
 
 if sys.platform == "emscripten":
     async def run_scene_from_class(scene_class: type[Scene], canvas_id: str, size: tuple[int, int] = (1920, 1080)) -> Scene:
-        """Build a Manim scene in an HTML canvas without blocking the caller."""
         import asyncio
 
         window = await Window.create_for_pyodide(canvas_id, size=size)
         scene = scene_class(window=window)
 
-        # Execute the scene itself as the awaited operation. The browser
-        # interaction loop is intentionally not awaited here because it is
-        # long-lived and would prevent the scene runner from returning.
         await scene.build_async()
         await scene.update_frame_async(force_draw=True)
 
-        # Keep browser input and redraws alive after construction without
-        # blocking the caller that awaits the completed scene.
         scene._browser_interaction_task = asyncio.create_task(
             scene.browser_interaction_loop()
         )
         return scene
-
