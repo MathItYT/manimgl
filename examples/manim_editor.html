@@ -26,6 +26,94 @@
     #loading { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(4,6,10,.82); }
     #loading-box { padding:18px 24px; border:1px solid #30394a; border-radius:9px; background:#151b27; font:13px monospace; }
     .label { color:#667287; font:11px monospace; margin:0 12px 5px; }
+    #assets-panel {
+      position:absolute;
+      z-index:8;
+      top:8px;
+      left:8px;
+      bottom:8px;
+      width:270px;
+      display:none;
+      flex-direction:column;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:rgba(17,22,32,.98);
+      box-shadow:0 12px 32px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    #assets-panel.open { display:flex; }
+    #assets-header {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px;
+      border-bottom:1px solid var(--line);
+    }
+    #assets-title { flex:1; font-size:12px; font-weight:700; }
+    #assets-list {
+      flex:1;
+      min-height:0;
+      overflow:auto;
+      padding:7px;
+    }
+    .asset-empty {
+      padding:20px 10px;
+      text-align:center;
+      color:var(--muted);
+      font:12px/1.5 ui-monospace,monospace;
+    }
+    .asset-item {
+      display:grid;
+      grid-template-columns:48px 1fr auto;
+      gap:8px;
+      align-items:center;
+      padding:6px;
+      border-radius:6px;
+      cursor:pointer;
+    }
+    .asset-item:hover { background:#1b2230; }
+    .asset-preview {
+      width:48px;
+      height:36px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      border:1px solid var(--line);
+      border-radius:4px;
+      background:#0b0e14;
+      color:var(--muted);
+      font-size:18px;
+    }
+    .asset-preview img,
+    .asset-preview video {
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+    .asset-name {
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      font:11px ui-monospace,monospace;
+    }
+    .asset-type {
+      margin-top:3px;
+      color:var(--muted);
+      font:10px ui-monospace,monospace;
+    }
+    .asset-actions {
+      display:flex;
+      gap:4px;
+    }
+    .asset-actions button {
+      padding:4px 6px;
+      font-size:10px;
+    }
+    #asset-input { display:none; }
+    #editor-wrap { overflow:hidden; }
+
   </style>
 </head>
 <body>
@@ -33,10 +121,25 @@
     <button id="run" class="primary" disabled>▶ Ejecutar</button>
     <button id="stop" disabled>■ Detener</button>
     <button id="format">Transformar a web</button>
+    <button id="assets-toggle">Assets</button>
     <div id="status">Inicializando Pyodide…</div>
   </div>
   <div id="main">
-    <section id="editor-wrap"><div id="editor"></div></section>
+
+    <section id="editor-wrap">
+      <div id="editor"></div>
+      <div id="assets-panel">
+        <div id="assets-header">
+          <div id="assets-title">Assets</div>
+          <button id="asset-upload">＋ Importar</button>
+          <button id="asset-refresh" title="Actualizar">↻</button>
+          <button id="asset-close" title="Cerrar">×</button>
+        </div>
+        <div id="assets-list"></div>
+      </div>
+      <input id="asset-input" type="file" multiple
+        accept="image/*,video/*,audio/*,.svg,.json,.txt,.csv,.ttf,.otf,.woff,.woff2">
+    </section>
     <section id="preview-wrap">
       <div id="preview"><canvas id="manim-canvas"></canvas></div>
       <div class="label">Código web generado</div>
@@ -90,6 +193,10 @@ class Demo(Scene):
     const errors = document.getElementById("errors");
     const runButton = document.getElementById("run");
     const stopButton = document.getElementById("stop");
+    const assetsPanel = document.getElementById("assets-panel");
+    const assetsList = document.getElementById("assets-list");
+    const assetInput = document.getElementById("asset-input");
+    const assetObjectUrls = new Map();
 
     function setStatus(value) { status.textContent = String(value); }
     function setLoading(value, message) {
@@ -100,6 +207,177 @@ class Demo(Scene):
       errors.style.display = "block";
       errors.textContent = String(error?.stack || error);
     }
+
+    const ASSET_DIR = "/assets";
+
+    function ensureAssetDir() {
+      if (!pyodide.FS.analyzePath(ASSET_DIR).exists) {
+        pyodide.FS.mkdir(ASSET_DIR);
+      }
+    }
+
+    function assetMimeType(name) {
+      const ext = name.toLowerCase().split(".").pop();
+      const types = {
+        png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif",
+        webp:"image/webp", avif:"image/avif", svg:"image/svg+xml",
+        mp4:"video/mp4", webm:"video/webm", mov:"video/quicktime",
+        ogv:"video/ogg", mp3:"audio/mpeg", wav:"audio/wav", ogg:"audio/ogg",
+        m4a:"audio/mp4", json:"application/json", txt:"text/plain",
+        csv:"text/csv", ttf:"font/ttf", otf:"font/otf", woff:"font/woff",
+        woff2:"font/woff2",
+      };
+      return types[ext] || "application/octet-stream";
+    }
+
+    function assetUrl(path) {
+      const oldUrl = assetObjectUrls.get(path);
+      if (oldUrl) URL.revokeObjectURL(oldUrl);
+      const bytes = pyodide.FS.readFile(path);
+      const url = URL.createObjectURL(new Blob([bytes], {type: assetMimeType(path)}));
+      assetObjectUrls.set(path, url);
+      return url;
+    }
+
+    function insertAssetPath(path) {
+      const value = JSON.stringify(path);
+      const model = editor.getModel();
+      const selection = editor.getSelection();
+      editor.executeEdits("assets", [{
+        range: selection,
+        text: value,
+        forceMoveMarkers: true,
+      }]);
+      editor.focus();
+    }
+
+    function removeAssetObjectUrl(path) {
+      const url = assetObjectUrls.get(path);
+      if (url) {
+        URL.revokeObjectURL(url);
+        assetObjectUrls.delete(path);
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / 1024 ** 2).toFixed(1) + " MB";
+    }
+
+    function createAssetPreview(name, path) {
+      const preview = document.createElement("div");
+      preview.className = "asset-preview";
+      const mime = assetMimeType(name);
+
+      if (mime.startsWith("image/")) {
+        const image = document.createElement("img");
+        image.src = assetUrl(path);
+        image.alt = "";
+        preview.appendChild(image);
+      } else if (mime.startsWith("video/")) {
+        const video = document.createElement("video");
+        video.src = assetUrl(path);
+        video.muted = true;
+        video.preload = "metadata";
+        preview.appendChild(video);
+      } else if (mime.startsWith("audio/")) {
+        preview.textContent = "♫";
+      } else if (mime === "image/svg+xml") {
+        const image = document.createElement("img");
+        image.src = assetUrl(path);
+        image.alt = "";
+        preview.appendChild(image);
+      } else {
+        preview.textContent = "▣";
+      }
+      return preview;
+    }
+
+    function refreshAssets() {
+      if (!pyodide) return;
+      ensureAssetDir();
+
+      for (const path of assetObjectUrls.keys()) {
+        if (!pyodide.FS.analyzePath(path).exists) removeAssetObjectUrl(path);
+      }
+
+      const names = pyodide.FS.readdir(ASSET_DIR)
+        .filter(name => name !== "." && name !== "..")
+        .sort((a, b) => a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+
+      assetsList.replaceChildren();
+
+      if (!names.length) {
+        const empty = document.createElement("div");
+        empty.className = "asset-empty";
+        empty.textContent = "No hay assets. Importa imágenes, videos, audio u otros archivos.";
+        assetsList.appendChild(empty);
+        return;
+      }
+
+      for (const name of names) {
+        const path = ASSET_DIR + "/" + name;
+        const stat = pyodide.FS.stat(path);
+        if (stat.mode && pyodide.FS.isDir(stat.mode)) continue;
+
+        const item = document.createElement("div");
+        item.className = "asset-item";
+        item.title = path;
+
+        item.appendChild(createAssetPreview(name, path));
+
+        const info = document.createElement("div");
+        info.innerHTML = "";
+        const nameNode = document.createElement("div");
+        nameNode.className = "asset-name";
+        nameNode.textContent = name;
+        const typeNode = document.createElement("div");
+        typeNode.className = "asset-type";
+        typeNode.textContent = formatBytes(stat.size);
+        info.append(nameNode, typeNode);
+
+        const actions = document.createElement("div");
+        actions.className = "asset-actions";
+        const insertButton = document.createElement("button");
+        insertButton.textContent = "Insertar";
+        insertButton.addEventListener("click", event => {
+          event.stopPropagation();
+          insertAssetPath(path);
+        });
+        const deleteButton = document.createElement("button");
+        deleteButton.textContent = "×";
+        deleteButton.title = "Eliminar asset";
+        deleteButton.addEventListener("click", event => {
+          event.stopPropagation();
+          pyodide.FS.unlink(path);
+          removeAssetObjectUrl(path);
+          refreshAssets();
+        });
+        actions.append(insertButton, deleteButton);
+
+        item.append(info, actions);
+        item.addEventListener("dblclick", () => insertAssetPath(path));
+        assetsList.appendChild(item);
+      }
+    }
+
+    async function importAssets(files) {
+      if (!pyodide || !files?.length) return;
+      ensureAssetDir();
+
+      for (const file of files) {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const path = ASSET_DIR + "/" + file.name.replace(/[/\\]/g, "_");
+        pyodide.FS.writeFile(path, bytes);
+      }
+
+      refreshAssets();
+      setStatus(files.length === 1
+        ? "Asset importado."
+        : files.length + " assets importados.");
+    }
+
     function clearError() {
       errors.style.display = "none";
       errors.textContent = "";
@@ -214,6 +492,27 @@ _editor_scene_token = ${token}`;
         );
       } catch (_) {}
     }
+
+
+    document.getElementById("assets-toggle").addEventListener("click", () => {
+      assetsPanel.classList.toggle("open");
+      if (assetsPanel.classList.contains("open")) refreshAssets();
+    });
+    document.getElementById("asset-close").addEventListener("click", () => {
+      assetsPanel.classList.remove("open");
+    });
+    document.getElementById("asset-refresh").addEventListener("click", refreshAssets);
+    document.getElementById("asset-upload").addEventListener("click", () => assetInput.click());
+    assetInput.addEventListener("change", async () => {
+      try {
+        await importAssets(assetInput.files);
+      } catch (error) {
+        showError(error);
+        setStatus("No se pudieron importar los assets.");
+      } finally {
+        assetInput.value = "";
+      }
+    });
 
     runButton.addEventListener("click", runScene);
     stopButton.addEventListener("click", stopScene);
