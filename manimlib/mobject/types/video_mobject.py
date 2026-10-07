@@ -176,8 +176,8 @@ class VideoSource(object):
         self._browser_requested_index = -1
         self._browser_playing = False
         self._browser_media_time = 0.0
-        self._browser_frame_ready = False
-        self._browser_playback_task = None
+        self._browser_capture_task = None
+        self._browser_last_captured_time = -1.0
 
         # ------------------------------------------------------------------
         # Live capture state
@@ -301,26 +301,32 @@ class VideoSource(object):
         )
         self._latest_frame = pixels
         self._browser_media_time = float(self.browser_video.currentTime)
+        self._browser_last_captured_time = self._browser_media_time
 
-    def _on_browser_video_frame(self, now, metadata) -> None:
-        """Publish the browser's current media time without seeking."""
-        if self.browser_video is None:
+    async def _capture_browser_playback_frame(self) -> None:
+        """Capture the frame currently presented by the playing HTML video."""
+        try:
+            self._capture_browser_frame()
+        finally:
+            self._browser_capture_task = None
+
+    def update_browser_playback(self) -> None:
+        """Schedule a capture when the HTML video clock advances."""
+        if not self._browser_playing or self.browser_video is None:
             return
 
-        self._browser_media_time = float(metadata.mediaTime)
-        self._browser_frame_ready = True
+        current_time = float(self.browser_video.currentTime)
+        if current_time <= self._browser_last_captured_time + 1e-6:
+            return
 
-        self.browser_video.requestVideoFrameCallback(
-            self._on_browser_video_frame
+        task = self._browser_capture_task
+        if task is not None and not task.done():
+            return
+
+        self._browser_media_time = current_time
+        self._browser_capture_task = asyncio.create_task(
+            self._capture_browser_playback_frame()
         )
-
-    async def _browser_playback_worker(self) -> None:
-        """Copy each decoded browser frame as it becomes available."""
-        while self._browser_playing and self.browser_video is not None:
-            if self._browser_frame_ready:
-                self._browser_frame_ready = False
-                self._capture_browser_frame()
-            await asyncio.sleep(0)
 
     def start_browser_playback(self, time: float = 0.0) -> None:
         """Start the HTMLVideoElement clock used by interactive playback."""
@@ -335,11 +341,7 @@ class VideoSource(object):
 
         if not self._browser_playing:
             self._browser_playing = True
-            self._browser_frame_ready = False
-            if hasattr(video, "requestVideoFrameCallback"):
-                video.requestVideoFrameCallback(
-                    self._on_browser_video_frame
-                )
+            self._browser_last_captured_time = float(video.currentTime)
 
         video.play()
 
@@ -348,6 +350,10 @@ class VideoSource(object):
         if self.browser_video is not None:
             self.browser_video.pause()
         self._browser_playing = False
+        task = self._browser_capture_task
+        if task is not None and not task.done():
+            task.cancel()
+        self._browser_capture_task = None
 
     def request_frame(self, index: int) -> None:
         """Seek the browser video for an explicit frame request."""
@@ -1213,6 +1219,7 @@ class VideoMobject(ImageMobject):
             return self
 
         if self.source.browser_video is not None:
+            self.source.update_browser_playback()
             self.frames.load(self.source.latest_index)
             return self
 
