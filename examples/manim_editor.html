@@ -112,6 +112,24 @@
       font-size:10px;
     }
     #asset-input { display:none; }
+    #assets-panel.drop-active {
+      border:2px dashed var(--accent);
+      background:rgba(71,125,255,.10);
+    }
+    #assets-drop-overlay {
+      position:absolute;
+      inset:0;
+      z-index:2;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      pointer-events:none;
+      background:rgba(71,125,255,.10);
+      border:2px dashed var(--accent);
+      color:#fff;
+      font:600 13px ui-monospace,monospace;
+    }
+    #assets-panel.drop-active #assets-drop-overlay { display:flex; }
     #editor-wrap { overflow:hidden; }
 
   </style>
@@ -197,6 +215,7 @@ class Demo(Scene):
     const assetsList = document.getElementById("assets-list");
     const assetInput = document.getElementById("asset-input");
     const assetObjectUrls = new Map();
+    const assetsDropZone = assetsPanel;
 
     function setStatus(value) { status.textContent = String(value); }
     function setLoading(value, message) {
@@ -362,20 +381,67 @@ class Demo(Scene):
       }
     }
 
+    function uniqueAssetPath(fileName) {
+      const safeName = fileName.replace(/[/\\]/g, "_").trim() || "asset";
+      const dot = safeName.lastIndexOf(".");
+      const stem = dot > 0 ? safeName.slice(0, dot) : safeName;
+      const ext = dot > 0 ? safeName.slice(dot) : "";
+      let candidate = ASSET_DIR + "/" + safeName;
+      let index = 1;
+      while (pyodide.FS.analyzePath(candidate).exists) {
+        candidate = ASSET_DIR + "/" + stem + "_" + index++ + ext;
+      }
+      return candidate;
+    }
+
     async function importAssets(files) {
       if (!pyodide || !files?.length) return;
       ensureAssetDir();
 
-      for (const file of files) {
+      let imported = 0;
+      for (const file of Array.from(files)) {
+        if (!file || typeof file.arrayBuffer !== "function") continue;
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const path = ASSET_DIR + "/" + file.name.replace(/[/\\]/g, "_");
-        pyodide.FS.writeFile(path, bytes);
+        pyodide.FS.writeFile(uniqueAssetPath(file.name), bytes);
+        imported++;
       }
 
       refreshAssets();
-      setStatus(files.length === 1
-        ? "Asset importado."
-        : files.length + " assets importados.");
+      if (imported) {
+        setStatus(imported === 1
+          ? "Asset importado."
+          : imported + " assets importados.");
+      }
+    }
+
+    async function importClipboardData(clipboardData) {
+      if (!clipboardData) return;
+
+      const files = Array.from(clipboardData.files || []);
+      if (files.length) {
+        await importAssets(files);
+        return true;
+      }
+
+      const items = Array.from(clipboardData.items || []);
+      const imageItems = items.filter(item =>
+        item.kind === "file" && item.type.startsWith("image/")
+      );
+
+      if (!imageItems.length) return false;
+
+      const filesFromClipboard = [];
+      for (const item of imageItems) {
+        const blob = item.getAsFile();
+        if (!blob) continue;
+        const extension = blob.type.split("/")[1]?.replace("jpeg", "jpg") || "png";
+        filesFromClipboard.push(
+          new File([blob], "pasted-image." + extension, {type: blob.type})
+        );
+      }
+
+      await importAssets(filesFromClipboard);
+      return filesFromClipboard.length > 0;
     }
 
     function clearError() {
@@ -511,6 +577,59 @@ _editor_scene_token = ${token}`;
         setStatus("No se pudieron importar los assets.");
       } finally {
         assetInput.value = "";
+      }
+    });
+
+    let dragDepth = 0;
+
+    assetsDropZone.addEventListener("dragenter", event => {
+      event.preventDefault();
+      dragDepth++;
+      assetsPanel.classList.add("drop-active");
+    });
+
+    assetsDropZone.addEventListener("dragover", event => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    });
+
+    assetsDropZone.addEventListener("dragleave", event => {
+      event.preventDefault();
+      dragDepth--;
+      if (dragDepth <= 0) {
+        dragDepth = 0;
+        assetsPanel.classList.remove("drop-active");
+      }
+    });
+
+    assetsDropZone.addEventListener("drop", async event => {
+      event.preventDefault();
+      dragDepth = 0;
+      assetsPanel.classList.remove("drop-active");
+      try {
+        await importAssets(event.dataTransfer.files);
+      } catch (error) {
+        showError(error);
+        setStatus("No se pudieron importar los assets.");
+      }
+    });
+
+    window.addEventListener("dragover", event => {
+      if (assetsPanel.classList.contains("open")) event.preventDefault();
+    });
+
+    window.addEventListener("drop", event => {
+      if (assetsPanel.classList.contains("open")) event.preventDefault();
+    });
+
+    window.addEventListener("paste", async event => {
+      if (!assetsPanel.classList.contains("open")) return;
+      try {
+        const imported = await importClipboardData(event.clipboardData);
+        if (imported) event.preventDefault();
+      } catch (error) {
+        showError(error);
+        setStatus("No se pudo importar el contenido del portapapeles.");
       }
     });
 
