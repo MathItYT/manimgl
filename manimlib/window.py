@@ -151,15 +151,17 @@ class Window(object):
         if sys.platform != "emscripten":
             raise RuntimeError("create_for_pyodide() is only available in Pyodide.")
 
+        from pyodide.ffi import jsnull
+
         adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
-        if adapter is None:
+        if adapter is None or adapter is jsnull:
             raise RuntimeError(
                 "WebGPU no está disponible en este navegador. "
                 "Se necesita un navegador compatible con WebGPU para ejecutar ManimGL."
             )
 
         device = await adapter.request_device_async()
-        if device is None:
+        if device is None or device is jsnull:
             raise RuntimeError(
                 "WebGPU no pudo crear un dispositivo en este navegador. "
                 "Comprueba que WebGPU esté habilitado y que el dispositivo sea compatible."
