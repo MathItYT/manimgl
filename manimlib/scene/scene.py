@@ -707,6 +707,7 @@ class Scene(object):
             # The clock moves before anything else in the frame, so that time
             # based updaters are evaluated at the moment the frame stands for.
             self.increment_time(dt)
+            browser_audio.sync(self.time, self._interactive_sound_events)
             for animation in animations:
                 animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
                 alpha = t / animation.run_time
@@ -900,6 +901,7 @@ class Scene(object):
                 animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
                 animation.interpolate(float(t) / animation.run_time)
             await self.update_mobjects_async(dt)
+            browser_audio.sync(self.time, self._interactive_sound_events)
             self.draw_frame(dt, force_draw=True)
             self.emit_frame()
         self.finish_animations(animations)
@@ -924,6 +926,7 @@ class Scene(object):
             dt = float(t - last_t)
             last_t = float(t)
             await self.update_frame_async(dt, force_draw=True)
+            browser_audio.sync(self.time, self._interactive_sound_events)
             self.emit_frame()
             await self._browser_frame()
         self.post_play()
