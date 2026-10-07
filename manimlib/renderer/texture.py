@@ -161,17 +161,35 @@ class BrowserVideoTexture(Texture):
         if abs(current_time - self.media_time) <= 1e-6:
             return
 
-        self.gpu.queue.copy_external_image_to_texture(
-            {"source": self.video},
-            {
-                "texture": self.texture,
-                "mip_level": 0,
-                "origin": (0, 0, 0),
-                "color_space": "srgb",
-                "premultiplied_alpha": False,
-            },
-            (self.width, self.height, 1),
-        )
+        source = {"source": self.video}
+        destination = {
+            "texture": self.texture,
+            "mip_level": 0,
+            "origin": (0, 0, 0),
+            "color_space": "srgb",
+            "premultiplied_alpha": False,
+        }
+        copy_size = (self.width, self.height, 1)
+
+        try:
+            self.gpu.queue.copy_external_image_to_texture(
+                source,
+                destination,
+                copy_size,
+            )
+        except NotImplementedError:
+            # Older browser wheels expose the API on the abstract queue but
+            # do not implement the forwarding method yet. Call the JS
+            # WebGPU queue directly so the Manim browser bundle remains
+            # compatible with those wheels.
+            from wgpu.backends.js_webgpu._helpers import to_js_value
+
+            self.gpu.queue._internal.copyExternalImageToTexture(
+                to_js_value(source),
+                to_js_value(destination),
+                to_js_value(copy_size),
+            )
+
         self.media_time = current_time
 
 
