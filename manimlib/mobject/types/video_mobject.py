@@ -1087,6 +1087,9 @@ class VideoMobject(ImageMobject):
     ):
         self.loop = loop
 
+        if _browser_source is not None:
+            self.shader_file = "video_browser.wgsl"
+
         # Used by normal video files.
         self._preload = preload
 
