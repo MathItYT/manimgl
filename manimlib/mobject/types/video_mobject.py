@@ -80,6 +80,8 @@ class VideoSource(object):
         video.src = url
         if video.readyState < 1:
             await Promise.new(lambda resolve, reject: video.addEventListener("loadedmetadata", resolve, {"once": True}))
+        if video.readyState < 2:
+            await Promise.new(lambda resolve, reject: video.addEventListener("loadeddata", resolve, {"once": True}))
         source = cls(str(path), preload=False, browser_video=video, browser_url=url)
         await source._load_browser_frame(0)
         return source
@@ -171,6 +173,7 @@ class VideoSource(object):
         self.browser_canvas = None
         self.browser_context = None
         self._browser_latest_task = None
+        self._browser_requested_index = -1
 
         # ------------------------------------------------------------------
         # Live capture state
@@ -263,17 +266,24 @@ class VideoSource(object):
         self._latest_frame = pixels
         self._latest_index = index
 
+    async def _browser_frame_worker(self) -> None:
+        """Serialize browser seeks while keeping only the newest request."""
+        while True:
+            index = self._browser_requested_index
+            if index < 0 or index == self._latest_index:
+                return
+            await self._load_browser_frame(index)
+            if self._browser_requested_index == index:
+                return
+
     def request_frame(self, index: int) -> None:
         """Schedule a browser decode without blocking Manim rendering."""
         if self.browser_video is None:
             return
-        index = int(np.clip(index, 0, self.num_frames - 1))
-        if index == self._latest_index:
-            return
+        self._browser_requested_index = int(np.clip(index, 0, self.num_frames - 1))
         task = self._browser_latest_task
-        if task is not None and not task.done():
-            task.cancel()
-        self._browser_latest_task = asyncio.create_task(self._load_browser_frame(index))
+        if task is None or task.done():
+            self._browser_latest_task = asyncio.create_task(self._browser_frame_worker())
     def _init_file(self, preload: bool | None) -> None:
         if av is None:
             raise RuntimeError(
