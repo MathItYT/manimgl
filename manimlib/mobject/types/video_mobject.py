@@ -759,9 +759,13 @@ class VideoSource(object):
         For live sources the requested index is intentionally ignored:
         the newest frame is always returned.
         """
-        if self.live or self.browser_video is not None:
+        if self.live:
             if self._latest_frame is None:
                 return self.blank_frame()
+            return self._latest_frame
+
+        if self.browser_video is not None:
+            self._capture_browser_frame()
             return self._latest_frame
 
         if self.preloaded:
