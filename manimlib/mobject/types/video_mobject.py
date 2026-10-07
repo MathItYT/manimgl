@@ -15,6 +15,7 @@ import numpy as np
 from PIL import Image
 
 from manimlib.mobject.types.image_mobject import ImageMobject
+from manimlib.renderer.texture import BrowserVideoTexture
 from manimlib.renderer.texture import LayeredPixels
 from manimlib.renderer.uniform_block import COMMON_UNIFORMS
 from manimlib.renderer.uniform_block import uniform_block_dtype
@@ -204,6 +205,7 @@ class VideoSource(object):
         # than accumulating latency.
         self._latest_frame: np.ndarray | None = None
         self._latest_index: int = -1
+        self._browser_gpu_texture = False
 
         self._capture_error: Exception | None = None
         self._closed = False
@@ -279,7 +281,9 @@ class VideoSource(object):
                 )
             )
 
-        self._capture_browser_frame(index)
+        self._latest_index = index
+        if not self._browser_gpu_texture:
+            self._capture_browser_frame(index)
 
     def _capture_browser_frame(self, index: int | None = None) -> None:
         """Copy the frame currently presented by the HTMLVideoElement."""
@@ -319,14 +323,21 @@ class VideoSource(object):
         if current_time <= self._browser_last_captured_time + 1e-6:
             return
 
-        task = self._browser_capture_task
-        if task is not None and not task.done():
-            return
-
         self._browser_media_time = current_time
-        self._browser_capture_task = asyncio.create_task(
-            self._capture_browser_playback_frame()
+        self._latest_index = min(
+            round(current_time * float(self.frame_rate)),
+            self.num_frames - 1,
         )
+
+        if not self._browser_gpu_texture:
+            task = self._browser_capture_task
+            if task is not None and not task.done():
+                return
+            self._browser_capture_task = asyncio.create_task(
+                self._capture_browser_playback_frame()
+            )
+        else:
+            self._browser_last_captured_time = current_time
 
     def start_browser_playback(self, time: float = 0.0) -> None:
         """Start the HTMLVideoElement clock used by interactive playback."""
@@ -342,6 +353,10 @@ class VideoSource(object):
         if not self._browser_playing:
             self._browser_playing = True
             self._browser_last_captured_time = float(video.currentTime)
+            self._latest_index = min(
+                round(float(video.currentTime) * float(self.frame_rate)),
+                self.num_frames - 1,
+            )
 
         video.play()
 
@@ -915,6 +930,20 @@ class VideoFrames(LayeredPixels):
     def live(self) -> bool:
         return self.video.live
 
+    def kind(self) -> str:
+        if self.video.browser_video is not None:
+            return "2d"
+        return super().kind()
+
+    def realize(self, gpu) -> object:
+        if (
+            self.video.browser_video is not None
+            and hasattr(gpu.queue, "copy_external_image_to_texture")
+        ):
+            self.video._browser_gpu_texture = True
+            return BrowserVideoTexture(self, gpu)
+        return super().realize(gpu)
+
     def copy(self) -> VideoFrames:
         """
         Preloaded stacks are shared.
@@ -942,11 +971,16 @@ class VideoFrames(LayeredPixels):
         if self.preloaded:
             return
 
-        if self.live or self.video.browser_video is not None:
+        if self.video.browser_video is not None:
             latest_index = self.video.latest_index
             if latest_index < 0:
                 return
-            if latest_index == self.loaded:
+            self.loaded = latest_index
+            return
+
+        if self.live:
+            latest_index = self.video.latest_index
+            if latest_index < 0 or latest_index == self.loaded:
                 return
             pixels = self.video.get_frame(latest_index)
             self.loaded = latest_index
