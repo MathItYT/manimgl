@@ -138,7 +138,7 @@ class BrowserVideoTexture(Texture):
         self.width = int(source.video.width)
         self.height = int(source.video.height)
         self.media_time = -1.0
-        texture = gpu.device.create_texture(
+        self.texture = gpu.device.create_texture(
             size=(self.width, self.height, 1),
             dimension=wgpu.TextureDimension.d2,
             format=wgpu.TextureFormat.rgba8unorm,
@@ -148,7 +148,7 @@ class BrowserVideoTexture(Texture):
                 | wgpu.TextureUsage.RENDER_ATTACHMENT
             ),
         )
-        super().__init__(source, texture.create_view())
+        super().__init__(source, self.texture.create_view())
 
     def refresh(self) -> None:
         current_time = float(self.video.currentTime)
@@ -158,7 +158,7 @@ class BrowserVideoTexture(Texture):
         self.gpu.queue.copy_external_image_to_texture(
             {"source": self.video},
             {
-                "texture": self.view.texture,
+                "texture": self.texture,
                 "mip_level": 0,
                 "origin": (0, 0, 0),
                 "color_space": "srgb",
