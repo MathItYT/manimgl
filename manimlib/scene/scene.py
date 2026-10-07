@@ -1039,16 +1039,28 @@ class Scene(object):
         browser_audio.stop_all()
 
     async def browser_interaction_loop(self) -> None:
-        """Keep browser input processing and redraws alive after playback."""
+        """Keep browser input and mobject updaters alive after playback."""
         if sys.platform != "emscripten":
             raise RuntimeError("browser_interaction_loop() is only available in Pyodide")
         from manimlib.utils.browser_scheduler import next_animation_frame
 
+        previous_time = await next_animation_frame()
+
         while not self.is_window_closing():
+            current_time = await next_animation_frame()
+            dt = max(0.0, current_time - previous_time)
+            previous_time = current_time
+
             self.window.poll_events()
-            if self.window.has_undrawn_event():
+
+            # Unlike native interact(), the browser cannot use a blocking
+            # loop. requestAnimationFrame is therefore the interactive clock:
+            # run mobject updaters on every frame when the scene needs them,
+            # while still avoiding unnecessary redraws for an idle scene.
+            if self.should_update_mobjects():
+                await self.update_frame_async(dt=dt, force_draw=True)
+            elif self.window.has_undrawn_event():
                 await self.update_frame_async(force_draw=True)
-            await next_animation_frame()
 
     # Helpers for interactive development
 
