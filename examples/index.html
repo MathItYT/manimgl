@@ -220,18 +220,6 @@
     #manim-canvas {
       display: block;
 
-      width:
-        min(
-          100%,
-          calc((100vh - 48px) * 16 / 9)
-        );
-
-      height: auto;
-
-      max-height: 100%;
-
-      aspect-ratio: 16 / 9;
-
       object-fit: contain;
 
       outline: none;
@@ -782,6 +770,9 @@ const status =
 
 const canvas =
   document.getElementById("manim-canvas");
+
+  canvas.width = 1005;
+  canvas.height = Math.floor(1005 * 9 / 16);
 
 const fileInput =
   document.getElementById("file-input");
@@ -1885,6 +1876,7 @@ NeuralNetworkDemoScene.browser_interaction_loop = (
 await run_scene_from_class(
     NeuralNetworkDemoScene,
     "manim-canvas",
+    size=(1005, 1005 * 9 // 16)
 )
 `;
 

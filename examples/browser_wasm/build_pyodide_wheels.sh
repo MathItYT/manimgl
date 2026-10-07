@@ -71,7 +71,7 @@ SETUP_CFG_BACKUP="$CACHE/setup.cfg.pyodide-wheel-backup"
 cp "$ROOT/setup.cfg" "$SETUP_CFG_BACKUP"
 trap 'cp "$SETUP_CFG_BACKUP" "$ROOT/setup.cfg"; rm -f "$SETUP_CFG_BACKUP"' EXIT
 sed -i -E "s/^version = .*/version = $MANIM_VERSION/" "$ROOT/setup.cfg"
-python -m pip wheel "$ROOT" --no-deps --no-cache-dir --wheel-dir "$OUT"
+python -m pip wheel "$ROOT" --no-deps --no-cache-dir --no-build-isolation --wheel-dir "$OUT"
 
 MANIM_WHEEL="$(find "$OUT" -maxdepth 1 -type f -name 'manimgl-*.whl' -print -quit)"
 [[ -n "$MANIM_WHEEL" ]] || die "ManimGL wheel was not produced"
@@ -97,7 +97,7 @@ sed -i -E "s/^__version__ = .*/__version__ = \"$WGPU_VERSION\"/" "$WGPU_VERSION_
 (
     cd "$WGPU_DIR"
     rm -rf -- build wgpu.egg-info
-    WGPU_PY_BUILD_NOARCH=1 python -m pip wheel . --no-deps --no-cache-dir --wheel-dir "$OUT"
+    WGPU_PY_BUILD_NOARCH=1 python -m pip wheel . --no-deps --no-cache-dir --no-build-isolation --wheel-dir "$OUT"
 )
 
 WGPU_WHEEL="$(find "$OUT" -maxdepth 1 -type f -name 'wgpu-*.whl' -print -quit)"

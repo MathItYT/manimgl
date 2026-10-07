@@ -108,8 +108,7 @@ class Window(object):
         self.render_size = DEFAULT_RESOLUTION if sys.platform == "emscripten" else None
 
         if sys.platform == "emscripten":
-            self.canvas = PyodideRenderCanvas(canvas_id, update_mode="manual")
-            self.set_render_size(*self.render_size)
+            self.canvas = PyodideRenderCanvas(canvas_id, size=size, update_mode="manual")
             self.canvas.request_draw(self.draw)
             self.context = self.canvas.get_context("wgpu")
             self.gpu = Gpu(adapter=adapter, device=device)
@@ -194,8 +193,6 @@ class Window(object):
         self.device = self.gpu.device
         preferred = self.context.get_preferred_format(self.gpu.adapter)
         self.format = preferred.removesuffix("-srgb")
-        if sys.platform == "emscripten":
-            self.set_render_size(*self.render_size)
         self.context.configure(device=self.device, format=self.format)
         self.init_present_resources()
 
@@ -231,23 +228,8 @@ class Window(object):
             """ % self.canvas_id
         )
 
-    def set_render_size(self, width: int, height: int) -> None:
-        """Set the browser canvas intrinsic size used by the WebGPU surface."""
-        if sys.platform != "emscripten":
-            return
-        from js import document
-
-        canvas = document.getElementById(self.canvas_id)
-        if canvas is None:
-            raise RuntimeError("Could not find the browser canvas element.")
-        self.render_size = (int(width), int(height))
-        canvas.width = self.render_size[0]
-        canvas.height = self.render_size[1]
-
     def get_size(self) -> tuple[int, int]:
         """How many pixels there are to draw, which is not the size in screen coordinates."""
-        if sys.platform == "emscripten":
-            return self.render_size
         return self.canvas.get_physical_size()
 
     def show(self, frame_view) -> None:
@@ -261,8 +243,6 @@ class Window(object):
         self.poll_events()
 
     def draw(self) -> None:
-        if sys.platform == "emscripten":
-            self.set_render_size(*self.render_size)
         self.present(self.context.get_current_texture().create_view())
 
     def init_present_resources(self) -> None:
@@ -421,8 +401,7 @@ class Window(object):
 
                     if client_y is not None:
                         rect = canvas.getBoundingClientRect()
-                        width = float(rect.width)
-                        height = width / ASPECT_RATIO
+                        width, height = float(rect.width), float(rect.height)
                         render_width, render_height = self.render_size
 
                         if width > 0 and height > 0:
@@ -431,7 +410,7 @@ class Window(object):
                             # render-pixel scale; do not derive a new Y scale
                             # from the CSS height.
                             y = (
-                                float(rect.bottom) - client_y
+                                float(event["y"])
                             ) * render_height / height
 
                             x = (
@@ -439,7 +418,7 @@ class Window(object):
                                 * render_width
                                 / width
                             )
-                            return np.array([x, y - render_height / 2 + float(rect.top) * ASPECT_RATIO])
+                            return np.array([x, render_height - y])
         _, height = self.canvas.get_logical_size()
         return np.array([event["x"], height - event["y"]])
 
@@ -522,11 +501,11 @@ class Window(object):
 
 
 if sys.platform == "emscripten":
-    async def run_scene_from_class(scene_class: type[Scene], canvas_id: str) -> Scene:
+    async def run_scene_from_class(scene_class: type[Scene], canvas_id: str, size: tuple[int, int] = (1920, 1080)) -> Scene:
         """Build a Manim scene in an HTML canvas without blocking the caller."""
         import asyncio
 
-        window = await Window.create_for_pyodide(canvas_id)
+        window = await Window.create_for_pyodide(canvas_id, size=size)
         scene = scene_class(window=window)
 
         # Execute the scene itself as the awaited operation. The browser
@@ -537,7 +516,6 @@ if sys.platform == "emscripten":
 
         # Keep browser input and redraws alive after construction without
         # blocking the caller that awaits the completed scene.
-        import asyncio
         scene._browser_interaction_task = asyncio.create_task(
             scene.browser_interaction_loop()
         )
