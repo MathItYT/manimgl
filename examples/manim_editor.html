@@ -571,6 +571,8 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         // without requiring a new wheel for every editor iteration.
         setLoading(false);
         runButton.disabled = false;
+        ensureAssetDir();
+        refreshAssets();
         setStatus("Listo. Ejecuta la escena con ▶ Ejecutar.");
         await transformOnly();
       } catch (error) {
