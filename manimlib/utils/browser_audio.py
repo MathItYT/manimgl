@@ -17,7 +17,32 @@ class BrowserAudio:
     def _url(self, sound_file: str) -> str:
         if sound_file in self._sources:
             return self._sources[sound_file]
-        url = str(window.URL.new(sound_file, window.location.href))
+
+        # Browser assets live in Pyodide's MEMFS, not at an HTTP URL.
+        # Materialize the sound as a Blob just like VideoSource does for
+        # browser-backed video.
+        from manimlib.utils.sounds import get_full_sound_file_path
+        from js import Blob, URL, Uint8Array
+
+        path = get_full_sound_file_path(sound_file)
+        mime_types = {
+            ".wav": "audio/wav",
+            ".mp3": "audio/mpeg",
+            ".ogg": "audio/ogg",
+            ".m4a": "audio/mp4",
+            ".aac": "audio/aac",
+            ".flac": "audio/flac",
+        }
+        mime = mime_types.get(
+            __import__("os").path.splitext(str(path))[1].lower(),
+            "application/octet-stream",
+        )
+        with open(path, "rb") as file:
+            data = file.read()
+        buffer = Uint8Array.new(len(data))
+        buffer.assign(data)
+        blob = Blob.new([buffer], {"type": mime})
+        url = str(URL.createObjectURL(blob))
         self._sources[sound_file] = url
         return url
 
@@ -52,6 +77,9 @@ class BrowserAudio:
             if offset < 0.0:
                 continue
             audio = self._get(sound_file)
+            duration = float(audio.duration)
+            if duration == duration and offset >= duration:
+                continue
             # Do not restart an already-playing element on every animation frame.
             if not bool(audio.paused):
                 continue
