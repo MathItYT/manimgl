@@ -83,6 +83,8 @@ class VideoSource(object):
         if video.readyState < 2:
             await Promise.new(lambda resolve, reject: video.addEventListener("loadeddata", resolve, {"once": True}))
         source = cls(str(path), preload=False, browser_video=video, browser_url=url)
+        await source._detect_browser_frame_rate()
+        source.num_frames = max(1, round(source.duration * float(source.frame_rate)))
         await source._load_browser_frame(0)
         return source
     @classmethod
@@ -235,6 +237,8 @@ class VideoSource(object):
         self.height = int(self.browser_video.videoHeight)
         if self.width <= 0 or self.height <= 0:
             raise RuntimeError(f"Browser video {self.path!r} has no intrinsic dimensions.")
+        # HTMLVideoElement does not expose the source frame rate directly.
+        # It is detected asynchronously from requestVideoFrameCallback().
         self.frame_rate = Fraction(30, 1)
         duration = float(self.browser_video.duration)
         if not np.isfinite(duration) or duration <= 0:
@@ -250,6 +254,57 @@ class VideoSource(object):
         self.browser_context = self.browser_canvas.getContext("2d")
         self._latest_frame = None
         self._latest_index = -1
+
+    async def _detect_browser_frame_rate(self) -> None:
+        """Estimate the source frame rate from decoded video frame timestamps."""
+        video = self.browser_video
+
+        if not hasattr(video, "requestVideoFrameCallback"):
+            return
+
+        from js import Promise
+
+        original_time = float(video.currentTime)
+        samples = []
+
+        try:
+            video.currentTime = 0
+            await Promise.new(
+                lambda resolve, reject: video.addEventListener(
+                    "seeked", resolve, {"once": True}
+                )
+            )
+
+            def collect_frames(resolve, reject):
+                times = []
+
+                def callback(now, metadata):
+                    media_time = float(metadata.mediaTime)
+                    if not times or media_time > times[-1] + 1e-6:
+                        times.append(media_time)
+
+                    if len(times) >= 9:
+                        resolve(times)
+                    else:
+                        video.requestVideoFrameCallback(callback)
+
+                video.requestVideoFrameCallback(callback)
+
+            samples = list(await Promise.new(collect_frames))
+
+            deltas = np.diff(np.asarray(samples, dtype=float))
+            deltas = deltas[deltas > 1e-5]
+            if len(deltas):
+                estimated_fps = 1.0 / float(np.median(deltas))
+                if np.isfinite(estimated_fps) and 1.0 <= estimated_fps <= 240.0:
+                    self.frame_rate = Fraction(estimated_fps).limit_denominator(1000)
+        except Exception:
+            # Keep the conservative fallback when the browser cannot expose
+            # frame callbacks for this media element.
+            self.frame_rate = Fraction(30, 1)
+        finally:
+            video.pause()
+            video.currentTime = min(original_time, max(0.0, self.duration - 1e-6))
 
     async def _load_browser_frame(self, index: int) -> None:
         """Seek the HTMLVideoElement and copy its current decoded frame."""
