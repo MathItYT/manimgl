@@ -143,9 +143,19 @@ class VideoSource(object):
         # Live capture state
         # ------------------------------------------------------------------
 
-        self._capture_thread: threading.Thread | None = None
-        self._capture_stop = threading.Event()
-        self._frame_lock = threading.Lock()
+        self._capture_thread = None
+        self._capture_stop = None
+        self._frame_lock = None
+
+        # These synchronization primitives only exist for native live capture.
+        # Browser video files do not use Python threads.
+        if self.live:
+            if threading is None:
+                raise RuntimeError(
+                    "Live VideoMobject capture is not available in Pyodide."
+                )
+            self._capture_stop = threading.Event()
+            self._frame_lock = threading.Lock()
 
         # Only the newest frame is retained.
         #
