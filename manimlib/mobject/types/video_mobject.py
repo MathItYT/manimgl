@@ -174,6 +174,8 @@ class VideoSource(object):
         self.browser_context = None
         self._browser_latest_task = None
         self._browser_requested_index = -1
+        self._browser_playing = False
+        self._browser_media_time = 0.0
 
         # ------------------------------------------------------------------
         # Live capture state
@@ -1164,11 +1166,11 @@ class VideoMobject(ImageMobject):
                 0,
                 self.source.latest_index,
             )
+            self.frames.load(self.source.latest_index)
+            return self
 
-            self.frames.load(
-                self.source.latest_index
-            )
-
+        if self.source.browser_video is not None:
+            self.source.start_browser_playback(time)
             return self
 
         return self.set_frame(
@@ -1192,7 +1194,10 @@ class VideoMobject(ImageMobject):
             self.frames.load(
                 self.source.latest_index
             )
+            return self
 
+        if self.source.browser_video is not None:
+            self.frames.load(self.source.latest_index)
             return self
 
         return self.set_time(
@@ -1209,6 +1214,12 @@ class VideoMobject(ImageMobject):
         For live sources this simply installs a refresh updater.
         """
         if self.live:
+            return self.add_updater(
+                lambda mob, dt: mob.increment_time(dt)
+            )
+
+        if self.source.browser_video is not None:
+            self.source.start_browser_playback(time)
             return self.add_updater(
                 lambda mob, dt: mob.increment_time(dt)
             )
@@ -1290,6 +1301,9 @@ class VideoMobject(ImageMobject):
         """
         if self.live:
             return 0.0
+
+        if self.source.browser_video is not None:
+            return float(self.source.browser_video.currentTime)
 
         return float(
             self.uniforms["frame"]
