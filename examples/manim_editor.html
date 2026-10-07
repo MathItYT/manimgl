@@ -215,6 +215,7 @@ class Demo(Scene):
     const assetsList = document.getElementById("assets-list");
     const assetInput = document.getElementById("asset-input");
     const assetObjectUrls = new Map();
+    const assetFontMetadata = new Map();
     const assetsDropZone = assetsPanel;
 
     function setStatus(value) { status.textContent = String(value); }
@@ -282,6 +283,27 @@ class Demo(Scene):
       if (bytes < 1024) return bytes + " B";
       if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + " KB";
       return (bytes / 1024 ** 2).toFixed(1) + " MB";
+    }
+
+    function isFontAsset(name) {
+      const extension = name.toLowerCase().split(".").pop();
+      return ["ttf", "otf", "woff", "woff2"].includes(extension);
+    }
+
+    async function registerFontAsset(path) {
+      const result = await pyodide.runPythonAsync(
+        "from manimlib.utils.browser_fonts import register_browser_font_path\n"
+        + "register_browser_font_path(" + JSON.stringify(path) + ")"
+      );
+      return result;
+    }
+
+    async function readFontMetadata(path) {
+      const result = await pyodide.runPythonAsync(
+        "from manimlib.utils.browser_fonts import describe_browser_font_path\n"
+        + "describe_browser_font_path(" + JSON.stringify(path) + ")"
+      );
+      return JSON.parse(String(result));
     }
 
     function createAssetPreview(name, path) {
@@ -353,7 +375,20 @@ class Demo(Scene):
         nameNode.textContent = name;
         const typeNode = document.createElement("div");
         typeNode.className = "asset-type";
-        typeNode.textContent = formatBytes(stat.size);
+        if (isFontAsset(name)) {
+          const metadata = assetFontMetadata.get(path);
+          if (metadata) {
+            typeNode.textContent =
+              metadata.family + " · " +
+              metadata.style + " · " +
+              metadata.weight + " · " +
+              formatBytes(stat.size);
+          } else {
+            typeNode.textContent = "Fuente · " + formatBytes(stat.size);
+          }
+        } else {
+          typeNode.textContent = formatBytes(stat.size);
+        }
         info.append(nameNode, typeNode);
 
         const actions = document.createElement("div");
@@ -407,10 +442,9 @@ class Demo(Scene):
 
         const extension = file.name.toLowerCase().split(".").pop();
         if (["ttf", "otf", "woff", "woff2"].includes(extension)) {
-          await pyodide.runPythonAsync(
-            "from manimlib.utils.browser_fonts import register_browser_font_path\n"
-            + "await register_browser_font_path(" + JSON.stringify(path) + ")"
-          );
+          const metadata = await readFontMetadata(path);
+          await registerFontAsset(path);
+          assetFontMetadata.set(path, metadata);
         }
 
         imported++;
