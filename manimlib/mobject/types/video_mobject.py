@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from fractions import Fraction
+import asyncio
+import os
 import platform
 if __import__('sys').platform != 'emscripten':
     import threading
@@ -57,6 +59,30 @@ class VideoSource(object):
 
     _sources: dict[tuple, VideoSource] = {}
 
+    @classmethod
+    async def create_browser(cls, path: str) -> VideoSource:
+        """Create a browser-backed video source from an Emscripten file."""
+        if __import__("sys").platform != "emscripten":
+            raise RuntimeError("create_browser() is only available in Pyodide.")
+        from js import Blob, URL, Uint8Array, document, Promise
+        mime_types = {".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".ogv": "video/ogg", ".m4v": "video/mp4"}
+        mime = mime_types.get(os.path.splitext(str(path))[1].lower(), "application/octet-stream")
+        with open(path, "rb") as file:
+            data = file.read()
+        buffer = Uint8Array.new(len(data))
+        buffer.assign(data)
+        blob = Blob.new([buffer], {"type": mime})
+        url = URL.createObjectURL(blob)
+        video = document.createElement("video")
+        video.preload = "auto"
+        video.muted = True
+        video.playsInline = True
+        video.src = url
+        if video.readyState < 1:
+            await Promise.new(lambda resolve, reject: video.addEventListener("loadedmetadata", resolve, {"once": True}))
+        source = cls(str(path), preload=False, browser_video=video, browser_url=url)
+        await source._load_browser_frame(0)
+        return source
     @classmethod
     def get(
         cls,
@@ -132,12 +158,19 @@ class VideoSource(object):
         live: bool = False,
         device_format: str | None = None,
         device_options: dict | None = None,
+        browser_video=None,
+        browser_url: str | None = None,
     ):
         self.path = str(path)
         self.live = live
 
         self.container = None
         self.stream = None
+        self.browser_video = browser_video
+        self.browser_url = browser_url
+        self.browser_canvas = None
+        self.browser_context = None
+        self._browser_latest_task = None
 
         # ------------------------------------------------------------------
         # Live capture state
@@ -184,6 +217,8 @@ class VideoSource(object):
                 device_format=device_format,
                 device_options=device_options,
             )
+        elif self.browser_video is not None:
+            self._init_browser()
         else:
             self._init_file(preload)
 
@@ -191,6 +226,54 @@ class VideoSource(object):
     # Normal video files
     # ======================================================================
 
+    def _init_browser(self) -> None:
+        """Initialize an HTMLVideoElement-backed browser video source."""
+        self.width = int(self.browser_video.videoWidth)
+        self.height = int(self.browser_video.videoHeight)
+        if self.width <= 0 or self.height <= 0:
+            raise RuntimeError(f"Browser video {self.path!r} has no intrinsic dimensions.")
+        self.frame_rate = Fraction(30, 1)
+        duration = float(self.browser_video.duration)
+        if not np.isfinite(duration) or duration <= 0:
+            raise RuntimeError(f"Browser video {self.path!r} has an invalid duration: {duration!r}.")
+        self.duration = duration
+        self.num_frames = max(1, round(duration * float(self.frame_rate)))
+        self.all_frames = None
+        self.preloaded = False
+        from js import document
+        self.browser_canvas = document.createElement("canvas")
+        self.browser_canvas.width = self.width
+        self.browser_canvas.height = self.height
+        self.browser_context = self.browser_canvas.getContext("2d")
+        self._latest_frame = None
+        self._latest_index = -1
+
+    async def _load_browser_frame(self, index: int) -> None:
+        """Seek the HTMLVideoElement and copy its current decoded frame."""
+        index = int(np.clip(index, 0, self.num_frames - 1))
+        target = min(index / float(self.frame_rate), max(0.0, self.duration - 1e-6))
+        video = self.browser_video
+        if abs(float(video.currentTime) - target) > 1e-6:
+            from js import Promise
+            video.currentTime = target
+            await Promise.new(lambda resolve, reject: video.addEventListener("seeked", resolve, {"once": True}))
+        self.browser_context.drawImage(video, 0, 0, self.width, self.height)
+        image_data = self.browser_context.getImageData(0, 0, self.width, self.height)
+        pixels = np.frombuffer(bytes(image_data.data.to_py()), dtype=np.uint8).reshape(self.height, self.width, 4).copy()
+        self._latest_frame = pixels
+        self._latest_index = index
+
+    def request_frame(self, index: int) -> None:
+        """Schedule a browser decode without blocking Manim rendering."""
+        if self.browser_video is None:
+            return
+        index = int(np.clip(index, 0, self.num_frames - 1))
+        if index == self._latest_index:
+            return
+        task = self._browser_latest_task
+        if task is not None and not task.done():
+            task.cancel()
+        self._browser_latest_task = asyncio.create_task(self._load_browser_frame(index))
     def _init_file(self, preload: bool | None) -> None:
         if av is None:
             raise RuntimeError(
@@ -383,7 +466,13 @@ class VideoSource(object):
                 self.container.close()
             except Exception:
                 pass
-
+        if self.browser_url is not None:
+            try:
+                from js import URL
+                URL.revokeObjectURL(self.browser_url)
+            except Exception:
+                pass
+            self.browser_url = None
         self.container = None
 
     # ======================================================================
@@ -548,8 +637,10 @@ class VideoSource(object):
         For live sources the requested index is intentionally ignored:
         the newest frame is always returned.
         """
-        if self.live:
-            return self.get_latest_frame()
+        if self.live or self.browser_video is not None:
+            if self._latest_frame is None:
+                return self.blank_frame()
+            return self._latest_frame
 
         if self.preloaded:
             return self.get_all_frames()[
@@ -744,25 +835,15 @@ class VideoFrames(LayeredPixels):
         if self.preloaded:
             return
 
-        if self.live:
+        if self.live or self.video.browser_video is not None:
             latest_index = self.video.latest_index
-
-            # No frame has arrived yet.
             if latest_index < 0:
                 return
-
-            # This frame is already on the GPU.
             if latest_index == self.loaded:
                 return
-
-            pixels = self.video.get_latest_frame()
-
+            pixels = self.video.get_frame(latest_index)
             self.loaded = latest_index
-
-            self.set_layers(
-                pixels[np.newaxis]
-            )
-
+            self.set_layers(pixels[np.newaxis])
             return
 
         # Normal file streaming.
@@ -856,6 +937,7 @@ class VideoMobject(ImageMobject):
         live: bool = False,
         device_format: str | None = None,
         device_options: dict | None = None,
+        _browser_source: VideoSource | None = None,
         **kwargs,
     ):
         self.loop = loop
@@ -867,6 +949,7 @@ class VideoMobject(ImageMobject):
         self.live = live
         self.device_format = device_format
         self.device_options = device_options
+        self._browser_source = _browser_source
 
         super().__init__(
             filename,
@@ -876,6 +959,15 @@ class VideoMobject(ImageMobject):
 
         self.set_time(time)
 
+    @classmethod
+    async def create(cls, filename: str, **kwargs):
+        """Asynchronously construct a browser-backed VideoMobject."""
+        import sys
+        if sys.platform != "emscripten":
+            return cls(filename, **kwargs)
+        path = str(get_full_video_path(filename))
+        source = await VideoSource.create_browser(path)
+        return cls(filename, _browser_source=source, **kwargs)
     # ======================================================================
     # Texture initialization
     # ======================================================================
@@ -898,16 +990,10 @@ class VideoMobject(ImageMobject):
                 )
             )
 
-        path = str(
-            get_full_video_path(filename)
-        )
-
-        return VideoFrames(
-            VideoSource.get(
-                path,
-                self._preload,
-            )
-        )
+        path = str(get_full_video_path(filename))
+        if self._browser_source is not None:
+            return VideoFrames(self._browser_source)
+        return VideoFrames(VideoSource.get(path, self._preload))
 
     # ======================================================================
     # Source properties
@@ -1102,6 +1188,8 @@ class VideoMobject(ImageMobject):
             )
 
         self.uniforms["frame"] = index
+        if self.source.browser_video is not None:
+            self.source.request_frame(self.frame_index)
 
         self.frames.load(
             self.frame_index
