@@ -265,14 +265,8 @@ class VideoSource(object):
         from js import Promise
 
         original_time = float(video.currentTime)
-        samples = []
 
         try:
-            # requestVideoFrameCallback() advances only when the browser
-            # presents decoded video frames.  The previous implementation
-            # waited for callbacks while the element was paused, which can
-            # wait forever.  Play the muted element briefly so the callbacks
-            # are actually generated.
             if abs(original_time) > 1e-6:
                 video.currentTime = 0
                 await Promise.new(
@@ -280,8 +274,6 @@ class VideoSource(object):
                         "seeked", resolve, {"once": True}
                     )
                 )
-
-            await video.play()
 
             def collect_frames(resolve, reject):
                 times = []
@@ -296,7 +288,12 @@ class VideoSource(object):
                     else:
                         video.requestVideoFrameCallback(callback)
 
+                # Register the callback before starting playback.  Do not
+                # await video.play(): the JS play() promise is not needed
+                # here and awaiting it through Pyodide can stall the Python
+                # coroutine even though the media element is playing.
                 video.requestVideoFrameCallback(callback)
+                video.play()
 
             samples = list(await Promise.new(collect_frames))
 
@@ -307,12 +304,13 @@ class VideoSource(object):
                 if np.isfinite(estimated_fps) and 1.0 <= estimated_fps <= 240.0:
                     self.frame_rate = Fraction(estimated_fps).limit_denominator(1000)
         except Exception:
-            # Keep the conservative fallback when the browser cannot expose
-            # frame callbacks for this media element.
             self.frame_rate = Fraction(30, 1)
         finally:
             video.pause()
-            video.currentTime = min(original_time, max(0.0, self.duration - 1e-6))
+            video.currentTime = min(
+                original_time,
+                max(0.0, self.duration - 1e-6),
+            )
 
     async def _load_browser_frame(self, index: int) -> None:
         """Seek the HTMLVideoElement and copy its current decoded frame."""
