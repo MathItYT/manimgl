@@ -41,7 +41,13 @@ def latex_to_typst(source: str) -> str:
         r'\\max': 'max', r'\\min': 'min', r'\\mod': 'mod',
     }
 
-    result = source
+    # La entrada puede llegar con los backslashes escapados dos veces
+    # (por ejemplo, ``\\\\frac`` en vez de ``\\frac``), especialmente cuando
+    # el código pasó por otra capa de serialización antes de llegar al AST.
+    # Normalizamos únicamente las secuencias de backslashes que introducen
+    # comandos LaTeX; ``\\\\`` usado como salto de línea de TeX se conserva.
+    result = re.sub(r'\\\\+(?=[A-Za-z])', r'\\', source)
+
     for pattern, replacement in replacements.items():
         result = re.sub(pattern, replacement, result)
 
