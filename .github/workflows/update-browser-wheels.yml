@@ -4,10 +4,8 @@ on:
   push:
     branches:
       - personal
-    paths-ignore:
-      - examples/browser_wasm/dist/wheels/**
-  schedule:
-    - cron: "0 4 * * 1"
+    paths:
+      - manimlib/**
   workflow_dispatch:
 
 permissions:
