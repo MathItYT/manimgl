@@ -1,22 +1,37 @@
 from __future__ import annotations
 
+from functools import lru_cache
 import re
+import sys
 from typing import Any, TYPE_CHECKING
 
 from manimlib.config import manim_config
 from manimlib.constants import WHITE
 from manimlib.mobject.svg.string_mobject import StringMobject
-from manimlib.mobject.svg.tex_mobject import get_tex_mob_scale_factor
+from manimlib.mobject.svg.svg_mobject import get_svg_content_height
 from manimlib.mobject.types.vectorized_mobject import VGroup, VMobject
 from manimlib.utils.color import color_to_hex
 
 from manimlib.utils.typst_file_writing import typst_to_svg
 
-if __import__('sys').platform == 'emscripten':
+if sys.platform == 'emscripten':
     from manimlib.utils.browser_typst import typst_to_svg_async
 
 if TYPE_CHECKING:
     from manimlib.typing import ManimColor, Selector, Span
+
+
+@lru_cache(maxsize=1)
+def get_typst_mob_scale_factor() -> float:
+    # Render a reference "0" and calibrate so that font_size_for_unit_height
+    # gives a height of 1 manim unit. Compensates for platform dvisvgm differences.
+    font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
+    if sys.platform == "emscripten":
+        svg_string = typst_to_svg_async("0")
+    else:
+        svg_string = typst_to_svg("0")
+    svg_height = get_svg_content_height(svg_string)
+    return 1.0 / (font_size_for_unit_height * svg_height)
 
 
 def to_hex(color: Any) -> str:
@@ -89,7 +104,7 @@ class SingleStringTypst(StringMobject):
             if sys.platform == "emscripten" and skip_browser_svg_measurement:
                 pass
             else:
-                scale = get_tex_mob_scale_factor() * self.font_size
+                scale = get_typst_mob_scale_factor() * self.font_size
                 self.scale(scale)
                 self.scale_stroke_widths(scale)
         self._char_to_submob_map = self._build_char_to_submob_map()
