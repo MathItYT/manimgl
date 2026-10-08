@@ -123,11 +123,14 @@ def markup_to_svg_async(markup_str: str, justify: bool = False, indent: float = 
 def get_text_mob_scale_factor() -> float:
     # Render a reference "0" and calibrate so that font_size_for_unit_height
     # gives a height of 1 manim unit. Compensates for platform DPI differences.
+    #
+    # The browser Pango backend uses the same SVG measurement as the native
+    # backend. The previous browser path measured the requested font size
+    # directly, which made the final scale depend on browser SVG units instead
+    # of using the same calibrated factor as native Manim.
     ref_size = 48
     font_size_for_unit_height = manim_config.text.font_size_for_unit_height
     pango_size = str(round(ref_size * 1024))
-    if sys.platform == "emscripten":
-        return 1.0
     svg_string = markup_to_svg(f'<span font_size="{pango_size}">0</span>')
     svg_height = get_svg_content_height(svg_string)
     return ref_size / (font_size_for_unit_height * svg_height)
@@ -221,12 +224,9 @@ class MarkupText(StringMobject):
         if self.t2c:
             self.set_color_by_text_to_color_map(self.t2c)
         if height is None:
-            if sys.platform == "emscripten":
-                svg_height = get_svg_content_height(self.svg_string)
-                if svg_height > 0:
-                    self.scale(self.font_size / (manim_config.text.font_size_for_unit_height * svg_height))
-            else:
-                self.scale(get_text_mob_scale_factor())
+            # Use the same calibrated font-size -> Manim-unit conversion on
+            # native and browser runtimes.
+            self.scale(get_text_mob_scale_factor() * self.font_size)
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
