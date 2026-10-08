@@ -344,6 +344,8 @@ class SingleStringTypst(StringMobject):
         return f"{doc_head}\n", "\n"
 
     def get_svg_string_by_content(self, content: str) -> str:
+        if self._svg_override is not None:
+            return self._svg_override
         return typst_to_svg(content)
 
     def select_parts(self, selector: Selector) -> VGroup:

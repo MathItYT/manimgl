@@ -225,14 +225,8 @@ class MarkupText(StringMobject):
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
-        if sys.platform == "emscripten":
-            return markup_to_svg_pyodide(
-                content,
-                justify=self.justify,
-                indent=self.indent,
-                alignment=self.alignment,
-                line_width=self.line_width
-            )
+        if self._svg_override is not None:
+            return self._svg_override
         else:
             return markup_to_svg(
                 content,
