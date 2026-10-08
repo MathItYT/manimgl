@@ -131,7 +131,10 @@ def get_text_mob_scale_factor() -> float:
     ref_size = 48
     font_size_for_unit_height = manim_config.text.font_size_for_unit_height
     pango_size = str(round(ref_size * 1024))
-    svg_string = markup_to_svg(f'<span font_size="{pango_size}">0</span>')
+    if sys.platform == "emscripten":
+        svg_string = markup_to_svg_async(f'<span font_size="{pango_size}">0</span>')
+    else:
+        svg_string = markup_to_svg(f'<span font_size="{pango_size}">0</span>')
     svg_height = get_svg_content_height(svg_string)
     return ref_size / (font_size_for_unit_height * svg_height)
 
