@@ -74,14 +74,14 @@ A local development server should provide these headers as well.
 
 The Python API is asynchronous in Pyodide:
 
-    title = Text.create("Hello")          # synchronous in the browser backend
-    formula = await Typst.create("x^2")     # asynchronous WASM compiler
+    title = await Text.create("Hello")     # rendered in a Web Worker
+    formula = await Typst.create("x^2")    # asynchronous WASM compiler
 
 The synchronous native APIs remain unchanged.
 
 ## Why construction is asynchronous
 
-Browser WASM compilers are promise-based and cannot block the browser event loop. Consequently browser scenes use:
+Browser WASM compilers are promise-based and must not block the browser event loop. Pango text shaping runs in a dedicated Web Worker, and browser text factories are awaited. Consequently browser scenes use:
 
     await scene.build_async()
     await scene.playback_async()
@@ -101,7 +101,6 @@ Then open `/manim_editor.html`.
 
 The editor's source transformer follows the actual web API:
 
-- **Synchronous:** `Text.create(...)`, `MarkupText.create(...)`, `Code.create(...)`.
-- **Asynchronous:** `Typst.create(...)`, `TypstText.create(...)`, `DecimalNumber.create(...)`, `Integer.create(...)`.
+- **Asynchronous:** `Text.create(...)`, `MarkupText.create(...)`, `Code.create(...)`, `Typst.create(...)`, `TypstText.create(...)`, `DecimalNumber.create(...)`, `Integer.create(...)`.
 
 Native direct construction of those classes is rewritten to the corresponding `.create(...)` form. `NumberLine(include_numbers=True)` is rewritten to construct without numbers and then await `add_numbers_async(...)`.

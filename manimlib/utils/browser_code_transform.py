@@ -324,7 +324,7 @@ class _BrowserTransformer(ast.NodeTransformer):
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == 'create'
             and isinstance(node.func.value, ast.Name)
-            and node.func.value.id in ASYNC_CREATE_MOBJECTS
+            and node.func.value.id in (ASYNC_CREATE_MOBJECTS | SYNC_CREATE_MOBJECTS)
         ):
             self.changed = True
             return ast.copy_location(ast.Await(node), node)
@@ -332,7 +332,7 @@ class _BrowserTransformer(ast.NodeTransformer):
         if not self.in_await and name in SYNC_CREATE_MOBJECTS | ASYNC_CREATE_MOBJECTS:
             node.func = ast.Attribute(ast.Name(id=name, ctx=ast.Load()), 'create', ast.Load())
             self.changed = True
-            return ast.copy_location(ast.Await(node), node) if name in ASYNC_CREATE_MOBJECTS else node
+            return ast.copy_location(ast.Await(node), node) if name in (ASYNC_CREATE_MOBJECTS | SYNC_CREATE_MOBJECTS) else node
         if not self.in_await and name in TEX_NAMES:
             node.func = ast.Attribute(
                 value=ast.Name(id='Typst', ctx=ast.Load()),

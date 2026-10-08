@@ -36,6 +36,19 @@ PATH_TO_POINTS: dict[str, Vect3Array] = {}
 
 
 def get_svg_content_height(svg_string: str) -> float:
+    root = ET.fromstring(svg_string)
+    # The browser Pango backend already measured the ink extents before
+    # writing its SVG. Reuse that exact measurement instead of reparsing all
+    # glyph paths through svgelements.
+    measured_height = root.attrib.get("data-manim-content-height")
+    if measured_height is not None:
+        try:
+            value = float(measured_height)
+            if np.isfinite(value) and value > 0:
+                return value
+        except (TypeError, ValueError):
+            pass
+
     # Strip root attributes to match SVGMobject.modify_xml_tree,
     # which avoids viewBox unit conversions (e.g. pt to px for dvisvgm)
     root = ET.fromstring(svg_string)

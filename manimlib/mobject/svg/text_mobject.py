@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import inspect
 import os
 from pathlib import Path
 import re
@@ -121,8 +122,44 @@ def markup_to_svg_pyodide(markup_str: str, justify: bool = False, indent: float 
     return str(result)
 
 
+async def markup_to_svg_pyodide_async(
+    markup_str: str,
+    justify: bool = False,
+    indent: float = 0,
+    alignment: str = "CENTER",
+    line_width: float | None = None,
+) -> str:
+    """Render text through the browser Pango worker without blocking the UI."""
+    if sys.platform != "emscripten":
+        raise RuntimeError(
+            "markup_to_svg_pyodide_async() is only available in Pyodide."
+        )
+    from js import window
+
+    result = window.manimPangoTextToSvgAsync(
+        markup_str,
+        justify,
+        indent,
+        alignment,
+        -1 if line_width is None else line_width / FRAME_WIDTH * DEFAULT_PIXEL_WIDTH,
+    )
+    if inspect.isawaitable(result):
+        result = await result
+    return str(result)
+
+
+_BROWSER_EMPTY_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" '
+    'viewBox="0 0 1 1"><path d="M0,0 L1,1" fill="none" '
+    'stroke="none"/></svg>'
+)
+_browser_text_scale_factor: float | None = None
+
+
 @lru_cache(maxsize=1)
 def get_text_mob_scale_factor() -> float:
+    if sys.platform == "emscripten" and _browser_text_scale_factor is not None:
+        return _browser_text_scale_factor
     ref_size = 48
     font_size_for_unit_height = manim_config.text.font_size_for_unit_height
     pango_size = str(round(ref_size * 1024))
@@ -188,6 +225,7 @@ class MarkupText(StringMobject):
         isolate: Selector = re.compile(r"\w+", re.U),
         **kwargs
     ):
+        text_scale_factor = kwargs.pop("_text_scale_factor", None)
         text_config = manim_config.text
         self.text = text
         self.font_size = font_size
@@ -223,7 +261,11 @@ class MarkupText(StringMobject):
         if self.t2c:
             self.set_color_by_text_to_color_map(self.t2c)
         if height is None:
-            self.scale(get_text_mob_scale_factor() * self.font_size / 48)
+            scale_factor = (
+                get_text_mob_scale_factor()
+                if text_scale_factor is None else text_scale_factor
+            )
+            self.scale(scale_factor * self.font_size / 48)
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
@@ -246,7 +288,82 @@ class MarkupText(StringMobject):
 
     @classmethod
     def create(cls, text: str, **kwargs):
-        return cls(text, **kwargs)
+        # Native callers retain the original synchronous constructor.
+        # In Pyodide, all Pango work is awaited from a dedicated Web Worker.
+        if sys.platform != "emscripten":
+            return cls(text, **kwargs)
+        return cls._create_browser(text, **kwargs)
+
+    @classmethod
+    async def _create_browser(cls, text: str, **kwargs):
+        global _browser_text_scale_factor
+
+        requested_height = kwargs.get("height")
+        needs_scale = requested_height is None
+        use_labelled_svg = kwargs.get("use_labelled_svg", issubclass(cls, Text))
+
+        # A scratch instance prepares exactly the same Pango markup as the
+        # final object, while a tiny SVG override prevents any synchronous
+        # Pango call during its construction.
+        scratch_kwargs = dict(kwargs)
+        for private_key in (
+            "_svg_override",
+            "_labelled_svg_override",
+            "_text_scale_factor",
+        ):
+            scratch_kwargs.pop(private_key, None)
+        scratch_kwargs.pop("height", None)
+        scratch_kwargs["height"] = 1
+        scratch_kwargs["use_labelled_svg"] = True
+        scratch_kwargs["_svg_override"] = _BROWSER_EMPTY_SVG
+        scratch = cls(text, **scratch_kwargs)
+
+        async def render(content: str) -> str:
+            return await markup_to_svg_pyodide_async(
+                content,
+                justify=scratch.justify,
+                indent=scratch.indent,
+                alignment=scratch.alignment,
+                line_width=scratch.line_width,
+            )
+
+        final_kwargs = dict(kwargs)
+        final_kwargs.pop("_svg_override", None)
+        final_kwargs.pop("_labelled_svg_override", None)
+        final_kwargs.pop("_text_scale_factor", None)
+        final_kwargs["use_labelled_svg"] = use_labelled_svg
+
+        if use_labelled_svg:
+            final_kwargs["_svg_override"] = await render(
+                scratch.get_content(is_labelled=True)
+            )
+        else:
+            final_kwargs["_svg_override"] = await render(
+                scratch.get_content(is_labelled=False)
+            )
+            final_kwargs["_labelled_svg_override"] = await render(
+                scratch.get_content(is_labelled=True)
+            )
+
+        if needs_scale:
+            if _browser_text_scale_factor is None:
+                ref_size = 48
+                pango_size = str(round(ref_size * 1024))
+                reference_svg = await markup_to_svg_pyodide_async(
+                    f'<span font_size="{pango_size}">0</span>'
+                )
+                svg_height = get_svg_content_height(reference_svg)
+                if svg_height <= 0:
+                    raise ValueError(
+                        "Pango returned an invalid reference glyph height"
+                    )
+                _browser_text_scale_factor = (
+                    ref_size
+                    / (manim_config.text.font_size_for_unit_height * svg_height)
+                )
+            final_kwargs["_text_scale_factor"] = _browser_text_scale_factor
+
+        return cls(text, **final_kwargs)
 
     # Toolkits
 

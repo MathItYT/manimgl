@@ -65,6 +65,7 @@ class StringMobject(SVGMobject, ABC):
         self.protect = protect
         self.use_labelled_svg = use_labelled_svg
         self._svg_override = kwargs.pop("_svg_override", None)
+        self._labelled_svg_override = kwargs.pop("_labelled_svg_override", None)
 
         self.parse()
         svg_string = self._svg_override if self._svg_override is not None else self.get_svg_string()
@@ -127,7 +128,9 @@ class StringMobject(SVGMobject, ABC):
         # of submobject which are and use those for labels
         unlabelled_submobs = submobs
         labelled_content = self.get_content(is_labelled=True)
-        labelled_file = self.get_svg_string_by_content(labelled_content)
+        labelled_file = self._labelled_svg_override
+        if labelled_file is None:
+            labelled_file = self.get_svg_string_by_content(labelled_content)
         labelled_submobs = super().mobjects_from_svg_string(labelled_file)
         self.labelled_submobs = labelled_submobs
         self.unlabelled_submobs = unlabelled_submobs
