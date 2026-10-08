@@ -247,12 +247,16 @@ class MarkupText(StringMobject):
         obj.content = content
 
         if "height" not in kwargs and "width" not in kwargs:
-            svg_height = get_svg_content_height(svg)
-            if svg_height > 0:
-                scale = obj.font_size / (
-                    manim_config.text.font_size_for_unit_height * svg_height
-                )
-                obj.scale(scale)
+            # Browser Pango embeds the ink bbox height in the SVG so that we
+            # avoid running svgelements over the full glyph geometry.
+            match = re.search(r'data-manim-content-height="([^"]+)"', svg)
+            if match:
+                svg_height = float(match.group(1))
+                if svg_height > 0:
+                    scale = obj.font_size / (
+                        manim_config.text.font_size_for_unit_height * svg_height
+                    )
+                    obj.scale(scale)
         return obj
 
     # Toolkits
