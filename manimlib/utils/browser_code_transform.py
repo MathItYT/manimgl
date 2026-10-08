@@ -9,50 +9,164 @@ TEX_NAMES = {'Tex', 'TexText'}
 
 
 def latex_to_typst(source: str) -> str:
+    protected_text = []
+
     def protect_text(match: re.Match) -> str:
         protected_text.append(match.group(0))
         return f'¤{len(protected_text) - 1}¤'
+
     replacements = {
         r'\\cdot': 'dot', r'\\times': 'times', r'\\pm': 'plus.minus',
-        r'\\mp': 'minus.plus', r'\\leq': '<=', r'\\geq': '>=',
-        r'\\neq': '!=', r'\\to': '->', r'\\infty': 'infinity',
-        r'\\pi': 'pi', r'\\theta': 'theta', r'\\alpha': 'alpha',
-        r'\\beta': 'beta', r'\\gamma': 'gamma', r'\\delta': 'delta',
-        r'\\Delta': 'Delta', r'\\Sigma': 'Sigma', r'\\Omega': 'Omega',
+        r'\\mp': 'minus.plus', r'\\leq': '<=', r'\\le': '<=',
+        r'\\geq': '>=', r'\\ge': '>=', r'\\neq': '!=', r'\\ne': '!=',
+        r'\\to': '->', r'\\rightarrow': '->',
+        r'\\infty': 'infinity', r'\\pi': 'pi', r'\\theta': 'theta',
+        r'\\alpha': 'alpha', r'\\beta': 'beta', r'\\gamma': 'gamma',
+        r'\\delta': 'delta', r'\\epsilon': 'epsilon',
+        r'\\varepsilon': 'varepsilon', r'\\phi': 'phi',
+        r'\\varphi': 'varphi', r'\\psi': 'psi', r'\\lambda': 'lambda',
+        r'\\mu': 'mu', r'\\nu': 'nu', r'\\xi': 'xi', r'\\rho': 'rho',
+        r'\\sigma': 'sigma', r'\\tau': 'tau', r'\\upsilon': 'upsilon',
+        r'\\chi': 'chi', r'\\omega': 'omega',
+        r'\\Delta': 'Delta', r'\\Gamma': 'Gamma', r'\\Lambda': 'Lambda',
+        r'\\Xi': 'Xi', r'\\Pi': 'Pi', r'\\Sigma': 'Sigma',
+        r'\\Theta': 'Theta', r'\\Upsilon': 'Upsilon', r'\\Phi': 'Phi',
+        r'\\Psi': 'Psi', r'\\Omega': 'Omega',
         r'\\sum': 'sum', r'\\prod': 'product', r'\\int': 'integral',
+        r'\\sin': 'sin', r'\\cos': 'cos', r'\\tan': 'tan',
+        r'\\cot': 'cot', r'\\sec': 'sec', r'\\csc': 'csc',
+        r'\\arcsin': 'arcsin', r'\\arccos': 'arccos', r'\\arctan': 'arctan',
+        r'\\sinh': 'sinh', r'\\cosh': 'cosh', r'\\tanh': 'tanh',
+        r'\\log': 'log', r'\\ln': 'ln', r'\\exp': 'exp', r'\\lim': 'lim',
+        r'\\max': 'max', r'\\min': 'min', r'\\mod': 'mod',
     }
+
     result = source
     for pattern, replacement in replacements.items():
         result = re.sub(pattern, replacement, result)
-    result = re.sub(r'\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}', r'frac(\1, \2)', result)
-    result = re.sub(r'\\sqrt\s*\{([^{}]*)\}', r'sqrt(\1)', result)
-    result = re.sub(r'#text\[[^]]*\]', protect_text, result)
-    result = re.sub(r'\\mathrm\s*\{([^{}]*)\}', r'\1', result)
-    result = re.sub(r'\\mathbf\s*\{([^{}]*)\}', r'bold(\1)', result)
-    result = re.sub(r'\\mathbb\s*\{([^{}]*)\}', r'bb(\1)', result)
+
+    # TeX groups may be nested, so do not use a single non-nested regex for
+    # commands such as frac/sqrt/mathbf.
+    def replace_braced_command(result: str, command: str, replacement) -> str:
+        pattern = re.compile(r'\\' + re.escape(command) + r'\s*\{')
+        while True:
+            match = pattern.search(result)
+            if match is None:
+                return result
+
+            start = match.start()
+            brace_start = match.end() - 1
+            depth = 0
+            end = None
+            for index in range(brace_start, len(result)):
+                char = result[index]
+                if char == '{':
+                    depth += 1
+                elif char == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = index
+                        break
+            if end is None:
+                return result
+
+            argument = result[brace_start + 1:end]
+            result = result[:start] + replacement(argument) + result[end + 1:]
+
+    def read_group(value: str, start: int):
+        if start >= len(value) or value[start] != '{':
+            return None, None
+        depth = 0
+        for index in range(start, len(value)):
+            if value[index] == '{':
+                depth += 1
+            elif value[index] == '}':
+                depth -= 1
+                if depth == 0:
+                    return value[start + 1:index], index + 1
+        return None, None
+
+    # Handle nested \frac arguments correctly.
+    while True:
+        match = re.search(r'\\frac\s*\{', result)
+        if match is None:
+            break
+
+        start = match.start()
+        numerator_start = match.end() - 1
+        numerator, after_numerator = read_group(result, numerator_start)
+        if after_numerator is None:
+            break
+
+        denominator_match = re.match(r'\s*\{', result[after_numerator:])
+        if denominator_match is None:
+            break
+
+        denominator_start = after_numerator + denominator_match.end() - 1
+        denominator, after_denominator = read_group(result, denominator_start)
+        if after_denominator is None:
+            break
+
+        result = (
+            result[:start]
+            + f'frac({numerator}, {denominator})'
+            + result[after_denominator:]
+        )
+
+    result = replace_braced_command(
+        result, 'sqrt', lambda argument: f'sqrt({argument})'
+    )
+    result = replace_braced_command(
+        result, 'mathrm', lambda argument: argument
+    )
+    result = replace_braced_command(
+        result, 'mathbf', lambda argument: f'bold({argument})'
+    )
+    result = replace_braced_command(
+        result, 'mathbb', lambda argument: f'bb({argument})'
+    )
+
     result = result.replace(r'\left', '').replace(r'\right', '')
     result = result.replace(r'\,', ' ').replace(r'\;', ' ').replace(r'\!', '')
+
+    # TeX's infix \over creates a fraction from the surrounding expression.
+    # This handles the common form a \over b, including occurrences inside
+    # braces after the outer group has been extracted.
+    def replace_over(value: str) -> str:
+        depth = 0
+        for index, char in enumerate(value):
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+            elif depth == 0 and value.startswith(r'\over', index):
+                left = value[:index].rstrip()
+                right = value[index + len(r'\over'):].lstrip()
+                if left and right:
+                    return f'frac({left}, {right})'
+        return value
+
+    result = replace_over(result)
+
     result = re.sub(r'\^\{([^{}]*)\}', r'^\1', result)
     result = re.sub(r'_\{([^{}]*)\}', r'_\1', result)
 
-    # Typst treats a contiguous ASCII word in math mode as a single
-    # identifier/token. Native TeX treats ordinary letters as independent
-    # variables, so xy means x * y. Preserve Typst math keywords/functions.
+    # At this point no supported TeX command should retain its leading slash.
+    # Preserve escaped literal characters as the corresponding character.
+    result = re.sub(r'\\([A-Za-z]+)', r'\1', result)
+
     typst_words = {
         'dot', 'times', 'plus', 'minus', 'infinity',
         'pi', 'theta', 'alpha', 'beta', 'gamma', 'delta',
-        'Delta', 'Sigma', 'Omega', 'sum', 'product', 'integral',
-        'frac', 'sqrt', 'bold', 'bb',
+        'epsilon', 'varepsilon', 'phi', 'varphi', 'psi', 'lambda',
+        'mu', 'nu', 'xi', 'rho', 'sigma', 'tau', 'upsilon', 'chi', 'omega',
+        'Delta', 'Gamma', 'Lambda', 'Xi', 'Pi', 'Sigma', 'Theta',
+        'Upsilon', 'Phi', 'Psi', 'Omega',
+        'sum', 'product', 'integral', 'frac', 'sqrt', 'bold', 'bb',
         'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
         'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh',
         'log', 'ln', 'exp', 'lim', 'max', 'min', 'mod', 'gcd',
-        'epsilon', 'varepsilon', 'phi', 'varphi', 'psi', 'lambda',
-        'mu', 'nu', 'xi', 'rho', 'sigma', 'tau', 'upsilon', 'chi', 'omega',
-        'Gamma', 'Lambda', 'Xi', 'Pi', 'Phi', 'Psi', 'Theta', 'Upsilon', 'Chi',
     }
-
-    protected_text = []
-
 
     def split_math_identifiers(match: re.Match) -> str:
         word = match.group(0)
@@ -60,9 +174,7 @@ def latex_to_typst(source: str) -> str:
             return word
         return ' '.join(word)
 
-    # Do not split words inside Typst text blocks. They are prose, not math
-    # identifiers.
-    result = re.sub(r'#text\\[[^]]*\\]', protect_text, result)
+    result = re.sub(r'#text\[[^]]*\]', protect_text, result)
     result = re.sub(r'[A-Za-z]+', split_math_identifiers, result)
 
     for index, text_block in enumerate(protected_text):
