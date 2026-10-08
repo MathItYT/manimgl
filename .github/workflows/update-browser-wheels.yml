@@ -6,7 +6,7 @@ on:
       - personal
     paths:
       - manimlib/**
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: write
