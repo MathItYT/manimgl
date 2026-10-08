@@ -178,6 +178,12 @@ char *manim_pango_text_to_svg(
     }
     pango_layout_set_alignment(layout, pango_alignment);
 
+    // Measure the Pango ink bbox once while the layout already exists.
+    // This avoids reparsing the generated SVG with svgelements in Pyodide.
+    PangoRectangle ink_rect;
+    pango_layout_get_extents(layout, &ink_rect, NULL);
+    double content_height = (double)ink_rect.height / PANGO_SCALE;
+
     pango_cairo_show_layout(cr, layout);
 
     g_object_unref(layout);
@@ -186,6 +192,25 @@ char *manim_pango_text_to_svg(
 
     char *data = read_file(path);
     remove(path);
+    if (!data) return NULL;
+
+    char attribute[128];
+    snprintf(attribute, sizeof(attribute),
+        " data-manim-content-height="%.9f"", content_height);
+    char *svg_start = strstr(data, "<svg");
+    char *tag_end = svg_start ? strchr(svg_start, '>') : NULL;
+    if (tag_end) {
+        size_t old_len = strlen(data);
+        size_t attr_len = strlen(attribute);
+        size_t offset = (size_t)(tag_end - data);
+        char *expanded = realloc(data, old_len + attr_len + 1);
+        if (expanded) {
+            memmove(expanded + offset + attr_len, expanded + offset,
+                    old_len - offset + 1);
+            memcpy(expanded + offset, attribute, attr_len);
+            data = expanded;
+        }
+    }
     return data;
 }
 
