@@ -157,3 +157,4 @@ DEFAULT_LIGHT_COLOR: ManimColor = manim_config.mobject.default_light_color or GR
 
 DEFAULT_VMOBJECT_STROKE_COLOR : ManimColor = manim_config.vmobject.default_stroke_color or GREY_A
 DEFAULT_VMOBJECT_FILL_COLOR : ManimColor = manim_config.vmobject.default_fill_color or GREY_C
+
