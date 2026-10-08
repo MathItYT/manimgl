@@ -5,6 +5,12 @@ on:
   # Runs on pushes targeting the default branch
   push:
     branches: ["personal"]
+    # Commits that change manimlib also trigger the browser-wheel workflow.
+    # Those commits must deploy only after the wheel workflow finishes,
+    # otherwise this deployment can race with the wheel commit and publish
+    # the pre-wheel state.
+    paths-ignore:
+      - manimlib/**
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
