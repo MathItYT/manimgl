@@ -29,7 +29,7 @@ jobs:
       - name: Install wheel build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install setuptools wheel
+          python -m pip install setuptools wheel hatchling requests
 
       - name: Build browser wheels
         run: ./examples/browser_wasm/build_pyodide_wheels.sh
