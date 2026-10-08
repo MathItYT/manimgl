@@ -23,13 +23,28 @@ if TYPE_CHECKING:
 
 @lru_cache(maxsize=1)
 def get_typst_mob_scale_factor() -> float:
+    if sys.platform == "emscripten":
+        raise RuntimeError(
+            "get_typst_mob_scale_factor() is not available in Pyodide. "
+            "Use get_typst_mob_scale_factor_async() instead."
+        )
     # Render a reference "0" and calibrate so that font_size_for_unit_height
     # gives a height of 1 manim unit. Compensates for platform dvisvgm differences.
     font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
-    if sys.platform == "emscripten":
-        svg_string = typst_to_svg_async("0")
-    else:
-        svg_string = typst_to_svg("0")
+    svg_string = typst_to_svg("0")
+    svg_height = get_svg_content_height(svg_string)
+    return 1.0 / (font_size_for_unit_height * svg_height)
+
+
+@lru_cache(maxsize=1)
+async def get_typst_mob_scale_factor_async() -> float:
+    if sys.platform != "emscripten":
+        raise RuntimeError(
+            "get_typst_mob_scale_factor_async() is only available in Pyodide. "
+            "Use get_typst_mob_scale_factor() instead."
+        )
+    font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
+    svg_string = await typst_to_svg_async("0")
     svg_height = get_svg_content_height(svg_string)
     return 1.0 / (font_size_for_unit_height * svg_height)
 
@@ -95,7 +110,7 @@ class SingleStringTypst(StringMobject):
             **kwargs,
         )
 
-        if "height" not in kwargs and "width" not in kwargs:
+        if ("height" not in kwargs or kwargs["height"] is None) and ("width" not in kwargs or kwargs["width"] is None):
             # Use exactly the same font-size -> Manim-unit calibration as the
             # native Typst path. Browser Typst SVGs can use different document
             # units, so calibrating from their raw SVG height produces a
@@ -136,12 +151,17 @@ class SingleStringTypst(StringMobject):
             raise TypeError(
                 f"Browser Typst compiler returned {type(svg).__name__}; expected SVG text."
             )
-        return cls(
+        obj = cls(
             typst_string,
             _svg_override=svg,
             use_labelled_svg=True,
             **kwargs,
         )
+        if ("height" not in kwargs or kwargs["height"] is None) and ("width" not in kwargs or kwargs["width"] is None):
+            scale = await get_typst_mob_scale_factor_async() * obj.font_size
+            obj.scale(scale)
+            obj.scale_stroke_widths(scale)
+        return obj
 
     def _build_char_to_submob_map(self) -> list[list[int]]:
         mapping: list[list[int]] = [[] for _ in range(len(self.string))]

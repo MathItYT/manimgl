@@ -105,9 +105,9 @@ def markup_to_svg(
     return result
 
 
-def markup_to_svg_async(markup_str: str, justify: bool = False, indent: float = 0, alignment: str = "CENTER", line_width: float | None = None) -> str:
+def markup_to_svg_pyodide(markup_str: str, justify: bool = False, indent: float = 0, alignment: str = "CENTER", line_width: float | None = None) -> str:
     if sys.platform != "emscripten":
-        return markup_to_svg(markup_str, justify, indent, alignment, line_width)
+        raise RuntimeError("markup_to_svg_pyodide() is only available in Pyodide; use markup_to_svg(...) instead.")
     from js import window
     result = window.manimPangoTextToSvg(
         markup_str,
@@ -125,7 +125,7 @@ def get_text_mob_scale_factor() -> float:
     font_size_for_unit_height = manim_config.text.font_size_for_unit_height
     pango_size = str(round(ref_size * 1024))
     if sys.platform == "emscripten":
-        svg_string = markup_to_svg_async(f'<span font_size="{pango_size}">0</span>')
+        svg_string = markup_to_svg_pyodide(f'<span font_size="{pango_size}">0</span>')
     else:
         svg_string = markup_to_svg(f'<span font_size="{pango_size}">0</span>')
     svg_height = get_svg_content_height(svg_string)
@@ -226,7 +226,7 @@ class MarkupText(StringMobject):
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
         if sys.platform == "emscripten":
-            return markup_to_svg_async(
+            return markup_to_svg_pyodide(
                 content,
                 justify=self.justify,
                 indent=self.indent,
