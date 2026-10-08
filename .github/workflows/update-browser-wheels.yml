@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   update-browser-wheels:
@@ -43,8 +44,13 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "Browser wheels are already up to date."
-            exit 0
+          else
+            git commit -m "Update browser wheels"
+            git push origin HEAD:personal
           fi
 
-          git commit -m "Update browser wheels"
-          git push origin HEAD:personal
+      - name: Trigger Pages deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run "Deploy static content to Pages" --ref personal
