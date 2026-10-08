@@ -225,13 +225,22 @@ class MarkupText(StringMobject):
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
-        return markup_to_svg(
-            content,
-            justify=self.justify,
-            indent=self.indent,
-            alignment=self.alignment,
-            line_width=self.line_width
-        )
+        if sys.platform == "emscripten":
+            return markup_to_svg_async(
+                content,
+                justify=self.justify,
+                indent=self.indent,
+                alignment=self.alignment,
+                line_width=self.line_width
+            )
+        else:
+            return markup_to_svg(
+                content,
+                justify=self.justify,
+                indent=self.indent,
+                alignment=self.alignment,
+                line_width=self.line_width
+            )
 
     @classmethod
     def create(cls, text: str, **kwargs):
