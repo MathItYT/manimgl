@@ -105,6 +105,8 @@ def markup_to_svg(
     return result
 
 
+@lru_cache(maxsize=128)
+@cache_on_disk
 def markup_to_svg_pyodide(markup_str: str, justify: bool = False, indent: float = 0, alignment: str = "CENTER", line_width: float | None = None) -> str:
     if sys.platform != "emscripten":
         raise RuntimeError("markup_to_svg_pyodide() is only available in Pyodide; use markup_to_svg(...) instead.")
@@ -225,8 +227,14 @@ class MarkupText(StringMobject):
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
-        if self._svg_override is not None:
-            return self._svg_override
+        if sys.platform == "emscripten":
+            return markup_to_svg_pyodide(
+                content,
+                justify=self.justify,
+                indent=self.indent,
+                alignment=self.alignment,
+                line_width=self.line_width
+            )
         else:
             return markup_to_svg(
                 content,
