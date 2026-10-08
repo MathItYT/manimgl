@@ -707,7 +707,8 @@ class Scene(object):
             # The clock moves before anything else in the frame, so that time
             # based updaters are evaluated at the moment the frame stands for.
             self.increment_time(dt)
-            browser_audio.sync(self.time, self._interactive_sound_events)
+            if sys.platform == "emscripten":
+                browser_audio.sync(self.time, self._interactive_sound_events)
             for animation in animations:
                 animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
                 alpha = t / animation.run_time

@@ -8,7 +8,7 @@ from typing import Any, TYPE_CHECKING
 from manimlib.config import manim_config
 from manimlib.constants import WHITE
 from manimlib.mobject.svg.string_mobject import StringMobject
-from manimlib.mobject.svg.svg_mobject import get_svg_content_height
+from manimlib.mobject.svg.svg_mobject import SVGMobject
 from manimlib.mobject.types.vectorized_mobject import VGroup, VMobject
 from manimlib.utils.color import color_to_hex
 
@@ -31,8 +31,8 @@ def get_typst_mob_scale_factor() -> float:
     # Render a reference "0" and calibrate so that font_size_for_unit_height
     # gives a height of 1 manim unit. Compensates for platform dvisvgm differences.
     font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
-    svg_string = typst_to_svg("0")
-    svg_height = get_svg_content_height(svg_string)
+    svg_string = typst_to_svg("#set text(size: 10pt)\n0")
+    svg_height = SVGMobject(svg_string=svg_string).get_height()
     return 1.0 / (font_size_for_unit_height * svg_height)
 
 
@@ -45,9 +45,9 @@ async def get_typst_mob_scale_factor_async() -> float:
             "get_typst_mob_scale_factor_async() is only available in Pyodide. "
             "Use get_typst_mob_scale_factor() instead."
         )
-    font_size_for_unit_height = 144
-    svg_string = await typst_to_svg_async("0")
-    svg_height = get_svg_content_height(svg_string)
+    font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
+    svg_string = await typst_to_svg_async("#set text(size: 10pt)\n0")
+    svg_height = SVGMobject(svg_string=svg_string).get_height()
     return 1.0 / (font_size_for_unit_height * svg_height)
 
 
