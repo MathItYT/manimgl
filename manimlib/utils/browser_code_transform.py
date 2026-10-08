@@ -41,43 +41,11 @@ def latex_to_typst(source: str) -> str:
         r'\\max': 'max', r'\\min': 'min', r'\\mod': 'mod',
     }
 
-    # La entrada puede llegar con los backslashes escapados dos veces
-    # (por ejemplo, ``\\\\frac`` en vez de ``\\frac``), especialmente cuando
-    # el código pasó por otra capa de serialización antes de llegar al AST.
-    # Normalizamos únicamente las secuencias de backslashes que introducen
-    # comandos LaTeX; ``\\\\`` usado como salto de línea de TeX se conserva.
+    # La entrada puede llegar con los backslashes escapados dos veces.
     result = re.sub(r'\\\\+(?=[A-Za-z])', r'\\', source)
 
     for pattern, replacement in replacements.items():
         result = re.sub(pattern, replacement, result)
-
-    # TeX groups may be nested, so do not use a single non-nested regex for
-    # commands such as frac/sqrt/mathbf.
-    def replace_braced_command(result: str, command: str, replacement) -> str:
-        pattern = re.compile(r'\\' + re.escape(command) + r'\s*\{')
-        while True:
-            match = pattern.search(result)
-            if match is None:
-                return result
-
-            start = match.start()
-            brace_start = match.end() - 1
-            depth = 0
-            end = None
-            for index in range(brace_start, len(result)):
-                char = result[index]
-                if char == '{':
-                    depth += 1
-                elif char == '}':
-                    depth -= 1
-                    if depth == 0:
-                        end = index
-                        break
-            if end is None:
-                return result
-
-            argument = result[brace_start + 1:end]
-            result = result[:start] + replacement(argument) + result[end + 1:]
 
     def read_group(value: str, start: int):
         if start >= len(value) or value[start] != '{':
@@ -92,7 +60,61 @@ def latex_to_typst(source: str) -> str:
                     return value[start + 1:index], index + 1
         return None, None
 
-    # Handle nested \frac arguments correctly.
+    def find_top_level_over(value: str):
+        depth = 0
+        index = 0
+        while index < len(value):
+            char = value[index]
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+            elif depth == 0 and value.startswith(r'\over', index):
+                return index
+            index += 1
+        return None
+
+    def convert_math_groups(value: str) -> str:
+        """Recursively convert TeX groups to parenthesized Typst expressions.
+
+        A group containing a top-level \\over is a TeX fraction:
+            {A \\over B} -> (A) / (B)
+
+        Other groups become ordinary parenthesized expressions:
+            {A + B} -> (A + B)
+        """
+        output = []
+        index = 0
+
+        while index < len(value):
+            if value[index] != '{':
+                output.append(value[index])
+                index += 1
+                continue
+
+            group, after = read_group(value, index)
+            if after is None:
+                # Leave malformed input untouched instead of dropping text.
+                output.append(value[index])
+                index += 1
+                continue
+
+            over_index = find_top_level_over(group)
+            if over_index is not None:
+                numerator = convert_math_groups(group[:over_index].strip())
+                denominator = convert_math_groups(
+                    group[over_index + len(r'\over'):].strip()
+                )
+                output.append(f'({numerator}) / ({denominator})')
+            else:
+                output.append(f'({convert_math_groups(group)})')
+
+            index = after
+
+        return ''.join(output)
+
+    # \\frac is represented as ordinary arithmetic rather than Typst's frac().
+    # Parse its two balanced arguments recursively so nested fractions/groups work.
     while True:
         match = re.search(r'\\frac\s*\{', result)
         if match is None:
@@ -113,52 +135,65 @@ def latex_to_typst(source: str) -> str:
         if after_denominator is None:
             break
 
+        numerator = convert_math_groups(numerator)
+        denominator = convert_math_groups(denominator)
         result = (
             result[:start]
-            + f'frac({numerator}, {denominator})'
+            + f'({numerator}) / ({denominator})'
             + result[after_denominator:]
         )
 
+    def replace_braced_command(result: str, command: str, replacement) -> str:
+        pattern = re.compile(r'\\' + re.escape(command) + r'\s*\{')
+        while True:
+            match = pattern.search(result)
+            if match is None:
+                return result
+
+            start = match.start()
+            brace_start = match.end() - 1
+            argument, end = read_group(result, brace_start)
+            if end is None:
+                return result
+
+            result = result[:start] + replacement(argument) + result[end:]
+
     result = replace_braced_command(
-        result, 'sqrt', lambda argument: f'sqrt({argument})'
+        result, 'sqrt', lambda argument: f'sqrt({convert_math_groups(argument)})'
     )
     result = replace_braced_command(
-        result, 'mathrm', lambda argument: argument
+        result, 'mathrm', lambda argument: convert_math_groups(argument)
     )
     result = replace_braced_command(
-        result, 'mathbf', lambda argument: f'bold({argument})'
+        result, 'mathbf', lambda argument: f'bold({convert_math_groups(argument)})'
     )
     result = replace_braced_command(
-        result, 'mathbb', lambda argument: f'bb({argument})'
+        result, 'mathbb', lambda argument: f'bb({convert_math_groups(argument)})'
     )
 
     result = result.replace(r'\left', '').replace(r'\right', '')
     result = result.replace(r'\,', ' ').replace(r'\;', ' ').replace(r'\!', '')
 
-    # TeX's infix \over creates a fraction from the surrounding expression.
-    # This handles the common form a \over b, including occurrences inside
-    # braces after the outer group has been extracted.
-    def replace_over(value: str) -> str:
-        depth = 0
-        for index, char in enumerate(value):
-            if char == '{':
-                depth += 1
-            elif char == '}':
-                depth -= 1
-            elif depth == 0 and value.startswith(r'\over', index):
-                left = value[:index].rstrip()
-                right = value[index + len(r'\over'):].lstrip()
-                if left and right:
-                    return f'frac({left}, {right})'
-        return value
+    # Handle TeX's infix \\over after command arguments have been consumed.
+    # A grouped form such as {2 \\over x} has already been converted above.
+    # For an ungrouped form, preserve the existing behavior: \\over divides
+    # the complete expression on its left from the complete expression on its right.
+    over_index = find_top_level_over(result)
+    if over_index is not None:
+        left = result[:over_index].rstrip()
+        right = result[over_index + len(r'\over'):].lstrip()
+        if left and right:
+            result = f'({left}) / ({right})'
 
-    result = replace_over(result)
+    # Convert remaining TeX grouping to normal mathematical parentheses.
+    # This also removes the literal braces from expressions which did not
+    # belong to a command such as \\frac.
+    result = convert_math_groups(result)
 
     result = re.sub(r'\^\{([^{}]*)\}', r'^\1', result)
     result = re.sub(r'_\{([^{}]*)\}', r'_\1', result)
 
     # At this point no supported TeX command should retain its leading slash.
-    # Preserve escaped literal characters as the corresponding character.
     result = re.sub(r'\\([A-Za-z]+)', r'\1', result)
 
     typst_words = {
@@ -168,7 +203,7 @@ def latex_to_typst(source: str) -> str:
         'mu', 'nu', 'xi', 'rho', 'sigma', 'tau', 'upsilon', 'chi', 'omega',
         'Delta', 'Gamma', 'Lambda', 'Xi', 'Pi', 'Sigma', 'Theta',
         'Upsilon', 'Phi', 'Psi', 'Omega',
-        'sum', 'product', 'integral', 'frac', 'sqrt', 'bold', 'bb',
+        'sum', 'product', 'integral', 'sqrt', 'bold', 'bb',
         'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
         'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh',
         'log', 'ln', 'exp', 'lim', 'max', 'min', 'mod', 'gcd',
@@ -243,8 +278,6 @@ class _BrowserTransformer(ast.NodeTransformer):
                     return ast.copy_location(ast.Await(call), call)
                 return call
         for function in self.function_nodes.values():
-            # NodeTransformer.visit() accepts an AST node, not a statement list.
-            # Visit each statement and preserve the FunctionDef.body list.
             transformer = AwaitCalls()
             new_body = []
             for statement in function.body:
@@ -264,15 +297,6 @@ class _BrowserTransformer(ast.NodeTransformer):
 
     def visit_ClassDef(self, node):
         node = self.generic_visit(node)
-
-        # Browser scenes must always have an async construct().  The generated
-        # code replaces synchronous Scene.play()/wait() calls with their async
-        # counterparts, so construct itself has to be awaitable as well.
-        #
-        # Do not restrict this to a class whose base is literally named
-        # Scene.  Manim has many Scene subclasses (ThreeDScene,
-        # MovingCameraScene, InteractiveScene, and user-defined Scene
-        # subclasses), and their construct() methods need the same treatment.
         is_scene_class = any(
             (
                 isinstance(base, ast.Name)
@@ -364,5 +388,6 @@ def transform_browser_source(source: str) -> str:
     tree = _BrowserTransformer().visit(tree)
     ast.fix_missing_locations(tree)
     return ast.unparse(tree)
+
 
 __all__ = ['SYNC_CREATE_MOBJECTS', 'ASYNC_CREATE_MOBJECTS', 'TEX_NAMES', 'latex_to_typst', 'transform_browser_source']
