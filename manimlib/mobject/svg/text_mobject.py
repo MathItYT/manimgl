@@ -223,7 +223,7 @@ class MarkupText(StringMobject):
         if self.t2c:
             self.set_color_by_text_to_color_map(self.t2c)
         if height is None:
-            self.scale(get_text_mob_scale_factor() * self.font_size)
+            self.scale(get_text_mob_scale_factor() * self.font_size / 48)
 
     def get_svg_string_by_content(self, content: str) -> str:
         self.content = content
