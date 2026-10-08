@@ -116,9 +116,7 @@ class SingleStringTypst(StringMobject):
             # units, so calibrating from their raw SVG height produces a
             # different scale than native Manim.
             import sys
-            if sys.platform == "emscripten" and skip_browser_svg_measurement:
-                pass
-            else:
+            if sys.platform != "emscripten" and not skip_browser_svg_measurement:
                 scale = get_typst_mob_scale_factor() * self.font_size
                 self.scale(scale)
                 self.scale_stroke_widths(scale)
