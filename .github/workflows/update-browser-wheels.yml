@@ -1,0 +1,52 @@
+name: Update browser wheels
+
+on:
+  push:
+    branches:
+      - personal
+    paths-ignore:
+      - examples/browser_wasm/dist/wheels/**
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-browser-wheels:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: personal
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install wheel build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install setuptools wheel
+
+      - name: Build browser wheels
+        run: ./examples/browser_wasm/build_pyodide_wheels.sh
+
+      - name: Commit updated wheels
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add examples/browser_wasm/dist/wheels
+
+          if git diff --cached --quiet; then
+            echo "Browser wheels are already up to date."
+            exit 0
+          fi
+
+          git commit -m "Update browser wheels"
+          git push origin HEAD:personal
