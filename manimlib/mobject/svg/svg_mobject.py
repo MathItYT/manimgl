@@ -135,15 +135,6 @@ class SVGMobject(VMobject):
             stroke_opacity=stroke_opacity,
         )
 
-    def scale_stroke_widths(self, factor: float) -> None:
-        if factor == 1:
-            return
-        for mob in self.get_family():
-            # The group holding the shapes carries no points of its own, so no widths either
-            if len(mob.data) == 0:
-                continue
-            mob.set_stroke(width=factor * mob.get_stroke_widths(), recurse=False)
-
     def init_svg_mobject(self) -> None:
         hash_val = hash_obj(self.hash_seed)
         if hash_val in SVG_HASH_TO_MOB_MAP:

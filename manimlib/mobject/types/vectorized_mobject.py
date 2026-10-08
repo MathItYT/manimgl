@@ -578,6 +578,16 @@ class VMobject(Mobject):
         self.set_uniform(recurse, stroke_width_in_scene_units=float(value))
         return self
 
+    def scale_stroke_widths(self, factor: float) -> Self:
+        if factor == 1:
+            return
+        for mob in self.get_family():
+            # The group holding the shapes carries no points of its own, so no widths either
+            if len(mob.data) == 0:
+                continue
+            mob.set_stroke(width=factor * mob.get_stroke_widths(), recurse=False)
+        return self
+
     def get_stroke_width_in_scene_units(self) -> bool:
         return self.uniforms["stroke_width_in_scene_units"] == 1.0
 
