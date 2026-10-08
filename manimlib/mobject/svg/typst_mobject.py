@@ -81,15 +81,13 @@ class SingleStringTypst(StringMobject):
         )
 
         if "height" not in kwargs and "width" not in kwargs:
+            # Use exactly the same font-size -> Manim-unit calibration as the
+            # native Typst path. Browser Typst SVGs can use different document
+            # units, so calibrating from their raw SVG height produces a
+            # different scale than native Manim.
             import sys
-            if sys.platform == "emscripten":
-                if not skip_browser_svg_measurement:
-                    from manimlib.mobject.svg.svg_mobject import get_svg_content_height
-                    svg_height = get_svg_content_height(self.svg_string)
-                    if svg_height > 0:
-                        scale = self.font_size / (manim_config.tex.font_size_for_unit_height * svg_height)
-                        self.scale(scale)
-                        self.scale_stroke_widths(scale)
+            if sys.platform == "emscripten" and skip_browser_svg_measurement:
+                pass
             else:
                 scale = get_tex_mob_scale_factor() * self.font_size
                 self.scale(scale)
