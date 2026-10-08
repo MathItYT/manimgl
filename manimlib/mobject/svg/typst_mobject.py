@@ -141,7 +141,6 @@ class SingleStringTypst(StringMobject):
             typst_string,
             _svg_override='<svg xmlns="http://www.w3.org/2000/svg"/>',
             use_labelled_svg=True,
-            _skip_browser_svg_measurement=True,
             **kwargs,
         )
         content = probe.get_content(is_labelled=True)
@@ -153,7 +152,6 @@ class SingleStringTypst(StringMobject):
         obj = cls(
             typst_string,
             _svg_override=svg,
-            use_labelled_svg=True,
             **kwargs,
         )
         if ("height" not in kwargs or kwargs["height"] is None) and ("width" not in kwargs or kwargs["width"] is None):
