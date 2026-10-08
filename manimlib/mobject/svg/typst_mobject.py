@@ -36,7 +36,6 @@ def get_typst_mob_scale_factor() -> float:
     return 1.0 / (font_size_for_unit_height * svg_height)
 
 
-@lru_cache(maxsize=1)
 async def get_typst_mob_scale_factor_async() -> float:
     if sys.platform != "emscripten":
         raise RuntimeError(
