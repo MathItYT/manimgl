@@ -246,22 +246,7 @@ class MarkupText(StringMobject):
     def create(cls, text: str, **kwargs):
         if sys.platform != "emscripten":
             return cls(text, **kwargs)
-        probe = cls(text, _svg_override='<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="1" height="1"/></svg>', **kwargs)
-        content = probe.get_content(probe.use_labelled_svg)
-        svg = markup_to_svg_async(
-            content,
-            justify=probe.justify,
-            indent=probe.indent,
-            alignment=probe.alignment,
-            line_width=probe.line_width,
-        )
-        obj = cls(text, _svg_override=svg, **kwargs)
-        obj.content = content
-
-
-        if ("height" not in kwargs or kwargs["height"] is None) and ("width" not in kwargs or kwargs["width"] is None):
-            obj.scale(get_text_mob_scale_factor() * obj.font_size)
-        return obj
+        return cls(text, **kwargs)
 
     # Toolkits
 
