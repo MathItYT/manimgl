@@ -36,6 +36,9 @@ def get_typst_mob_scale_factor() -> float:
     return 1.0 / (font_size_for_unit_height * svg_height)
 
 
+TYPST_MOB_SCALE_FACTOR_ASYNC = None
+
+
 async def get_typst_mob_scale_factor_async() -> float:
     if sys.platform != "emscripten":
         raise RuntimeError(
@@ -124,6 +127,7 @@ class SingleStringTypst(StringMobject):
     @classmethod
     async def create(cls, typst_string: str, **kwargs):
         """Asynchronously construct a Typst mobject in Pyodide."""
+        global TYPST_MOB_SCALE_FACTOR_ASYNC
         import sys
         if sys.platform != "emscripten":
             return cls(typst_string, **kwargs)
@@ -155,7 +159,9 @@ class SingleStringTypst(StringMobject):
             **kwargs,
         )
         if ("height" not in kwargs or kwargs["height"] is None) and ("width" not in kwargs or kwargs["width"] is None):
-            scale = await get_typst_mob_scale_factor_async() * obj.font_size
+            if TYPST_MOB_SCALE_FACTOR_ASYNC is None:
+                TYPST_MOB_SCALE_FACTOR_ASYNC = await get_typst_mob_scale_factor_async()
+            scale = TYPST_MOB_SCALE_FACTOR_ASYNC * obj.font_size
             obj.scale(scale)
             obj.scale_stroke_widths(scale)
         return obj
