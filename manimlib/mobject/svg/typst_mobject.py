@@ -45,7 +45,7 @@ async def get_typst_mob_scale_factor_async() -> float:
             "get_typst_mob_scale_factor_async() is only available in Pyodide. "
             "Use get_typst_mob_scale_factor() instead."
         )
-    font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
+    font_size_for_unit_height = 144
     svg_string = await typst_to_svg_async("0")
     svg_height = get_svg_content_height(svg_string)
     return 1.0 / (font_size_for_unit_height * svg_height)
@@ -91,7 +91,6 @@ class SingleStringTypst(StringMobject):
         self.code_font = code_font
         self.base_color = color if color is not None else base_color
         self.t2c = t2c or typst_to_color_map or {}
-        skip_browser_svg_measurement = kwargs.pop("_skip_browser_svg_measurement", False)
 
         isolate = () if isolate is None else isolate
         protect = () if protect is None else protect
@@ -117,8 +116,7 @@ class SingleStringTypst(StringMobject):
             # native Typst path. Browser Typst SVGs can use different document
             # units, so calibrating from their raw SVG height produces a
             # different scale than native Manim.
-            import sys
-            if sys.platform != "emscripten" and not skip_browser_svg_measurement:
+            if sys.platform != "emscripten":
                 scale = get_typst_mob_scale_factor() * self.font_size
                 self.scale(scale)
                 self.scale_stroke_widths(scale)
