@@ -244,8 +244,6 @@ class MarkupText(StringMobject):
 
     @classmethod
     def create(cls, text: str, **kwargs):
-        if sys.platform != "emscripten":
-            return cls(text, **kwargs)
         return cls(text, **kwargs)
 
     # Toolkits
