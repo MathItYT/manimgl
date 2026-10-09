@@ -98,9 +98,9 @@ class Tex(StringMobject):
         command = "mitext" if text_mode else "mitex"
         return (
             '#import "@preview/mitex:0.2.7": *\n'
-            '#set page(width: auto, height: auto, margin: 0pt, fill: none)\\n'
-            '#set text(size: 10pt, ligatures: false)\\n'
-            f'#{command}({delimiter}{content}{delimiter})\\n'
+            '#set page(width: auto, height: auto, margin: 0pt, fill: none)\n'
+            '#set text(size: 10pt, ligatures: false)\n'
+            f'#{command}({delimiter}{content}{delimiter})\n'
         )
 
     @classmethod
@@ -131,7 +131,7 @@ class Tex(StringMobject):
             if probe.alignment:
                 content = content.replace(probe.alignment, "")
             if probe.additional_preamble:
-                content = probe.additional_preamble + "\\n" + content
+                content = probe.additional_preamble + "\n" + content
             svg = await typst_to_svg_async(
                 cls._make_mitex_source(content, text_mode=text_mode)
             )
