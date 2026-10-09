@@ -115,6 +115,7 @@ class Window(object):
             self.gpu = Gpu(adapter=adapter, device=device)
             self.configure()
             self._install_browser_pointer_tracking()
+            self._install_browser_keyboard_tracking()
         else:
             # Asking about monitors needs glfw started, which creating the canvas would otherwise
             # be what did
@@ -210,6 +211,47 @@ class Window(object):
         self.format = preferred.removesuffix("-srgb")
         self.context.configure(device=self.device, format=self.format)
         self.init_present_resources()
+
+    def _install_browser_keyboard_tracking(self) -> None:
+        """Forward keyboard events from the detached popup canvas into ManimGL."""
+        from pyodide.ffi import create_proxy
+
+        canvas = getattr(self.canvas, "_canvas_element", None)
+        if canvas is None:
+            return
+
+        def modifiers(event):
+            result = []
+            if event.shiftKey:
+                result.append("Shift")
+            if event.ctrlKey:
+                result.append("Control")
+            if event.altKey:
+                result.append("Alt")
+            if event.metaKey:
+                result.append("Meta")
+            return result
+
+        def key_down(event):
+            if event.key in ("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Tab"):
+                event.preventDefault()
+            self.on_key_down({"key": event.key, "modifiers": modifiers(event)})
+
+        def key_up(event):
+            self.on_key_up({"key": event.key, "modifiers": modifiers(event)})
+
+        def focus_canvas(_event):
+            canvas.focus()
+
+        # Keep the proxies alive for as long as the window exists. The canvas belongs
+        # to the popup document, while Pyodide and rendercanvas were created by the opener.
+        self._browser_key_down_proxy = create_proxy(key_down)
+        self._browser_key_up_proxy = create_proxy(key_up)
+        self._browser_canvas_focus_proxy = create_proxy(focus_canvas)
+        canvas.addEventListener("keydown", self._browser_key_down_proxy)
+        canvas.addEventListener("keyup", self._browser_key_up_proxy)
+        canvas.addEventListener("pointerdown", self._browser_canvas_focus_proxy, True)
+        canvas.addEventListener("click", self._browser_canvas_focus_proxy, True)
 
     def _install_browser_pointer_tracking(self) -> None:
         """Track viewport pointer coordinates independently of rendercanvas's offsetX/Y."""
