@@ -1271,9 +1271,14 @@ _editor_scene_token = ${token}`;
         stream = canvas.captureStream(requestedFps);
         for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
         const mimeType = getRecordingMimeType();
-        mediaRecorder = mimeType
-          ? new MediaRecorder(stream, { mimeType })
-          : new MediaRecorder(stream);
+        // 1080p60 needs a much higher bitrate than MediaRecorder's browser default.
+        // Keep the same options for supported MIME types and the fallback path.
+        const recorderOptions = {
+          videoBitsPerSecond: requestedFps >= 50 ? 28_000_000 : 16_000_000,
+          audioBitsPerSecond: 192_000,
+        };
+        if (mimeType) recorderOptions.mimeType = mimeType;
+        mediaRecorder = new MediaRecorder(stream, recorderOptions);
         recordingChunks = [];
         recordingStream = stream;
         recordingMicStream = micStream;
@@ -1357,8 +1362,9 @@ _editor_scene_token = ${token}`;
     async function runAndRecord() {
       if (!pyodide || running) return;
       try {
-        await startRecording();
-        await runScene();
+        // Prepare/transform the source first. Start capture only when the runner
+        // is ready to execute, so editor/transpilation startup time is not in the clip.
+        await runScene(startRecording);
         // Interactive recording is optional. Keep the existing interactive
         // behavior by default; otherwise stop immediately after the scene run.
         if (!recordInteractiveCheckbox.checked && mediaRecorder && mediaRecorder.state !== "inactive") {
@@ -1370,7 +1376,7 @@ _editor_scene_token = ${token}`;
       }
     }
 
-    async function runScene() {
+    async function runScene(beforeRender = null) {
       if (!pyodide || running) return;
       if (!canvas || !canvasPreviewWindow || canvasPreviewWindow.closed) {
         setStatus("Abre primero la ventana del canvas con «Abrir canvas».");
@@ -1389,10 +1395,13 @@ _editor_scene_token = ${token}`;
         const transformed = await transformSource(source);
         webCode.textContent = transformed;
 
-        setStatus("Construyendo escena…");
-        await pyodide.runPythonAsync(
-          buildRunner(transformed, token, canvas.width, canvas.height)
-        );
+        setStatus("Preparando renderizado…");
+        const runnerCode = buildRunner(transformed, token, canvas.width, canvas.height);
+        // Start MediaRecorder after source transformation and runner construction,
+        // immediately before ManimGL begins rendering the scene.
+        if (beforeRender) await beforeRender();
+        setStatus("Renderizando escena…");
+        await pyodide.runPythonAsync(runnerCode);
         setStatus("Escena terminada.");
       } catch (error) {
         showError(error);
