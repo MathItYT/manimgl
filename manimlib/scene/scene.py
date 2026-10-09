@@ -654,7 +654,8 @@ class Scene(object):
         return self.get_time_progression(duration, **kw)
 
     def pre_play(self):
-        if self.presenter_mode and self.num_plays == 0:
+        # Browser code must use _hold_loop_async() from async entry points.
+        if self.presenter_mode and self.num_plays == 0 and sys.platform != "emscripten":
             self.hold_loop()
 
         self.update_skipping_status()
@@ -877,6 +878,8 @@ class Scene(object):
         animations = [await prepare_animation_async(anim) for anim in proto_animations]
         for anim in animations:
             anim.update_rate_info(run_time, rate_func, lag_ratio)
+        if self.presenter_mode and self.num_plays == 0:
+            await self.hold_loop_async()
         self.pre_play()
         self.begin_animations(animations)
         duration = run_time or self.get_run_time(animations)
@@ -911,26 +914,79 @@ class Scene(object):
     async def wait_async(
         self,
         duration: float | None = None,
+        stop_condition: Callable[[], bool] | None = None,
+        note: str | None = None,
+        ignore_presenter_mode: bool = False,
         register: bool = True,
     ) -> None:
-        """Wait while yielding frames to requestAnimationFrame in the browser."""
+        """Wait asynchronously, preserving native presenter-mode behavior."""
         if sys.platform != "emscripten":
-            return self.wait(duration=duration, register=register)
+            return self.wait(
+                duration=duration,
+                stop_condition=stop_condition,
+                note=note,
+                ignore_presenter_mode=ignore_presenter_mode,
+                register=register,
+            )
+
         duration = self.default_wait_time if duration is None else duration
+        if self.presenter_mode and self.num_plays == 0:
+            await self.hold_loop_async()
         self.pre_play()
         await self.update_mobjects_async(0)
-        if register:
-            self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), [], duration, None))
-        last_t = 0.0
-        for t in np.arange(0, duration, 1 / self.camera.fps) + 1 / self.camera.fps:
+
+        presenter_wait = (
+            self.presenter_mode
+            and not self.skip_animations
+            and not ignore_presenter_mode
+        )
+        if presenter_wait:
+            if note:
+                log.info(note)
+            await self.hold_loop_async()
+        else:
+            if register:
+                self.checkpoints.append((
+                    self.get_state(ignore=[self.camera.frame]),
+                    [],
+                    duration or self.default_wait_time,
+                    stop_condition,
+                ))
+            last_t = 0.0
+            for t in np.arange(0, duration, 1 / self.camera.fps) + 1 / self.camera.fps:
+                self.window.poll_events()
+                if self.should_end_playing and register:
+                    self.should_end_playing = False
+                    while self.current_checkpoint is not None:
+                        await self.update_frame_async(dt=1 / self.camera.fps, force_draw=True)
+                        self.emit_frame()
+                        await self._browser_frame()
+                    self.post_play()
+                    return
+                dt = float(t - last_t)
+                last_t = float(t)
+                await self.update_frame_async(dt, force_draw=True)
+                browser_audio.sync(self.time, self._interactive_sound_events)
+                self.emit_frame()
+                if stop_condition is not None and stop_condition():
+                    break
+                await self._browser_frame()
+        self.post_play()
+
+    async def hold_loop_async(self) -> None:
+        """Browser equivalent of hold_loop(), without blocking the event loop."""
+        if sys.platform != "emscripten":
+            return self.hold_loop()
+        while self.hold_on_wait:
             self.window.poll_events()
-            dt = float(t - last_t)
-            last_t = float(t)
-            await self.update_frame_async(dt, force_draw=True)
+            await self.update_frame_async(
+                dt=1 / self.camera.fps,
+                force_draw=True,
+            )
             browser_audio.sync(self.time, self._interactive_sound_events)
             self.emit_frame()
             await self._browser_frame()
-        self.post_play()
+        self.hold_on_wait = True
 
     def wait(
         self,
