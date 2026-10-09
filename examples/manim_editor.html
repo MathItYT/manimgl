@@ -389,9 +389,23 @@
     import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
 
     const canvas = document.getElementById("manim-canvas");
+    window.__manimAudioElements = window.__manimAudioElements || new Set();
+    window.__manimAudioSources = window.__manimAudioSources || new Map();
 
-    // Route Manim's HTMLAudioElements through Web Audio so the scene soundtrack
-    // can be mixed into the same MediaRecorder stream as the canvas and microphone.
+    // Keep references to scene audio elements without rerouting ordinary playback.
+    // They are connected to Web Audio only after the user starts a recording.
+    function attachSceneAudioElement(audio) {
+      window.__manimAudioElements.add(audio);
+      const context = window.__manimAudioContext;
+      const destination = window.__manimRecordingAudioDestination;
+      if (!context || !destination || window.__manimAudioSources.has(audio)) return;
+      const source = context.createMediaElementSource(audio);
+      source.connect(context.destination);
+      source.connect(destination);
+      window.__manimAudioSources.set(audio, source);
+    }
+    window.__manimAttachAudioForRecording = attachSceneAudioElement;
+
     function ensureRecordingAudioGraph() {
       if (!window.__manimAudioContext) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -399,24 +413,20 @@
           throw new Error("Este navegador no admite Web Audio para grabar el audio de la escena.");
         }
         window.__manimAudioContext = new AudioContextClass();
-        window.__manimAudioSources = new Map();
       }
       const context = window.__manimAudioContext;
       const sources = window.__manimAudioSources;
 
-      window.__manimAttachAudioForRecording = audio => {
-        if (sources.has(audio)) return;
-        const source = context.createMediaElementSource(audio);
-        source.connect(context.destination);
-        if (window.__manimRecordingAudioDestination) {
-          source.connect(window.__manimRecordingAudioDestination);
-        }
-        sources.set(audio, source);
-      };
       window.__manimConnectRecordingAudio = async destination => {
         await context.resume();
         window.__manimRecordingAudioDestination = destination;
-        for (const source of sources.values()) source.connect(destination);
+        for (const audio of window.__manimAudioElements) {
+          if (!sources.has(audio)) {
+            attachSceneAudioElement(audio);
+          } else {
+            sources.get(audio).connect(destination);
+          }
+        }
       };
       window.__manimDisconnectRecordingAudio = destination => {
         for (const source of sources.values()) {
