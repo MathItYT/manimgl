@@ -26,6 +26,70 @@
     #loading { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(4,6,10,.82); }
     #loading-box { padding:18px 24px; border:1px solid #30394a; border-radius:9px; background:#151b27; font:13px monospace; }
     .label { color:#667287; font:11px monospace; margin:0 12px 5px; }
+    #projects-panel {
+      position:absolute;
+      z-index:10;
+      top:8px;
+      left:8px;
+      bottom:8px;
+      width:min(310px, calc(100% - 16px));
+      display:none;
+      flex-direction:column;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:rgba(17,22,32,.99);
+      box-shadow:0 12px 32px rgba(0,0,0,.4);
+      overflow:hidden;
+    }
+    #projects-panel.open { display:flex; }
+    #projects-header {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px;
+      border-bottom:1px solid var(--line);
+    }
+    #projects-title { flex:1; font-size:13px; font-weight:700; }
+    #projects-actions {
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      padding:8px;
+      border-bottom:1px solid var(--line);
+    }
+    #projects-actions button { flex:1; min-width:75px; }
+    #projects-list { flex:1; min-height:0; overflow:auto; padding:7px; }
+    .project-item {
+      display:flex;
+      align-items:center;
+      gap:6px;
+      padding:8px;
+      margin-bottom:4px;
+      border:1px solid transparent;
+      border-radius:6px;
+      cursor:pointer;
+    }
+    .project-item:hover { background:#1b2230; }
+    .project-item.active {
+      border-color:#3558a5;
+      background:#182541;
+    }
+    .project-info { flex:1; min-width:0; }
+    .project-name {
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      font-size:12px;
+      font-weight:600;
+    }
+    .project-meta { margin-top:4px; color:var(--muted); font:10px ui-monospace,monospace; }
+    .project-item button { padding:4px 6px; font-size:10px; }
+    #projects-panel .project-empty {
+      padding:20px 10px;
+      text-align:center;
+      color:var(--muted);
+      font:12px/1.5 ui-monospace,monospace;
+    }
     #assets-panel {
       position:absolute;
       z-index:8;
@@ -150,6 +214,7 @@
       border:2px dashed var(--accent);
       background:rgba(71,125,255,.10);
     }
+    #projects-panel { }
     #assets-panel.drop-active {
       border:2px dashed var(--accent);
       background:rgba(71,125,255,.10);
@@ -253,6 +318,7 @@
     <button id="run" class="primary" disabled>▶ Ejecutar</button>
     <button id="stop" disabled>■ Detener</button>
     <button id="format">Transformar a web</button>
+    <button id="projects-toggle">Proyectos</button>
     <button id="assets-toggle">Assets</button>
     <button id="fonts-toggle">Fuentes</button>
     <div id="status">Inicializando Pyodide…</div>
@@ -261,6 +327,18 @@
 
     <section id="editor-wrap">
       <div id="editor"></div>
+      <div id="projects-panel" aria-label="Proyectos Python">
+        <div id="projects-header">
+          <div id="projects-title">Proyectos Python</div>
+          <button id="projects-close" title="Cerrar">×</button>
+        </div>
+        <div id="projects-actions">
+          <button id="project-new" class="primary">＋ Nuevo</button>
+          <button id="project-rename">Renombrar</button>
+          <button id="project-delete">Eliminar</button>
+        </div>
+        <div id="projects-list"></div>
+      </div>
       <div id="fonts-panel" aria-label="Catálogo de fuentes">
         <div id="fonts-header">
           <div id="fonts-title">Fuentes</div>
@@ -356,8 +434,10 @@ class Demo(Scene):
 `;
     const CODE_STORAGE_KEY = "manimgl-editor:last-code:v1";
     const ASSET_DB_NAME = "manimgl-editor-assets";
-    const ASSET_DB_VERSION = 1;
+    const ASSET_DB_VERSION = 2;
     const ASSET_STORE_NAME = "assets";
+    const PROJECT_STORE_NAME = "projects";
+    const ACTIVE_PROJECT_KEY = "manimgl-editor:active-project:v1";
 
     function getSavedSource() {
       try {
@@ -388,6 +468,9 @@ class Demo(Scene):
           const db = request.result;
           if (!db.objectStoreNames.contains(ASSET_STORE_NAME)) {
             db.createObjectStore(ASSET_STORE_NAME, { keyPath: "name" });
+          }
+          if (!db.objectStoreNames.contains(PROJECT_STORE_NAME)) {
+            db.createObjectStore(PROJECT_STORE_NAME, { keyPath: "id" });
           }
         };
         request.onsuccess = () => resolve(request.result);
@@ -432,7 +515,47 @@ class Demo(Scene):
       return assetDbRequest("readwrite", store => store.delete(name));
     }
 
+    function projectDbRequest(mode, action) {
+      return openAssetDatabase().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(PROJECT_STORE_NAME, mode);
+        const store = tx.objectStore(PROJECT_STORE_NAME);
+        let request;
+        try {
+          request = action(store);
+        } catch (error) {
+          db.close();
+          reject(error);
+          return;
+        }
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("Error en IndexedDB de proyectos."));
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error || new Error("No se pudieron guardar los proyectos."));
+        };
+      }));
+    }
+
+    function getProjects() {
+      return projectDbRequest("readonly", store => store.getAll());
+    }
+
+    function saveProject(project) {
+      return projectDbRequest("readwrite", store => store.put({
+        ...project,
+        updatedAt: Date.now(),
+      }));
+    }
+
+    function deleteProject(id) {
+      return projectDbRequest("readwrite", store => store.delete(id));
+    }
+
     let editor;
+    let activeProject = null;
+    let projectSaveTimeout = null;
+    let projectSaveSequence = 0;
     let pyodide = null;
     let running = false;
     let runToken = 0;
@@ -445,6 +568,8 @@ class Demo(Scene):
     const runButton = document.getElementById("run");
     const stopButton = document.getElementById("stop");
     const assetsPanel = document.getElementById("assets-panel");
+    const projectsPanel = document.getElementById("projects-panel");
+    const projectsList = document.getElementById("projects-list");
     const assetsList = document.getElementById("assets-list");
     const assetInput = document.getElementById("asset-input");
     const assetObjectUrls = new Map();
@@ -452,6 +577,168 @@ class Demo(Scene):
     const assetsDropZone = assetsPanel;
 
     function setStatus(value) { status.textContent = String(value); }
+
+    function renderProjects(projects) {
+      const sorted = [...projects].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      const fragment = document.createDocumentFragment();
+      for (const project of sorted) {
+        const row = document.createElement("div");
+        row.className = "project-item" + (activeProject?.id === project.id ? " active" : "");
+        row.title = "Abrir " + project.name;
+        row.addEventListener("click", () => switchProject(project.id));
+        const info = document.createElement("div");
+        info.className = "project-info";
+        const name = document.createElement("div");
+        name.className = "project-name";
+        name.textContent = project.name || "Proyecto sin nombre";
+        const meta = document.createElement("div");
+        meta.className = "project-meta";
+        const date = project.updatedAt ? new Date(project.updatedAt).toLocaleString() : "Sin guardar";
+        meta.textContent = date;
+        info.append(name, meta);
+        row.appendChild(info);
+        if (project.id === activeProject?.id) {
+          const current = document.createElement("span");
+          current.textContent = "●";
+          current.style.color = "var(--accent)";
+          current.title = "Proyecto actual";
+          row.appendChild(current);
+        }
+        fragment.appendChild(row);
+      }
+      projectsList.replaceChildren(fragment);
+      if (!sorted.length) {
+        const empty = document.createElement("div");
+        empty.className = "project-empty";
+        empty.textContent = "Todavía no hay proyectos. Crea uno para empezar.";
+        projectsList.appendChild(empty);
+      }
+    }
+
+    async function refreshProjects() {
+      try {
+        renderProjects(await getProjects());
+      } catch (error) {
+        console.warn("[projects persistence] No se pudieron listar los proyectos:", error);
+        setStatus("No se pudieron leer los proyectos guardados.");
+      }
+    }
+
+    function persistActiveProject() {
+      if (!activeProject || !editor) return Promise.resolve();
+      const snapshot = { ...activeProject, source: editor.getValue() };
+      activeProject = snapshot;
+      const sequence = ++projectSaveSequence;
+      return saveProject(snapshot).then(() => {
+        if (sequence === projectSaveSequence) {
+          setStatus("Proyecto «" + snapshot.name + "» guardado automáticamente.");
+          refreshProjects();
+        }
+      }).catch(error => {
+        console.warn("[projects persistence] No se pudo guardar el proyecto:", error);
+        setStatus("No se pudo guardar el proyecto; revisa el almacenamiento del navegador.");
+      });
+    }
+
+    function scheduleProjectSave() {
+      if (projectSaveTimeout !== null) clearTimeout(projectSaveTimeout);
+      projectSaveTimeout = setTimeout(() => {
+        projectSaveTimeout = null;
+        saveSource(editor.getValue());
+        persistActiveProject();
+      }, 250);
+    }
+
+    async function switchProject(id) {
+      if (activeProject) await persistActiveProject();
+      const projects = await getProjects();
+      const next = projects.find(project => project.id === id);
+      if (!next) return;
+      activeProject = next;
+      localStorage.setItem(ACTIVE_PROJECT_KEY, next.id);
+      editor.setValue(next.source || "");
+      saveSource(next.source || "");
+      renderProjects(projects);
+      setStatus("Proyecto abierto: " + next.name);
+    }
+
+    async function createProject() {
+      if (activeProject) await persistActiveProject();
+      const name = prompt("Nombre del nuevo proyecto:", "Proyecto nuevo");
+      if (name === null) return;
+      const cleanName = name.trim() || "Proyecto sin nombre";
+      const project = {
+        id: (typeof crypto !== "undefined" && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : "project-" + Date.now() + "-" + Math.random().toString(16).slice(2),
+        name: cleanName,
+        source: DEFAULT_SOURCE,
+        updatedAt: Date.now(),
+      };
+      await saveProject(project);
+      activeProject = project;
+      localStorage.setItem(ACTIVE_PROJECT_KEY, project.id);
+      editor.setValue(project.source);
+      saveSource(project.source);
+      await refreshProjects();
+      setStatus("Proyecto creado: " + project.name);
+    }
+
+    async function renameProject() {
+      if (!activeProject) return;
+      const name = prompt("Nuevo nombre del proyecto:", activeProject.name);
+      if (name === null) return;
+      activeProject.name = name.trim() || activeProject.name;
+      await persistActiveProject();
+      await refreshProjects();
+      setStatus("Proyecto renombrado: " + activeProject.name);
+    }
+
+    async function removeActiveProject() {
+      if (!activeProject) return;
+      const projects = await getProjects();
+      if (projects.length <= 1) {
+        setStatus("Debe quedar al menos un proyecto. Crea otro antes de eliminar este.");
+        return;
+      }
+      if (!confirm("¿Eliminar el proyecto «" + activeProject.name + "»? Esta acción no se puede deshacer.")) return;
+      const removedId = activeProject.id;
+      await deleteProject(removedId);
+      const remaining = (await getProjects()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      activeProject = remaining[0];
+      localStorage.setItem(ACTIVE_PROJECT_KEY, activeProject.id);
+      editor.setValue(activeProject.source || "");
+      saveSource(activeProject.source || "");
+      renderProjects(remaining);
+      setStatus("Proyecto eliminado. Abierto: " + activeProject.name);
+    }
+
+    async function initializeProjects() {
+      let projects = await getProjects();
+      if (!projects.length) {
+        const legacySource = localStorage.getItem(CODE_STORAGE_KEY);
+        const project = {
+          id: (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : "project-" + Date.now() + "-" + Math.random().toString(16).slice(2),
+          name: "Mi primer proyecto",
+          source: legacySource !== null ? legacySource : editor.getValue(),
+          updatedAt: Date.now(),
+        };
+        await saveProject(project);
+        projects = [project];
+      }
+      let selected = null;
+      try {
+        selected = localStorage.getItem(ACTIVE_PROJECT_KEY);
+      } catch (_) {}
+      activeProject = projects.find(project => project.id === selected)
+        || [...projects].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+      localStorage.setItem(ACTIVE_PROJECT_KEY, activeProject.id);
+      editor.setValue(activeProject.source ?? DEFAULT_SOURCE);
+      saveSource(editor.getValue());
+      await refreshProjects();
+    }
     function setLoading(value, message) {
       loading.style.display = value ? "flex" : "none";
       if (message) loadingBox.textContent = message;
@@ -854,8 +1141,38 @@ _editor_scene_token = ${token}`;
       } catch (_) {}
     }
 
+    document.getElementById("projects-toggle").addEventListener("click", () => {
+      projectsPanel.classList.toggle("open");
+      assetsPanel.classList.remove("open");
+      document.getElementById("fonts-panel").classList.remove("open");
+      if (projectsPanel.classList.contains("open")) refreshProjects();
+    });
+    document.getElementById("projects-close").addEventListener("click", () => {
+      projectsPanel.classList.remove("open");
+    });
+    document.getElementById("project-new").addEventListener("click", () => {
+      createProject().catch(error => {
+        console.error("[projects]", error);
+        setStatus("No se pudo crear el proyecto.");
+      });
+    });
+    document.getElementById("project-rename").addEventListener("click", () => {
+      renameProject().catch(error => {
+        console.error("[projects]", error);
+        setStatus("No se pudo renombrar el proyecto.");
+      });
+    });
+    document.getElementById("project-delete").addEventListener("click", () => {
+      removeActiveProject().catch(error => {
+        console.error("[projects]", error);
+        setStatus("No se pudo eliminar el proyecto.");
+      });
+    });
+
     document.getElementById("assets-toggle").addEventListener("click", () => {
       assetsPanel.classList.toggle("open");
+      projectsPanel.classList.remove("open");
+      document.getElementById("fonts-panel").classList.remove("open");
       if (assetsPanel.classList.contains("open")) refreshAssets();
     });
     document.getElementById("asset-close").addEventListener("click", () => {
@@ -950,15 +1267,27 @@ _editor_scene_token = ${token}`;
           bracketPairColorization: { enabled: true },
         });
 
-        let saveCodeTimeout = null;
+        await initializeProjects();
+
         editor.onDidChangeModelContent(() => {
-          if (saveCodeTimeout !== null) clearTimeout(saveCodeTimeout);
-          saveCodeTimeout = setTimeout(() => {
-            saveSource(editor.getValue());
-            saveCodeTimeout = null;
-          }, 250);
+          scheduleProjectSave();
         });
-        window.addEventListener("pagehide", () => saveSource(editor.getValue()));
+        window.addEventListener("pagehide", () => {
+          saveSource(editor.getValue());
+          if (activeProject) {
+            const snapshot = { ...activeProject, source: editor.getValue() };
+            const request = indexedDB.open(ASSET_DB_NAME, ASSET_DB_VERSION);
+            request.onsuccess = () => {
+              const db = request.result;
+              try {
+                const tx = db.transaction(PROJECT_STORE_NAME, "readwrite");
+                tx.objectStore(PROJECT_STORE_NAME).put({ ...snapshot, updatedAt: Date.now() });
+                tx.oncomplete = () => db.close();
+                tx.onerror = () => db.close();
+              } catch (_) { db.close(); }
+            };
+          }
+        });
         window.addEventListener("beforeunload", () => saveSource(editor.getValue()));
 
         setLoading(true, "Cargando backends WASM…");
@@ -1159,6 +1488,7 @@ _editor_scene_token = ${token}`;
         fontsToggle.addEventListener("click", () => {
           fontsPanel.classList.toggle("open");
           assetsPanel.classList.remove("open");
+          projectsPanel.classList.remove("open");
           if (fontsPanel.classList.contains("open")) fontsSearch.focus();
         });
         document.getElementById("fonts-close").addEventListener("click", () =>
