@@ -97,7 +97,7 @@ class Tex(StringMobject):
         delimiter = "`" * (longest + 1)
         command = "mitext" if text_mode else "mitex"
         return (
-            '#import "@preview/mitex:0.2.7": *\\n'
+            '#import "@preview/mitex:0.2.7": *\n'
             '#set page(width: auto, height: auto, margin: 0pt, fill: none)\\n'
             '#set text(size: 10pt, ligatures: false)\\n'
             f'#{command}({delimiter}{content}{delimiter})\\n'
