@@ -387,7 +387,7 @@
         accept="image/*,video/*,audio/*,.svg,.json,.txt,.csv,.ttf,.otf,.woff,.woff2">
     </section>
     <section id="preview-wrap">
-      <div id="preview"><canvas id="manim-canvas"></canvas></div>
+      <div id="preview"><div id="canvas-detached-notice" style="max-width:440px;text-align:center;color:#8e9aae;font:13px/1.6 ui-monospace,monospace">El canvas se renderiza en una ventana independiente.<br>Usa «Abrir canvas» para abrirlo y activar pantalla completa.</div></div>
       <div class="label">Código web generado</div>
       <pre id="web-code"></pre>
       <pre id="errors"></pre>
@@ -399,7 +399,7 @@
   <script type="module">
     import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
 
-    const canvas = document.getElementById("manim-canvas");
+    let canvas = null;
     window.__manimAudioElements = window.__manimAudioElements || new Set();
     window.__manimAudioSources = window.__manimAudioSources || new Map();
 
@@ -460,15 +460,10 @@
     // Keep the render target at true Full HD regardless of the editor preview size.
     // CSS scales it down on screen; captureStream() therefore records 1920x1080.
     function resizeManimCanvas() {
+      if (!canvas) return;
       if (canvas.width !== 1920) canvas.width = 1920;
       if (canvas.height !== 1080) canvas.height = 1080;
     }
-
-    canvas.width = 1920;
-    canvas.height = 1080;
-
-    const canvasResizeObserver = new ResizeObserver(resizeManimCanvas);
-    canvasResizeObserver.observe(document.getElementById("preview"));
 
     let canvasPreviewWindow = null;
 
@@ -492,42 +487,22 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ManimGL — Canvas Full HD</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font:14px system-ui,sans-serif;overflow:hidden}
-body{display:flex;flex-direction:column}#bar{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#111620}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font:14px system-ui,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column}
+#bar{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#111620;flex:none}
 button{border:0;border-radius:6px;padding:8px 13px;background:#2b3342;color:#fff;font-weight:600;cursor:pointer}
-#hint{color:#aab4c5;font-size:12px}#stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
-#mirror{display:block;width:100%;height:100%;object-fit:contain;outline:none;touch-action:none}
-:fullscreen #bar{position:fixed;top:8px;left:8px;z-index:2;background:#111620dd;border-radius:8px;opacity:.35}
+#hint{color:#aab4c5;font-size:12px}
+#stage{flex:1;min-height:0;min-width:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+#manim-canvas{display:block;width:100%;height:100%;object-fit:contain;outline:none;touch-action:none;background:#000}
+:fullscreen #bar{position:fixed;top:8px;left:8px;z-index:2;background:#111620dd;border-radius:8px;opacity:.25}
 :fullscreen #bar:hover{opacity:1}
 </style>
 </head>
 <body>
-<div id="bar"><button id="fullscreen">⛶ Pantalla completa</button><span id="hint">Canvas Full HD · Abre pantalla completa antes de ejecutar la escena en el editor</span></div>
-<div id="stage"><canvas id="mirror" width="1920" height="1080" tabindex="0"></canvas></div>
+<div id="bar"><button id="fullscreen">⛶ Pantalla completa</button><span id="hint">Canvas Full HD · Activa pantalla completa antes de ejecutar</span></div>
+<div id="stage"><canvas id="manim-canvas" width="1920" height="1080" tabindex="0"></canvas></div>
 <script>
-const mirror=document.getElementById("mirror");
-const ctx=mirror.getContext("2d");
-let active=true;
-let lastDrawTime=0;
-const previewFrameInterval=1000/30;
-function draw(timestamp){
-  if(!active)return;
-  // Avoid continuously copying the opener's canvas at display refresh rate:
-  // that can contend with Manim's own frame uploads and produce visible flicker,
-  // especially after entering fullscreen. A steady 30 Hz preview is sufficient
-  // for the mirror; the original canvas and recording remain at their own rate.
-  if(timestamp-lastDrawTime>=previewFrameInterval){
-    try{
-      const source=window.opener?.document.getElementById("manim-canvas");
-      if(source && source.width===1920 && source.height===1080){
-        ctx.drawImage(source,0,0,1920,1080);
-      }
-    }catch(e){}
-    lastDrawTime=timestamp;
-  }
-  requestAnimationFrame(draw);
-}
-requestAnimationFrame(draw);
 document.getElementById("fullscreen").addEventListener("click",async()=>{
   try{
     if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
@@ -535,36 +510,29 @@ document.getElementById("fullscreen").addEventListener("click",async()=>{
     document.getElementById("fullscreen").textContent=document.fullscreenElement?"⛶ Salir de pantalla completa":"⛶ Pantalla completa";
   }catch(e){document.getElementById("hint").textContent="No se pudo activar pantalla completa: "+e.message}
 });
-function forwardPointer(event){
-  const source=window.opener.document.getElementById("manim-canvas");
-  const rect=mirror.getBoundingClientRect(), target=source.getBoundingClientRect();
-  const x=(event.clientX-rect.left)/rect.width, y=(event.clientY-rect.top)/rect.height;
-  const init={bubbles:true,cancelable:true,clientX:target.left+x*target.width,clientY:target.top+y*target.height,
-    button:event.button,buttons:event.buttons,pointerId:event.pointerId||1,pointerType:event.pointerType||"mouse",
-    pressure:event.pressure||0,altKey:event.altKey,ctrlKey:event.ctrlKey,metaKey:event.metaKey,shiftKey:event.shiftKey};
-  try{
-    if(event.type.startsWith("pointer") && window.opener.PointerEvent) source.dispatchEvent(new PointerEvent(event.type,init));
-    else source.dispatchEvent(new MouseEvent(event.type.replace(/^pointer/,"mouse"),init));
-    source.focus();
-  }catch(e){}
-  event.preventDefault();
-}
-["pointerdown","pointerup","pointermove","pointercancel"].forEach(type=>mirror.addEventListener(type,forwardPointer));
-mirror.addEventListener("wheel",event=>{
-  try{window.opener.document.getElementById("manim-canvas").dispatchEvent(new WheelEvent("wheel",{bubbles:true,cancelable:true,deltaX:event.deltaX,deltaY:event.deltaY,deltaMode:event.deltaMode,clientX:event.clientX,clientY:event.clientY,ctrlKey:event.ctrlKey,shiftKey:event.shiftKey}))}catch(e){}
-  event.preventDefault();
-},{passive:false});
-window.addEventListener("keydown",event=>{
-  try{window.opener.dispatchEvent(new KeyboardEvent("keydown",{key:event.key,code:event.code,bubbles:true,cancelable:true,altKey:event.altKey,ctrlKey:event.ctrlKey,metaKey:event.metaKey,shiftKey:event.shiftKey}))}catch(e){}
-});
-window.addEventListener("beforeunload",()=>{active=false});
-<\/script>
+</script>
 </body></html>`);
       popup.document.close();
+      // Use the popup's actual canvas as ManimGL's render target; no frame-copy loop.
+      canvas = popup.document.getElementById("manim-canvas");
+      canvas.width = 1920;
+      canvas.height = 1080;
+      window.__manimCanvasElement = canvas;
+      window.__manimCanvasWindowClosed = () => {
+        if (canvasPreviewWindow === popup) {
+          canvasPreviewWindow = null;
+          canvas = null;
+          window.__manimCanvasElement = null;
+        }
+      };
       popup.addEventListener("beforeunload", () => {
-        if (canvasPreviewWindow === popup) canvasPreviewWindow = null;
+        if (canvasPreviewWindow === popup) {
+          canvasPreviewWindow = null;
+          canvas = null;
+          window.__manimCanvasElement = null;
+        }
       });
-      setStatus("Canvas Full HD abierto en otra ventana. Puedes activar pantalla completa antes de ejecutar.");
+      setStatus("Canvas Full HD desacoplado. El renderizado se ejecutará directamente en la ventana nueva.");
     }
 
 
@@ -1251,7 +1219,11 @@ if not _candidates:
 
 _scene_class = _candidates[-1]
 
-_editor_scene = await run_scene_from_class(_scene_class, "manim-canvas", size=(${canvasWidth}, ${canvasHeight}))
+from js import window
+_canvas_target = window.__manimCanvasElement
+if _canvas_target is None:
+    raise RuntimeError("Abre primero la ventana del canvas con «Abrir canvas».")
+_editor_scene = await run_scene_from_class(_scene_class, _canvas_target, size=(${canvasWidth}, ${canvasHeight}))
 _editor_scene_token = ${token}`;
     }
 
@@ -1267,7 +1239,7 @@ _editor_scene_token = ${token}`;
 
     async function startRecording() {
       if (mediaRecorder && mediaRecorder.state !== "inactive") return;
-      if (!canvas.captureStream || !window.MediaRecorder) {
+      if (!canvas || !canvas.captureStream || !window.MediaRecorder) {
         throw new Error("Este navegador no admite la grabación de vídeo (MediaRecorder/captureStream).");
       }
 
