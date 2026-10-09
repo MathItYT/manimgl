@@ -1268,7 +1268,21 @@ _editor_scene_token = ${token}`;
         }
 
         const requestedFps = Number(recordFpsSelect.value) || 60;
-        stream = canvas.captureStream(requestedFps);
+        // Manual capture: do not emit black/idle frames before ManimGL presents
+        // the first real scene frame. Window.show() requests frames as rendering advances.
+        stream = canvas.captureStream(0);
+        const videoTrack = stream.getVideoTracks()[0];
+        if (!videoTrack || typeof videoTrack.requestFrame !== "function") {
+          throw new Error("Este navegador no admite captura manual de fotogramas del canvas.");
+        }
+        window.__manimCaptureTrack = videoTrack;
+        window.__manimRequestCaptureFrame = () => {
+          const targetCanvas = window.__manimCanvasElement;
+          const view = targetCanvas?.ownerDocument?.defaultView || window;
+          view.requestAnimationFrame(() => {
+            if (mediaRecorder?.state === "recording") videoTrack.requestFrame();
+          });
+        };
         for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
         const mimeType = getRecordingMimeType();
         // 1080p60 needs a much higher bitrate than MediaRecorder's browser default.
@@ -1291,6 +1305,11 @@ _editor_scene_token = ${token}`;
           const error = event.error || new Error("Error durante la grabación.");
           showError(error);
           setStatus("Error al grabar la escena.");
+        });
+        mediaRecorder.addEventListener("start", () => {
+          setStatus(recordMicCheckbox.checked
+            ? "Grabando escena y micrófono…"
+            : "Grabando escena y audio…");
         });
         mediaRecorder.addEventListener("stop", () => {
           const type = mediaRecorder?.mimeType || "video/webm";
@@ -1318,6 +1337,8 @@ _editor_scene_token = ${token}`;
           if (recordingAudioDestination) {
             window.__manimDisconnectRecordingAudio(recordingAudioDestination);
           }
+          if (window.__manimRequestCaptureFrame) window.__manimRequestCaptureFrame = null;
+          window.__manimCaptureTrack = null;
           recordingStream = null;
           recordingMicStream = null;
           recordingMicSource = null;
@@ -1330,19 +1351,27 @@ _editor_scene_token = ${token}`;
           recordStopButton.disabled = true;
           runRecordButton.disabled = !pyodide;
         });
-        mediaRecorder.start(1000);
+        // Do not start the muxer yet: it starts on the first actual ManimGL frame,
+        // avoiding a leading audio-only/black interval in the exported clip.
+        window.__manimStartRecorderOnFirstFrame = () => {
+          if (!mediaRecorder || mediaRecorder.state !== "inactive") return;
+          mediaRecorder.start(1000);
+          window.__manimStartRecorderOnFirstFrame = null;
+          window.__manimRequestCaptureFrame?.();
+        };
         recordButton.disabled = true;
         recordButton.classList.add("recording");
         recordButton.textContent = "● Grabando…";
         recordStopButton.disabled = false;
         runRecordButton.disabled = true;
-        setStatus(recordMicCheckbox.checked
-          ? "Grabando escena y micrófono…"
-          : "Grabando escena y audio…");
+        setStatus("Preparando grabación; comenzará con el primer fotograma…");
       } catch (error) {
         if (stream) for (const track of stream.getTracks()) track.stop();
         if (micStream) for (const track of micStream.getTracks()) track.stop();
         if (destination) window.__manimDisconnectRecordingAudio(destination);
+        window.__manimStartRecorderOnFirstFrame = null;
+        window.__manimRequestCaptureFrame = null;
+        window.__manimCaptureTrack = null;
         if (recordingMicSource && destination) {
           try { recordingMicSource.disconnect(destination); } catch (_) {}
         }
@@ -1400,7 +1429,7 @@ _editor_scene_token = ${token}`;
         // Start MediaRecorder after source transformation and runner construction,
         // immediately before ManimGL begins rendering the scene.
         if (beforeRender) await beforeRender();
-        setStatus("Renderizando escena…");
+        setStatus("Esperando el primer fotograma para iniciar la grabación…");
         await pyodide.runPythonAsync(runnerCode);
         setStatus("Escena terminada.");
       } catch (error) {
