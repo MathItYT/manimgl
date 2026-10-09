@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-import inspect
 import os
 from pathlib import Path
 import re
@@ -116,7 +115,7 @@ def markup_to_svg_pyodide(markup_str: str, justify: bool = False, indent: float 
         markup_str,
         justify,
         indent,
-        alignment,
+        _Alignment(alignment).value,
         -1 if line_width is None else line_width / FRAME_WIDTH * DEFAULT_PIXEL_WIDTH,
     )
     return str(result)
@@ -136,15 +135,15 @@ async def markup_to_svg_pyodide_async(
         )
     from js import window
 
-    result = window.manimPangoTextToSvg(
+    # Use the worker-backed Promise API. Calling the synchronous
+    # manimPangoTextToSvg here blocks Pyodide's main thread, even inside async def.
+    result = await window.manimPangoTextToSvgAsync(
         markup_str,
         justify,
         indent,
-        alignment,
+        _Alignment(alignment).value,
         -1 if line_width is None else line_width / FRAME_WIDTH * DEFAULT_PIXEL_WIDTH,
     )
-    if inspect.isawaitable(result):
-        result = await result
     return str(result)
 
 
