@@ -324,6 +324,13 @@
     <button id="stop" disabled>■ Detener</button>
     <button id="record" class="record" disabled>● Grabar</button>
     <button id="record-stop" disabled>■ Finalizar grabación</button>
+    <label class="toolbar-option" title="Frecuencia de captura del vídeo">
+      FPS
+      <select id="record-fps" aria-label="FPS de grabación">
+        <option value="30">30</option>
+        <option value="60" selected>60</option>
+      </select>
+    </label>
     <label class="toolbar-option" title="Mezcla el micrófono con el audio de la escena">
       <input id="record-mic" type="checkbox">
       Micrófono
@@ -637,6 +644,7 @@ class Demo(Scene):
     const stopButton = document.getElementById("stop");
     const recordButton = document.getElementById("record");
     const recordStopButton = document.getElementById("record-stop");
+    const recordFpsSelect = document.getElementById("record-fps");
     const recordMicCheckbox = document.getElementById("record-mic");
     const assetsPanel = document.getElementById("assets-panel");
     const projectsPanel = document.getElementById("projects-panel");
@@ -1193,7 +1201,8 @@ _editor_scene_token = ${token}`;
           recordingMicSource.connect(destination);
         }
 
-        stream = canvas.captureStream(30);
+        const requestedFps = Number(recordFpsSelect.value) || 60;
+        stream = canvas.captureStream(requestedFps);
         for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
         const mimeType = getRecordingMimeType();
         mediaRecorder = mimeType
@@ -1283,12 +1292,13 @@ _editor_scene_token = ${token}`;
       if (!pyodide || running) return;
       try {
         await startRecording();
+        // Recording is intentionally independent from scene execution:
+        // keep capturing after construct() finishes so users can interact
+        // with the live scene and stop only when they press "Finalizar grabación".
         await runScene();
       } catch (error) {
         showError(error);
         setStatus("No se pudo iniciar la grabación: " + String(error?.message || error));
-      } finally {
-        if (mediaRecorder && mediaRecorder.state !== "inactive") stopRecording();
       }
     }
 
