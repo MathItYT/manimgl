@@ -333,7 +333,7 @@
     const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
     const WHEEL_MANIFEST = "./browser_wasm/dist/wheels/wheels.json";
 
-    const initialSource = `from manimlib import *
+    const DEFAULT_SOURCE = `from manimlib import *
 
 class Demo(Scene):
     def construct(self):
@@ -354,6 +354,83 @@ class Demo(Scene):
         self.play(ShowCreation(plane))
         self.wait(1)
 `;
+    const CODE_STORAGE_KEY = "manimgl-editor:last-code:v1";
+    const ASSET_DB_NAME = "manimgl-editor-assets";
+    const ASSET_DB_VERSION = 1;
+    const ASSET_STORE_NAME = "assets";
+
+    function getSavedSource() {
+      try {
+        const saved = localStorage.getItem(CODE_STORAGE_KEY);
+        return saved && saved.trim() ? saved : DEFAULT_SOURCE;
+      } catch (error) {
+        console.warn("[editor persistence] No se pudo leer el código guardado:", error);
+        return DEFAULT_SOURCE;
+      }
+    }
+
+    function saveSource(source) {
+      try {
+        localStorage.setItem(CODE_STORAGE_KEY, source);
+      } catch (error) {
+        console.warn("[editor persistence] No se pudo guardar el código:", error);
+      }
+    }
+
+    function openAssetDatabase() {
+      return new Promise((resolve, reject) => {
+        if (!("indexedDB" in window)) {
+          reject(new Error("IndexedDB no está disponible en este navegador."));
+          return;
+        }
+        const request = indexedDB.open(ASSET_DB_NAME, ASSET_DB_VERSION);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(ASSET_STORE_NAME)) {
+            db.createObjectStore(ASSET_STORE_NAME, { keyPath: "name" });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("No se pudo abrir IndexedDB."));
+      });
+    }
+
+    function assetDbRequest(mode, action) {
+      return openAssetDatabase().then(db => new Promise((resolve, reject) => {
+        const tx = db.transaction(ASSET_STORE_NAME, mode);
+        const store = tx.objectStore(ASSET_STORE_NAME);
+        let request;
+        try {
+          request = action(store);
+        } catch (error) {
+          db.close();
+          reject(error);
+          return;
+        }
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("Error en IndexedDB."));
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error || new Error("Error guardando assets."));
+        };
+      }));
+    }
+
+    function persistAsset(name, bytes) {
+      const copy = bytes instanceof Uint8Array ? bytes.slice().buffer : bytes;
+      return assetDbRequest("readwrite", store =>
+        store.put({ name, bytes: copy, updatedAt: Date.now() })
+      );
+    }
+
+    function loadPersistedAssets() {
+      return assetDbRequest("readonly", store => store.getAll());
+    }
+
+    function deletePersistedAsset(name) {
+      return assetDbRequest("readwrite", store => store.delete(name));
+    }
 
     let editor;
     let pyodide = null;
@@ -563,6 +640,9 @@ class Demo(Scene):
           pyodide.FS.unlink(path);
           removeAssetObjectUrl(path);
           assetFontMetadata.delete(path);
+          deletePersistedAsset(name).catch(error =>
+            console.warn("[asset persistence] No se pudo eliminar el asset guardado:", name, error)
+          );
           refreshAssets();
         });
         actions.append(insertButton, deleteButton);
@@ -595,7 +675,14 @@ class Demo(Scene):
         if (!file || typeof file.arrayBuffer !== "function") continue;
         const bytes = new Uint8Array(await file.arrayBuffer());
         const path = uniqueAssetPath(file.name);
+        const storedName = path.slice(ASSET_DIR.length + 1);
         pyodide.FS.writeFile(path, bytes);
+        try {
+          await persistAsset(storedName, bytes);
+        } catch (error) {
+          console.warn("[asset persistence] No se pudo guardar el asset:", storedName, error);
+          setStatus("Asset importado, pero no se pudo guardar de forma persistente: " + storedName);
+        }
 
         const extension = file.name.toLowerCase().split(".").pop();
         if (["ttf", "otf", "woff", "woff2"].includes(extension)) {
@@ -849,7 +936,7 @@ _editor_scene_token = ${token}`;
         setLoading(true, "Cargando Monaco…");
         await loadMonaco();
         editor = monaco.editor.create(document.getElementById("editor"), {
-          value: initialSource,
+          value: getSavedSource(),
           language: "python",
           theme: "vs-dark",
           automaticLayout: true,
@@ -862,6 +949,17 @@ _editor_scene_token = ${token}`;
           wordWrap: "off",
           bracketPairColorization: { enabled: true },
         });
+
+        let saveCodeTimeout = null;
+        editor.onDidChangeModelContent(() => {
+          if (saveCodeTimeout !== null) clearTimeout(saveCodeTimeout);
+          saveCodeTimeout = setTimeout(() => {
+            saveSource(editor.getValue());
+            saveCodeTimeout = null;
+          }, 250);
+        });
+        window.addEventListener("pagehide", () => saveSource(editor.getValue()));
+        window.addEventListener("beforeunload", () => saveSource(editor.getValue()));
 
         setLoading(true, "Cargando backends WASM…");
         await initializeBrowserWasm();
@@ -1124,11 +1222,34 @@ await micropip.install(${JSON.stringify(new URL(manifest.wgpu, wheelBase).href)}
 await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).href)})
 `);
 
+        setLoading(true, "Restaurando assets guardados…");
+        ensureAssetDir();
+        try {
+          const savedAssets = await loadPersistedAssets();
+          for (const savedAsset of savedAssets) {
+            if (!savedAsset || typeof savedAsset.name !== "string" || !savedAsset.bytes) continue;
+            const path = ASSET_DIR + "/" + savedAsset.name;
+            const bytes = new Uint8Array(savedAsset.bytes);
+            pyodide.FS.writeFile(path, bytes);
+            const extension = savedAsset.name.toLowerCase().split(".").pop();
+            if (["ttf", "otf", "woff", "woff2"].includes(extension)) {
+              try {
+                const metadata = await readFontMetadata(path);
+                await registerFontAsset(path);
+                assetFontMetadata.set(path, metadata);
+              } catch (error) {
+                console.warn("[asset persistence] No se pudo restaurar la fuente:", savedAsset.name, error);
+              }
+            }
+          }
+        } catch (error) {
+          console.warn("[asset persistence] No se pudieron restaurar los assets:", error);
+          setStatus("No se pudieron restaurar los assets guardados; puedes importarlos de nuevo.");
+        }
         setLoading(false);
         runButton.disabled = false;
-        ensureAssetDir();
         refreshAssets();
-        setStatus("Listo. Ejecuta la escena con ▶ Ejecutar.");
+        setStatus("Listo. Código y assets se guardan automáticamente en este navegador.");
         await transformOnly();
       } catch (error) {
         showError(error);
