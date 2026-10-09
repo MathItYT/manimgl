@@ -71,6 +71,7 @@ class Tex(StringMobject):
             use_labelled_svg=use_labelled_svg,
             isolate=isolate,
             height=None,
+            stroke_width=None,
             **kwargs
         )
 
