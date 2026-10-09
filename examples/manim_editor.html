@@ -816,38 +816,125 @@ _editor_scene_token = ${token}`;
         const pango = await import("./browser_wasm/dist/pango_text_loader.js");
         await pango.initializePangoText();
 
-        setStatus(
-          "Loading browser font...",
-        );
+        setStatus("Cargando catálogo tipográfico para Pango y Typst…");
 
-        const fontUrl =
-          "https://raw.githubusercontent.com/openmaptiles/fonts/refs/heads/master/roboto/Roboto-Regular.ttf";
+        // Cada archivo se registra en los dos motores: Pango (texto) y Typst (Tex).
+        // Los archivos variables incluyen sus pesos; los estilos itálicos se cargan
+        // como archivos separados cuando la familia los publica.
+        const FONT_CATALOG = [
+          // New Computer Modern: texto, sans, mono y variantes matemáticas.
+          ["NewCM10-Regular.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM10-Regular.otf"],
+          ["NewCM10-Book.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM10-Book.otf"],
+          ["NewCM10-Italic.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM10-Italic.otf"],
+          ["NewCM10-Bold.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM10-Bold.otf"],
+          ["NewCM10-BoldItalic.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM10-BoldItalic.otf"],
+          ["NewCM08-Regular.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM08-Regular.otf"],
+          ["NewCM08-Book.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM08-Book.otf"],
+          ["NewCM08-Italic.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM08-Italic.otf"],
+          ["NewCM10Math-Regular.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCM10Math-Regular.otf"],
+          ["NewCMSans10-Regular.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Regular.otf"],
+          ["NewCMSans10-Bold.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Bold.otf"],
+          ["NewCMSans10-Oblique.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Oblique.otf"],
+          ["NewCMMono10-Regular.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Regular.otf"],
+          ["NewCMMono10-Bold.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Bold.otf"],
+          ["NewCMMono10-Oblique.otf", "https://mirrors.ibiblio.org/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Oblique.otf"],
 
-        const fontResponse =
-          await fetch(
-            fontUrl,
-          );
+          // Familias tipográficas variables (los ejes de peso suelen abarcar 100–900).
+          ["Inter[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"],
+          ["Inter-Italic[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf"],
+          ["JetBrainsMono[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf"],
+          ["JetBrainsMono-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono-Italic%5Bwght%5D.ttf"],
+          ["Roboto[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf"],
+          ["Roboto-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto-Italic%5Bwdth%2Cwght%5D.ttf"],
+          ["OpenSans[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf"],
+          ["OpenSans-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/opensans/OpenSans-Italic%5Bwdth%2Cwght%5D.ttf"],
+          ["Montserrat[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf"],
+          ["Montserrat-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Italic%5Bwght%5D.ttf"],
+          ["Oswald[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf"],
+          ["Merriweather[opsz,wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/Merriweather%5Bopsz%2Cwdth%2Cwght%5D.ttf"],
+          ["PlayfairDisplay[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bopsz%2Cwght%5D.ttf"],
+          ["SourceSans3[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/SourceSans3%5Bopsz%2Cwght%5D.ttf"],
+          ["SourceSans3-Italic[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/SourceSans3-Italic%5Bopsz%2Cwght%5D.ttf"],
+          ["SourceSerif4[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4%5Bopsz%2Cwght%5D.ttf"],
+          ["SourceSerif4-Italic[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4-Italic%5Bopsz%2Cwght%5D.ttf"],
+          ["IBMPlexSans[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans%5Bwdth%2Cwght%5D.ttf"],
+          ["IBMPlexSans-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans-Italic%5Bwdth%2Cwght%5D.ttf"],
+          ["IBMPlexMono[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono%5Bwght%5D.ttf"],
+          ["IBMPlexMono-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Italic%5Bwght%5D.ttf"],
+          ["IBMPlexSerif[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif%5Bwght%5D.ttf"],
+          ["FiraSans[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans%5Bwght%5D.ttf"],
+          ["FiraMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Regular.ttf"],
+          ["FiraMono-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Medium.ttf"],
+          ["FiraMono-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Bold.ttf"],
+          ["NotoSans[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf"],
+          ["NotoSans-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans-Italic%5Bwdth%2Cwght%5D.ttf"],
+          ["NotoSerif[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserif/NotoSerif%5Bwdth%2Cwght%5D.ttf"],
+          ["NotoSerif-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserif/NotoSerif-Italic%5Bwdth%2Cwght%5D.ttf"],
+          ["Ubuntu[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ubuntu/Ubuntu%5Bwght%5D.ttf"],
+          ["Ubuntu-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ubuntu/Ubuntu-Italic%5Bwght%5D.ttf"],
+          ["WorkSans[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/worksans/WorkSans%5Bwdth%2Cwght%5D.ttf"],
+          ["DMSans[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/DMSans%5Bopsz%2Cwght%5D.ttf"],
+          ["DMSans-Italic[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/DMSans-Italic%5Bopsz%2Cwght%5D.ttf"],
+          ["DMMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Regular.ttf"],
+          ["DMMono-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Medium.ttf"],
+          ["SpaceGrotesk[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf"],
+          ["SpaceMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Regular.ttf"],
+          ["SpaceMono-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Bold.ttf"],
+          ["Manrope[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf"],
+          ["PlusJakartaSans[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/plusjakartasans/PlusJakartaSans%5Bwght%5D.ttf"],
+          ["Barlow[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow%5Bwdth%2Cwght%5D.ttf"],
+          ["Inconsolata[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/Inconsolata%5Bwdth%2Cwght%5D.ttf"],
+          ["Nunito[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito%5Bwght%5D.ttf"],
+          ["Raleway[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/raleway/Raleway%5Bwght%5D.ttf"],
+          ["Rubik[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/rubik/Rubik%5Bwght%5D.ttf"],
+          ["Archivo[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/archivo/Archivo%5Bwdth%2Cwght%5D.ttf"],
+          ["Sora[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sora/Sora%5Bwght%5D.ttf"],
+          ["Lexend[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/Lexend%5Bwght%5D.ttf"],
+          ["Cabin[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/cabin/Cabin%5Bwght%5D.ttf"],
+          ["LibreBaskerville[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville%5Bwght%5D.ttf"],
+          ["RobotoSlab[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/robotoslab/RobotoSlab%5Bwght%5D.ttf"],
+          ["AtkinsonHyperlegibleNext[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegibleNext%5Bwght%5D.ttf"],
+          ["UbuntuMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ubuntumono/UbuntuMono-Regular.ttf"],
+          ["UbuntuMono-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ubuntumono/UbuntuMono-Bold.ttf"],
+        ];
 
-        if (!fontResponse.ok) {
-          throw new Error(
-            "Failed to load browser font: " +
-              fontResponse.status,
-          );
+        async function registerCatalogFont(fileName, url) {
+          const response = await fetch(url, { cache: "force-cache" });
+          if (!response.ok) {
+            throw new Error("HTTP " + response.status + " al cargar " + fileName);
+          }
+          const bytes = await response.arrayBuffer();
+          const pangoFont = await window.manimRegisterPangoFont(bytes, fileName);
+          const compiler = window.manimTypstCompiler;
+          if (!compiler || typeof compiler.addFonts !== "function") {
+            throw new Error("El compilador Typst del navegador no expone addFonts()");
+          }
+          const typstBytes = new Uint8Array(bytes);
+          await compiler.addFonts(typstBytes);
+          return pangoFont;
         }
 
-        const fontBytes =
-          await fontResponse.arrayBuffer();
-
-        const registeredFont =
-          await window.manimRegisterPangoFont(
-            fontBytes,
-            "Roboto-Regular.ttf",
-          );
-
-        window.manimBrowserFontFamily =
-          String(
-            registeredFont.family,
-          );
+        let fontsLoaded = 0;
+        const fontFailures = [];
+        // Carga secuencial para no saturar la memoria WASM del navegador.
+        for (const [fileName, url] of FONT_CATALOG) {
+          try {
+            const registered = await registerCatalogFont(fileName, url);
+            fontsLoaded++;
+            window.manimBrowserFontFamily = String(registered.family);
+          } catch (error) {
+            fontFailures.push(fileName + ": " + String(error.message || error));
+            console.warn("[font catalog]", fileName, error);
+          }
+          if (fontsLoaded % 5 === 0) {
+            setStatus("Fuentes registradas en Pango y Typst: " + fontsLoaded + "/" + FONT_CATALOG.length);
+          }
+        }
+        if (!fontsLoaded) {
+          throw new Error("No se pudo registrar ninguna fuente en Pango y Typst.");
+        }
+        console.info("Catálogo de fuentes:", fontsLoaded, "cargadas;", fontFailures.length, "fallidas.", fontFailures);
+        setStatus("Fuentes listas: " + fontsLoaded + "/" + FONT_CATALOG.length + " en Pango y Typst.");
 
         setLoading(true, "Cargando Pyodide…");
         const { loadPyodide } = await import(PYODIDE_URL);
