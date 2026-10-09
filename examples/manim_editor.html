@@ -832,6 +832,7 @@ _editor_scene_token = ${token}`;
           const extension = fileName.toLowerCase().split(".").pop();
           if (extension === "ttf" &&
               !(signatureText.startsWith("00010000") ||
+                signatureText.startsWith("4f54544f") ||
                 signatureText.startsWith("74727565") ||
                 signatureText.startsWith("74797031") ||
                 signatureText.startsWith("74746366"))) {
