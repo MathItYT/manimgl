@@ -1421,6 +1421,8 @@ class MotionBlur(PostProcessEffect):
         # movimiento después de varios frames estáticos.
         self._smoothed_strength = 0.0
         self._strength_smoothing = 0.28
+        self._strength_release = 0.45
+        self._was_moving = False
 
         self._initialized = False
 
@@ -1446,6 +1448,7 @@ class MotionBlur(PostProcessEffect):
 
         self._cached_strength = 0.0
         self._smoothed_strength = 0.0
+        self._was_moving = False
 
     # ==================================================================
     # WORLD POSITION
@@ -2229,7 +2232,22 @@ class MotionBlur(PostProcessEffect):
         # one-frame displacement. Ease the blur in and out instead of
         # feeding that value directly to the shader.
         #
-        alpha = self._strength_smoothing
+        # Suppress the onset impulse: a large first displacement after
+        # a static frame must not immediately create a full-strength blur.
+        moving_now = magnitude > 1e-8
+        if moving_now and not self._was_moving:
+            active_strength = min(
+                active_strength,
+                self.max_blur * 0.15,
+            )
+
+        # Use separate attack/release rates. The onset is capped above,
+        # then sustained motion can ramp up normally; stopping fades out.
+        alpha = (
+            self._strength_smoothing
+            if active_strength > self._smoothed_strength
+            else self._strength_release
+        )
         self._smoothed_strength += alpha * (
             active_strength - self._smoothed_strength
         )
@@ -2237,6 +2255,7 @@ class MotionBlur(PostProcessEffect):
             max(self._smoothed_strength, 0.0),
             self.max_blur,
         )
+        self._was_moving = moving_now
 
         # ==============================================================
         # COMMIT FRAME
