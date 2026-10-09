@@ -1357,7 +1357,6 @@ _editor_scene_token = ${token}`;
           if (!mediaRecorder || mediaRecorder.state !== "inactive") return;
           mediaRecorder.start(1000);
           window.__manimStartRecorderOnFirstFrame = null;
-          window.__manimRequestCaptureFrame?.();
         };
         recordButton.disabled = true;
         recordButton.classList.add("recording");
