@@ -823,15 +823,47 @@ _editor_scene_token = ${token}`;
           if (!response.ok) {
             throw new Error("HTTP " + response.status + " al cargar " + fileName);
           }
+
           const bytes = await response.arrayBuffer();
-          const pangoFont = await window.manimRegisterPangoFont(bytes, fileName);
-          const compiler = window.manimTypstCompiler;
-          if (!compiler || typeof compiler.addFonts !== "function") {
-            throw new Error("El compilador Typst del navegador no expone addFonts()");
+          const signature = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
+          const signatureText = Array.from(signature, byte =>
+            byte.toString(16).padStart(2, "0")
+          ).join("");
+          const extension = fileName.toLowerCase().split(".").pop();
+          if (extension === "ttf" &&
+              !(signatureText.startsWith("00010000") ||
+                signatureText.startsWith("74727565") ||
+                signatureText.startsWith("74797031") ||
+                signatureText.startsWith("74746366"))) {
+            throw new Error("El archivo .ttf no tiene una firma TrueType válida (firma: " + signatureText + ")");
           }
-          const typstBytes = new Uint8Array(bytes);
-          await compiler.addFonts(typstBytes);
-          return pangoFont;
+
+          const result = { name: fileName, pango: null, typst: false, errors: [] };
+
+          // Registrar cada motor por separado: un fallo de Pango no debe impedir
+          // que Typst reciba el mismo TTF, ni al revés.
+          try {
+            result.pango = await window.manimRegisterPangoFont(bytes.slice(0), fileName);
+          } catch (error) {
+            result.errors.push("Pango: " + String(error?.message || error));
+          }
+
+          try {
+            const compiler = window.manimTypstCompiler;
+            if (!compiler || typeof compiler.addFonts !== "function") {
+              throw new Error("El compilador Typst del navegador no expone addFonts()");
+            }
+            // addFonts es variádico; conservar esta forma también para fuentes TTF.
+            await compiler.addFonts(...[new Uint8Array(bytes.slice(0))]);
+            result.typst = true;
+          } catch (error) {
+            result.errors.push("Typst: " + String(error?.message || error));
+          }
+
+          if (!result.pango && !result.typst) {
+            throw new Error(result.errors.join(" | ") || "Ningún motor aceptó la fuente");
+          }
+          return result;
         }
 
         const fontManifestUrl = new URL("./fonts/fonts.json", document.baseURI);
@@ -850,30 +882,51 @@ _editor_scene_token = ${token}`;
           throw new Error("fonts/fonts.json no contiene fuentes disponibles.");
         }
 
+        let pangoLoaded = 0;
+        let typstLoaded = 0;
         let fontsLoaded = 0;
         const fontFailures = [];
+        const engineFailures = [];
         // Solo se solicitan archivos enumerados en fonts/fonts.json y alojados junto al editor.
         // La carga secuencial evita saturar la memoria WASM del navegador.
-        for (const font of availableFonts) {
+        for (let index = 0; index < availableFonts.length; index++) {
+          const font = availableFonts[index];
           const fileName = font.fileName || font.name;
           const url = new URL(font.url, fontManifestUrl).href;
           try {
-            const registered = await registerCatalogFont(fileName, url);
-            fontsLoaded++;
-            window.manimBrowserFontFamily = String(registered.family);
+            const result = await registerCatalogFont(fileName, url);
+            if (result.pango) {
+              pangoLoaded++;
+              window.manimBrowserFontFamily = String(result.pango.family);
+            }
+            if (result.typst) typstLoaded++;
+            if (result.pango || result.typst) fontsLoaded++;
+            if (result.errors.length) {
+              engineFailures.push(fileName + ": " + result.errors.join(" | "));
+            }
           } catch (error) {
-            fontFailures.push(fileName + ": " + String(error.message || error));
+            fontFailures.push(fileName + ": " + String(error?.message || error));
             console.warn("[font catalog]", fileName, error);
           }
-          if (fontsLoaded % 5 === 0 || fontsLoaded === availableFonts.length) {
-            setStatus("Fuentes registradas en Pango y Typst: " + fontsLoaded + "/" + availableFonts.length);
+          if ((index + 1) % 5 === 0 || index + 1 === availableFonts.length) {
+            setStatus("Fuentes: Pango " + pangoLoaded + ", Typst " + typstLoaded + " / " + availableFonts.length);
           }
         }
         if (!fontsLoaded) {
           throw new Error("No se pudo registrar ninguna fuente alojada en fonts/.");
         }
-        console.info("Fuentes locales:", fontsLoaded, "cargadas;", fontFailures.length, "fallidas.", fontFailures);
-        setStatus("Fuentes listas: " + fontsLoaded + "/" + availableFonts.length + " en Pango y Typst.");
+        console.info("Fuentes locales:", {
+          disponibles: availableFonts.length,
+          registradasEnPango: pangoLoaded,
+          registradasEnTypst: typstLoaded,
+          fallidasEnAmbos: fontFailures,
+          fallidasEnUnMotor: engineFailures,
+        });
+        setStatus("Fuentes listas: Pango " + pangoLoaded + "/" + availableFonts.length +
+          ", Typst " + typstLoaded + "/" + availableFonts.length + ".");
+        if (fontFailures.length || engineFailures.length) {
+          console.warn("[font catalog] Fuentes con errores:", { fontFailures, engineFailures });
+        }
 
         setLoading(true, "Cargando Pyodide…");
         const { loadPyodide } = await import(PYODIDE_URL);
