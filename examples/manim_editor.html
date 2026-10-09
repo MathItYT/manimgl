@@ -243,9 +243,6 @@
   </div>
   <div id="loading"><div id="loading-box">Cargando…</div></div>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js"></script>
   <script type="module">
     import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
@@ -821,307 +818,6 @@ _editor_scene_token = ${token}`;
         // Cada archivo se registra en los dos motores: Pango (texto) y Typst (Tex).
         // Los archivos variables incluyen sus pesos; los estilos itálicos se cargan
         // como archivos separados cuando la familia los publica.
-        const FONT_CATALOG = [
-          // New Computer Modern: URLs raw de GitHub cuando se verificó que el archivo existe;
-          // las variantes restantes usan el mirror CTAN listado y verificado antes del cambio.
-          ["NewCM08-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-Book.otf"],
-          ["NewCM08-BookItalic.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-BookItalic.otf"],
-          ["NewCM08-Italic.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-Italic.otf"],
-          ["NewCM08-Regular.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-Regular.otf"],
-          ["NewCM08Devanagari-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08Devanagari-Book.otf"],
-          ["NewCM08Devanagari-Regular.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08Devanagari-Regular.otf"],
-          ["NewCM10-Bold.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Bold.otf"],
-          ["NewCM10-BoldItalic.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-BoldItalic.otf"],
-          ["NewCM10-Book.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Book.otf"],
-          ["NewCM10-BookItalic.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-BookItalic.otf"],
-          ["NewCM10-Italic.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Italic.otf"],
-          ["NewCM10-Regular.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Regular.otf"],
-          ["NewCM10Devanagari-Bold.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10Devanagari-Bold.otf"],
-          ["NewCM10Devanagari-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10Devanagari-Book.otf"],
-          ["NewCM10Devanagari-Regular.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10Devanagari-Regular.otf"],
-          ["NewCMMath-Bold.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Bold.otf"],
-          ["NewCMMath-Book.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Book.otf"],
-          ["NewCMMath-Regular.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Regular.otf"],
-          ["NewCMMono10-Bold.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Bold.otf"],
-          ["NewCMMono10-BoldOblique.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-BoldOblique.otf"],
-          ["NewCMMono10-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Book.otf"],
-          ["NewCMMono10-BookItalic.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-BookItalic.otf"],
-          ["NewCMMono10-Italic.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Italic.otf"],
-          ["NewCMMono10-Regular.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Regular.otf"],
-          ["NewCMSans08-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-Book.otf"],
-          ["NewCMSans08-BookOblique.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-BookOblique.otf"],
-          ["NewCMSans08-Oblique.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-Oblique.otf"],
-          ["NewCMSans08-Regular.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-Regular.otf"],
-          ["NewCMSans10-Bold.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Bold.otf"],
-          ["NewCMSans10-BoldOblique.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-BoldOblique.otf"],
-          ["NewCMSans10-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Book.otf"],
-          ["NewCMSans10-BookOblique.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-BookOblique.otf"],
-          ["NewCMSans10-Oblique.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Oblique.otf"],
-          ["NewCMSans10-Regular.otf", "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Regular.otf"],
-          ["NewCMSansMath-Regular.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSansMath-Regular.otf"],
-          ["NewCMUncial08-Bold.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial08-Bold.otf"],
-          ["NewCMUncial08-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial08-Book.otf"],
-          ["NewCMUncial08-Regular.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial08-Regular.otf"],
-          ["NewCMUncial10-Bold.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial10-Bold.otf"],
-          ["NewCMUncial10-Book.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial10-Book.otf"],
-          ["NewCMUncial10-Regular.otf", "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial10-Regular.otf"],
-
-          // JetBrains Mono: todos los pesos estáticos disponibles y sus cursivas, verificados
-          // contra el directorio fonts/ttf del repositorio oficial.
-          ["JetBrainsMono-Thin.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Thin.ttf"],
-          ["JetBrainsMono-ThinItalic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ThinItalic.ttf"],
-          ["JetBrainsMono-ExtraLight.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraLight.ttf"],
-          ["JetBrainsMono-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraLightItalic.ttf"],
-          ["JetBrainsMono-Light.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Light.ttf"],
-          ["JetBrainsMono-LightItalic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-LightItalic.ttf"],
-          ["JetBrainsMono-Regular.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Regular.ttf"],
-          ["JetBrainsMono-Italic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Italic.ttf"],
-          ["JetBrainsMono-Medium.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Medium.ttf"],
-          ["JetBrainsMono-MediumItalic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-MediumItalic.ttf"],
-          ["JetBrainsMono-SemiBold.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-SemiBold.ttf"],
-          ["JetBrainsMono-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-SemiBoldItalic.ttf"],
-          ["JetBrainsMono-Bold.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Bold.ttf"],
-          ["JetBrainsMono-BoldItalic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-BoldItalic.ttf"],
-          ["JetBrainsMono-ExtraBold.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraBold.ttf"],
-          ["JetBrainsMono-ExtraBoldItalic.ttf", "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraBoldItalic.ttf"],
-
-          // Catálogo ampliado de Google Fonts. Cada ruta se obtiene del árbol Git verificado.
-          ["FiraSans-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Black.ttf"],
-          ["FiraSans-BlackItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-BlackItalic.ttf"],
-          ["FiraSans-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Bold.ttf"],
-          ["FiraSans-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-BoldItalic.ttf"],
-          ["FiraSans-ExtraBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraBold.ttf"],
-          ["FiraSans-ExtraBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraBoldItalic.ttf"],
-          ["FiraSans-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraLight.ttf"],
-          ["FiraSans-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraLightItalic.ttf"],
-          ["FiraSans-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Italic.ttf"],
-          ["FiraSans-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Light.ttf"],
-          ["FiraSans-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-LightItalic.ttf"],
-          ["FiraSans-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Medium.ttf"],
-          ["FiraSans-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-MediumItalic.ttf"],
-          ["FiraSans-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Regular.ttf"],
-          ["FiraSans-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-SemiBold.ttf"],
-          ["FiraSans-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-SemiBoldItalic.ttf"],
-          ["FiraSans-Thin.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Thin.ttf"],
-          ["FiraSans-ThinItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ThinItalic.ttf"],
-          ["Lato-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Black.ttf"],
-          ["Lato-BlackItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-BlackItalic.ttf"],
-          ["Lato-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Bold.ttf"],
-          ["Lato-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-BoldItalic.ttf"],
-          ["Lato-ExtraBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraBold.ttf"],
-          ["Lato-ExtraBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraBoldItalic.ttf"],
-          ["Lato-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraLight.ttf"],
-          ["Lato-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraLightItalic.ttf"],
-          ["Lato-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Italic.ttf"],
-          ["Lato-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Light.ttf"],
-          ["Lato-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-LightItalic.ttf"],
-          ["Lato-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Medium.ttf"],
-          ["Lato-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-MediumItalic.ttf"],
-          ["Lato-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Regular.ttf"],
-          ["Lato-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-SemiBold.ttf"],
-          ["Lato-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-SemiBoldItalic.ttf"],
-          ["Lato-Thin.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Thin.ttf"],
-          ["Lato-ThinItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ThinItalic.ttf"],
-          ["Barlow-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Black.ttf"],
-          ["Barlow-BlackItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-BlackItalic.ttf"],
-          ["Barlow-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Bold.ttf"],
-          ["Barlow-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-BoldItalic.ttf"],
-          ["Barlow-ExtraBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraBold.ttf"],
-          ["Barlow-ExtraBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraBoldItalic.ttf"],
-          ["Barlow-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraLight.ttf"],
-          ["Barlow-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraLightItalic.ttf"],
-          ["Barlow-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Italic.ttf"],
-          ["Barlow-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Light.ttf"],
-          ["Barlow-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-LightItalic.ttf"],
-          ["Barlow-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Medium.ttf"],
-          ["Barlow-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-MediumItalic.ttf"],
-          ["Barlow-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Regular.ttf"],
-          ["Barlow-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-SemiBold.ttf"],
-          ["Barlow-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-SemiBoldItalic.ttf"],
-          ["Barlow-Thin.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Thin.ttf"],
-          ["Barlow-ThinItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ThinItalic.ttf"],
-          ["IBMPlexMono-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Bold.ttf"],
-          ["IBMPlexMono-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-BoldItalic.ttf"],
-          ["IBMPlexMono-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-ExtraLight.ttf"],
-          ["IBMPlexMono-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-ExtraLightItalic.ttf"],
-          ["IBMPlexMono-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Italic.ttf"],
-          ["IBMPlexMono-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Light.ttf"],
-          ["IBMPlexMono-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-LightItalic.ttf"],
-          ["IBMPlexMono-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Medium.ttf"],
-          ["IBMPlexMono-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-MediumItalic.ttf"],
-          ["IBMPlexMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf"],
-          ["IBMPlexMono-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-SemiBold.ttf"],
-          ["IBMPlexMono-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-SemiBoldItalic.ttf"],
-          ["IBMPlexMono-Thin.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Thin.ttf"],
-          ["IBMPlexMono-ThinItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-ThinItalic.ttf"],
-          ["IBMPlexSerif-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Bold.ttf"],
-          ["IBMPlexSerif-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-BoldItalic.ttf"],
-          ["IBMPlexSerif-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-ExtraLight.ttf"],
-          ["IBMPlexSerif-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-ExtraLightItalic.ttf"],
-          ["IBMPlexSerif-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Italic.ttf"],
-          ["IBMPlexSerif-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Light.ttf"],
-          ["IBMPlexSerif-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-LightItalic.ttf"],
-          ["IBMPlexSerif-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Medium.ttf"],
-          ["IBMPlexSerif-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-MediumItalic.ttf"],
-          ["IBMPlexSerif-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Regular.ttf"],
-          ["IBMPlexSerif-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-SemiBold.ttf"],
-          ["IBMPlexSerif-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-SemiBoldItalic.ttf"],
-          ["IBMPlexSerif-Thin.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Thin.ttf"],
-          ["IBMPlexSerif-ThinItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-ThinItalic.ttf"],
-          ["DMMono-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Italic.ttf"],
-          ["DMMono-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Light.ttf"],
-          ["DMMono-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-LightItalic.ttf"],
-          ["DMMono-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Medium.ttf"],
-          ["DMMono-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-MediumItalic.ttf"],
-          ["DMMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Regular.ttf"],
-          ["SpaceMono-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Bold.ttf"],
-          ["SpaceMono-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-BoldItalic.ttf"],
-          ["SpaceMono-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Italic.ttf"],
-          ["SpaceMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Regular.ttf"],
-          ["PT_Sans-Web-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-Bold.ttf"],
-          ["PT_Sans-Web-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-BoldItalic.ttf"],
-          ["PT_Sans-Web-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-Italic.ttf"],
-          ["PT_Sans-Web-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-Regular.ttf"],
-          ["PT_Serif-Web-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Bold.ttf"],
-          ["PT_Serif-Web-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-BoldItalic.ttf"],
-          ["PT_Serif-Web-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Italic.ttf"],
-          ["PT_Serif-Web-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Regular.ttf"],
-          ["FiraMono-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Bold.ttf"],
-          ["FiraMono-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Medium.ttf"],
-          ["FiraMono-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Regular.ttf"],
-          ["Inconsolata[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/Inconsolata%5Bwdth%2Cwght%5D.ttf"],
-          ["Inconsolata-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Black.ttf"],
-          ["Inconsolata-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Bold.ttf"],
-          ["Inconsolata-ExtraBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-ExtraBold.ttf"],
-          ["Inconsolata-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-ExtraLight.ttf"],
-          ["Inconsolata-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Light.ttf"],
-          ["Inconsolata-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Medium.ttf"],
-          ["Inconsolata-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Regular.ttf"],
-          ["Inconsolata-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-SemiBold.ttf"],
-          ["Ligconsolata-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Ligconsolata-Bold.ttf"],
-          ["Ligconsolata-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Ligconsolata-Regular.ttf"],
-          ["Inter-Italic[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf"],
-          ["Inter[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf"],
-          ["Roboto-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["Roboto[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf"],
-          ["OpenSans-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/opensans/OpenSans-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["OpenSans[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf"],
-          ["Montserrat-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Italic%5Bwght%5D.ttf"],
-          ["Montserrat[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf"],
-          ["Oswald[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf"],
-          ["Merriweather-Italic[opsz,wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/Merriweather-Italic%5Bopsz%2Cwdth%2Cwght%5D.ttf"],
-          ["Merriweather[opsz,wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/Merriweather%5Bopsz%2Cwdth%2Cwght%5D.ttf"],
-          ["SourceSans3-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/SourceSans3-Italic%5Bwght%5D.ttf"],
-          ["SourceSans3[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/SourceSans3%5Bwght%5D.ttf"],
-          ["SourceSerif4-Italic[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4-Italic%5Bopsz%2Cwght%5D.ttf"],
-          ["SourceSerif4[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4%5Bopsz%2Cwght%5D.ttf"],
-          ["IBMPlexSans-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["IBMPlexSans[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans%5Bwdth%2Cwght%5D.ttf"],
-          ["NotoSans-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["NotoSans[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf"],
-          ["NotoSerif-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserif/NotoSerif-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["NotoSerif[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserif/NotoSerif%5Bwdth%2Cwght%5D.ttf"],
-          ["WorkSans-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/worksans/WorkSans-Italic%5Bwght%5D.ttf"],
-          ["WorkSans[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/worksans/WorkSans%5Bwght%5D.ttf"],
-          ["DMSans-Italic[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/DMSans-Italic%5Bopsz%2Cwght%5D.ttf"],
-          ["DMSans[opsz,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/DMSans%5Bopsz%2Cwght%5D.ttf"],
-          ["SpaceGrotesk[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf"],
-          ["Manrope[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf"],
-          ["PlusJakartaSans-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/plusjakartasans/PlusJakartaSans-Italic%5Bwght%5D.ttf"],
-          ["PlusJakartaSans[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/plusjakartasans/PlusJakartaSans%5Bwght%5D.ttf"],
-          ["Lexend[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/Lexend%5Bwght%5D.ttf"],
-          ["Sora[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/sora/Sora%5Bwght%5D.ttf"],
-          ["Cabin-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/cabin/Cabin-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["Cabin[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/cabin/Cabin%5Bwdth%2Cwght%5D.ttf"],
-          ["LibreBaskerville-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville-Italic%5Bwght%5D.ttf"],
-          ["LibreBaskerville[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville%5Bwght%5D.ttf"],
-          ["PlayfairDisplay-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf"],
-          ["PlayfairDisplay[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf"],
-          ["AtkinsonHyperlegible-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Bold.ttf"],
-          ["AtkinsonHyperlegible-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-BoldItalic.ttf"],
-          ["AtkinsonHyperlegible-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Italic.ttf"],
-          ["AtkinsonHyperlegible-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf"],
-          ["Archivo-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/archivo/Archivo-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["Archivo[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/archivo/Archivo%5Bwdth%2Cwght%5D.ttf"],
-          ["Nunito-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito-Italic%5Bwght%5D.ttf"],
-          ["Nunito[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito%5Bwght%5D.ttf"],
-          ["Raleway-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/raleway/Raleway-Italic%5Bwght%5D.ttf"],
-          ["Raleway[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/raleway/Raleway%5Bwght%5D.ttf"],
-          ["Rubik-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/rubik/Rubik-Italic%5Bwght%5D.ttf"],
-          ["Rubik[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/rubik/Rubik%5Bwght%5D.ttf"],
-          ["Bitter-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf"],
-          ["Bitter[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf"],
-          ["CrimsonPro-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro-Italic%5Bwght%5D.ttf"],
-          ["CrimsonPro[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro%5Bwght%5D.ttf"],
-          ["Karla-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/karla/Karla-Italic%5Bwght%5D.ttf"],
-          ["Karla[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/karla/Karla%5Bwght%5D.ttf"],
-          ["PublicSans-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/publicsans/PublicSans-Italic%5Bwght%5D.ttf"],
-          ["PublicSans[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/publicsans/PublicSans%5Bwght%5D.ttf"],
-          ["Urbanist-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/urbanist/Urbanist-Italic%5Bwght%5D.ttf"],
-          ["Urbanist[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/urbanist/Urbanist%5Bwght%5D.ttf"],
-          ["Figtree-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/figtree/Figtree-Italic%5Bwght%5D.ttf"],
-          ["Figtree[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/figtree/Figtree%5Bwght%5D.ttf"],
-          ["Outfit[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/outfit/Outfit%5Bwght%5D.ttf"],
-          ["RedHatDisplay-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/redhatdisplay/RedHatDisplay-Italic%5Bwght%5D.ttf"],
-          ["RedHatDisplay[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/redhatdisplay/RedHatDisplay%5Bwght%5D.ttf"],
-          ["RedHatText-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/redhattext/RedHatText-Italic%5Bwght%5D.ttf"],
-          ["RedHatText[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/redhattext/RedHatText%5Bwght%5D.ttf"],
-          ["Mulish-Italic[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/mulish/Mulish-Italic%5Bwght%5D.ttf"],
-          ["Mulish[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/mulish/Mulish%5Bwght%5D.ttf"],
-          ["Quicksand[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/quicksand/Quicksand%5Bwght%5D.ttf"],
-          ["Assistant[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/assistant/Assistant%5Bwght%5D.ttf"],
-          ["Heebo[wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/heebo/Heebo%5Bwght%5D.ttf"],
-          ["TitilliumWeb-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Black.ttf"],
-          ["TitilliumWeb-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Bold.ttf"],
-          ["TitilliumWeb-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-BoldItalic.ttf"],
-          ["TitilliumWeb-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-ExtraLight.ttf"],
-          ["TitilliumWeb-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-ExtraLightItalic.ttf"],
-          ["TitilliumWeb-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Italic.ttf"],
-          ["TitilliumWeb-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Light.ttf"],
-          ["TitilliumWeb-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-LightItalic.ttf"],
-          ["TitilliumWeb-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Regular.ttf"],
-          ["TitilliumWeb-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-SemiBold.ttf"],
-          ["TitilliumWeb-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-SemiBoldItalic.ttf"],
-          ["Asap-Italic[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asap/Asap-Italic%5Bwdth%2Cwght%5D.ttf"],
-          ["Asap[wdth,wght].ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asap/Asap%5Bwdth%2Cwght%5D.ttf"],
-          ["AsapCondensed-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Black.ttf"],
-          ["AsapCondensed-BlackItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-BlackItalic.ttf"],
-          ["AsapCondensed-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Bold.ttf"],
-          ["AsapCondensed-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-BoldItalic.ttf"],
-          ["AsapCondensed-ExtraBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraBold.ttf"],
-          ["AsapCondensed-ExtraBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraBoldItalic.ttf"],
-          ["AsapCondensed-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraLight.ttf"],
-          ["AsapCondensed-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraLightItalic.ttf"],
-          ["AsapCondensed-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Italic.ttf"],
-          ["AsapCondensed-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Light.ttf"],
-          ["AsapCondensed-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-LightItalic.ttf"],
-          ["AsapCondensed-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Medium.ttf"],
-          ["AsapCondensed-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-MediumItalic.ttf"],
-          ["AsapCondensed-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Regular.ttf"],
-          ["AsapCondensed-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-SemiBold.ttf"],
-          ["AsapCondensed-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-SemiBoldItalic.ttf"],
-          ["BarlowCondensed-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Black.ttf"],
-          ["BarlowCondensed-BlackItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-BlackItalic.ttf"],
-          ["BarlowCondensed-Bold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Bold.ttf"],
-          ["BarlowCondensed-BoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-BoldItalic.ttf"],
-          ["BarlowCondensed-ExtraBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraBold.ttf"],
-          ["BarlowCondensed-ExtraBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraBoldItalic.ttf"],
-          ["BarlowCondensed-ExtraLight.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraLight.ttf"],
-          ["BarlowCondensed-ExtraLightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraLightItalic.ttf"],
-          ["BarlowCondensed-Italic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Italic.ttf"],
-          ["BarlowCondensed-Light.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Light.ttf"],
-          ["BarlowCondensed-LightItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-LightItalic.ttf"],
-          ["BarlowCondensed-Medium.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Medium.ttf"],
-          ["BarlowCondensed-MediumItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-MediumItalic.ttf"],
-          ["BarlowCondensed-Regular.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Regular.ttf"],
-          ["BarlowCondensed-SemiBold.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-SemiBold.ttf"],
-          ["BarlowCondensed-SemiBoldItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-SemiBoldItalic.ttf"],
-          ["BarlowCondensed-Thin.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Thin.ttf"],
-          ["BarlowCondensed-ThinItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ThinItalic.ttf"],
-          ["BarlowSemiCondensed-Black.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowsemicondensed/BarlowSemiCondensed-Black.ttf"],
-          ["BarlowSemiCondensed-BlackItalic.ttf", "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowsemicondensed/BarlowSemiCondensed-BlackItalic.ttf"],
-        ];
-
         async function registerCatalogFont(fileName, url) {
           const response = await fetch(url, { cache: "force-cache" });
           if (!response.ok) {
@@ -1138,10 +834,29 @@ _editor_scene_token = ${token}`;
           return pangoFont;
         }
 
+        const fontManifestUrl = new URL("./fonts/fonts.json", document.baseURI);
+        const fontManifestResponse = await fetch(fontManifestUrl, { cache: "no-store" });
+        if (!fontManifestResponse.ok) {
+          throw new Error("No se pudo cargar fonts/fonts.json: HTTP " + fontManifestResponse.status);
+        }
+        const fontManifest = await fontManifestResponse.json();
+        if (!Array.isArray(fontManifest)) {
+          throw new Error("fonts/fonts.json debe contener un array de fuentes.");
+        }
+        const availableFonts = fontManifest.filter(font =>
+          font && typeof font.name === "string" && typeof font.url === "string"
+        );
+        if (!availableFonts.length) {
+          throw new Error("fonts/fonts.json no contiene fuentes disponibles.");
+        }
+
         let fontsLoaded = 0;
         const fontFailures = [];
-        // Carga secuencial para no saturar la memoria WASM del navegador.
-        for (const [fileName, url] of FONT_CATALOG) {
+        // Solo se solicitan archivos enumerados en fonts/fonts.json y alojados junto al editor.
+        // La carga secuencial evita saturar la memoria WASM del navegador.
+        for (const font of availableFonts) {
+          const fileName = font.fileName || font.name;
+          const url = new URL(font.url, fontManifestUrl).href;
           try {
             const registered = await registerCatalogFont(fileName, url);
             fontsLoaded++;
@@ -1150,15 +865,15 @@ _editor_scene_token = ${token}`;
             fontFailures.push(fileName + ": " + String(error.message || error));
             console.warn("[font catalog]", fileName, error);
           }
-          if (fontsLoaded % 5 === 0) {
-            setStatus("Fuentes registradas en Pango y Typst: " + fontsLoaded + "/" + FONT_CATALOG.length);
+          if (fontsLoaded % 5 === 0 || fontsLoaded === availableFonts.length) {
+            setStatus("Fuentes registradas en Pango y Typst: " + fontsLoaded + "/" + availableFonts.length);
           }
         }
         if (!fontsLoaded) {
-          throw new Error("No se pudo registrar ninguna fuente en Pango y Typst.");
+          throw new Error("No se pudo registrar ninguna fuente alojada en fonts/.");
         }
-        console.info("Catálogo de fuentes:", fontsLoaded, "cargadas;", fontFailures.length, "fallidas.", fontFailures);
-        setStatus("Fuentes listas: " + fontsLoaded + "/" + FONT_CATALOG.length + " en Pango y Typst.");
+        console.info("Fuentes locales:", fontsLoaded, "cargadas;", fontFailures.length, "fallidas.", fontFailures);
+        setStatus("Fuentes listas: " + fontsLoaded + "/" + availableFonts.length + " en Pango y Typst.");
 
         setLoading(true, "Cargando Pyodide…");
         const { loadPyodide } = await import(PYODIDE_URL);
