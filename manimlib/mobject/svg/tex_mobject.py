@@ -164,7 +164,7 @@ class Tex(StringMobject):
             reference_svg = await typst_to_svg_async(
                 cls._make_mitex_source("0", text_mode=text_mode)
             )
-            svg_height = SVGMobject(svg_string=reference_svg, height=None).get_height()
+            svg_height = get_svg_content_height(reference_svg)
             scale_cache[scale_key] = (
                 1.0 / (manim_config.tex.font_size_for_unit_height * svg_height)
             )
