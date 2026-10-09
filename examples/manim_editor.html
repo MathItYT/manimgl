@@ -938,6 +938,7 @@ _editor_scene_token = ${token}`;
           "Inter[opsz,wght].ttf",
         ]);
         const loadedFontNames = new Set();
+        const selectedFontNames = new Set();
         const loadingFontNames = new Set();
         const failedFontNames = new Map();
         const fontStats = { pango: 0, typst: 0, success: 0 };
@@ -970,7 +971,11 @@ _editor_scene_token = ${token}`;
             checkbox.type = "checkbox";
             checkbox.value = fileName;
             checkbox.disabled = loadedFontNames.has(fileName) || loadingFontNames.has(fileName);
-            checkbox.checked = loadedFontNames.has(fileName);
+            checkbox.checked = loadedFontNames.has(fileName) || selectedFontNames.has(fileName);
+            checkbox.addEventListener("change", () => {
+              if (checkbox.checked) selectedFontNames.add(fileName);
+              else selectedFontNames.delete(fileName);
+            });
             const name = document.createElement("span");
             name.textContent = font.name;
             const state = document.createElement("small");
@@ -1008,6 +1013,7 @@ _editor_scene_token = ${token}`;
             }
             if (result.typst) fontStats.typst++;
             loadedFontNames.add(fileName);
+            selectedFontNames.delete(fileName);
             fontStats.success++;
             if (result.errors.length) {
               failedFontNames.set(fileName, result.errors.join(" | "));
