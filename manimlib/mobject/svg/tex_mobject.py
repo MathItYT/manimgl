@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
 
 from functools import lru_cache
 
 from manimlib.config import manim_config
 from manimlib.mobject.svg.string_mobject import StringMobject
-from manimlib.mobject.svg.svg_mobject import get_svg_content_height
+from manimlib.mobject.svg.svg_mobject import SVGMobject, get_svg_content_height
 from manimlib.mobject.types.vectorized_mobject import VGroup
 from manimlib.mobject.types.vectorized_mobject import VMobject
 from manimlib.utils.color import color_to_hex
@@ -164,7 +163,7 @@ class Tex(StringMobject):
             reference_svg = await typst_to_svg_async(
                 cls._make_mitex_source("0", text_mode=text_mode)
             )
-            svg_height = get_svg_content_height(reference_svg)
+            svg_height = SVGMobject(reference_svg, height=None).get_height()
             if svg_height <= 0:
                 raise ValueError("MiTeX returned an invalid reference glyph height")
             scale_cache[scale_key] = (
