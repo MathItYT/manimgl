@@ -196,7 +196,7 @@ char *manim_pango_text_to_svg(
 
     char attribute[128];
     snprintf(attribute, sizeof(attribute),
-        " data-manim-content-height="%.9f"", content_height);
+        " data-manim-content-height=\"%.9f\"", content_height);
     char *svg_start = strstr(data, "<svg");
     char *tag_end = svg_start ? strchr(svg_start, '>') : NULL;
     if (tag_end) {
