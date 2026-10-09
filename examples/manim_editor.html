@@ -1567,7 +1567,7 @@ _editor_scene_token = ${token}`;
       }
     });
 
-    runButton.addEventListener("click", runScene);
+    runButton.addEventListener("click", () => runScene());
     canvasWindowButton.addEventListener("click", openCanvasWindow);
     runRecordButton.addEventListener("click", runAndRecord);
     recordButton.addEventListener("click", () => {
