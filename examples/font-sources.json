@@ -31,32 +31,32 @@
   },
   {
     "name": "NewCM10-Bold.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Bold.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10-Bold.otf",
     "file": "files/007-NewCM10-Bold.otf"
   },
   {
     "name": "NewCM10-BoldItalic.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-BoldItalic.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10-BoldItalic.otf",
     "file": "files/008-NewCM10-BoldItalic.otf"
   },
   {
     "name": "NewCM10-Book.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10-Book.otf",
     "file": "files/009-NewCM10-Book.otf"
   },
   {
     "name": "NewCM10-BookItalic.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-BookItalic.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10-BookItalic.otf",
     "file": "files/010-NewCM10-BookItalic.otf"
   },
   {
     "name": "NewCM10-Italic.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Italic.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10-Italic.otf",
     "file": "files/011-NewCM10-Italic.otf"
   },
   {
     "name": "NewCM10-Regular.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10-Regular.otf",
     "file": "files/012-NewCM10-Regular.otf"
   },
   {
@@ -76,27 +76,27 @@
   },
   {
     "name": "NewCMMath-Bold.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Bold.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMath-Bold.otf",
     "file": "files/016-NewCMMath-Bold.otf"
   },
   {
     "name": "NewCMMath-Book.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMath-Book.otf",
     "file": "files/017-NewCMMath-Book.otf"
   },
   {
     "name": "NewCMMath-Regular.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMath-Regular.otf",
     "file": "files/018-NewCMMath-Regular.otf"
   },
   {
     "name": "NewCMMono10-Bold.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Bold.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Bold.otf",
     "file": "files/019-NewCMMono10-Bold.otf"
   },
   {
     "name": "NewCMMono10-BoldOblique.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-BoldOblique.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-BoldOblique.otf",
     "file": "files/020-NewCMMono10-BoldOblique.otf"
   },
   {
@@ -111,12 +111,12 @@
   },
   {
     "name": "NewCMMono10-Italic.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Italic.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Italic.otf",
     "file": "files/023-NewCMMono10-Italic.otf"
   },
   {
     "name": "NewCMMono10-Regular.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Regular.otf",
     "file": "files/024-NewCMMono10-Regular.otf"
   },
   {
@@ -141,12 +141,12 @@
   },
   {
     "name": "NewCMSans10-Bold.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Bold.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Bold.otf",
     "file": "files/029-NewCMSans10-Bold.otf"
   },
   {
     "name": "NewCMSans10-BoldOblique.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-BoldOblique.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-BoldOblique.otf",
     "file": "files/030-NewCMSans10-BoldOblique.otf"
   },
   {
@@ -161,12 +161,12 @@
   },
   {
     "name": "NewCMSans10-Oblique.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Oblique.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Oblique.otf",
     "file": "files/033-NewCMSans10-Oblique.otf"
   },
   {
     "name": "NewCMSans10-Regular.otf",
-    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Regular.otf",
     "file": "files/034-NewCMSans10-Regular.otf"
   },
   {
