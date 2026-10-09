@@ -70,6 +70,7 @@ class Tex(StringMobject):
             tex_string,
             use_labelled_svg=use_labelled_svg,
             isolate=isolate,
+            height=None,
             **kwargs
         )
 
@@ -78,6 +79,7 @@ class Tex(StringMobject):
         # asynchronous, so browser scaling is applied by create() after rendering.
         if sys.platform != "emscripten":
             self.scale(get_tex_mob_scale_factor() * font_size)
+            self.scale_stroke_widths(get_tex_mob_scale_factor() * font_size)
 
         self.font_size = font_size  # Important for this to go after the scale call
 
@@ -90,17 +92,20 @@ class Tex(StringMobject):
 
     @staticmethod
     def _make_mitex_source(content: str, *, text_mode: bool = False) -> str:
-        # Typst raw blocks use backticks as delimiters. Increase the delimiter
-        # length when the LaTeX input itself contains backticks (for example \\verb).
         longest = max((len(match.group(0)) for match in re.finditer(r"`+", content)), default=0)
         delimiter = "`" * (longest + 1)
+
+        font_rule = f'#set text(font: "New Computer Modern")\n'
+        doc_head = (
+            f'#set page(width: auto, height: auto, margin: 0pt, fill: none)\n'
+            f'#set text(fill: rgb("#ffffff"), size: 10pt, ligatures: false)\n'
+            f'{font_rule}'
+            f'#show math.equation: set text(ligatures: false)\n'
+            f'#let _mc(c, it) = if c != "" {{ text(fill: rgb(c), it) }} else {{ it }}\n'
+        ).strip()
+
         command = "mitext" if text_mode else "mitex"
-        return (
-            '#import "@preview/mitex:0.2.7": *\n'
-            '#set page(width: auto, height: auto, margin: 0pt, fill: none)\n'
-            '#set text(size: 10pt, ligatures: false)\n'
-            f'#{command}({delimiter}{content}{delimiter})\n'
-        )
+        return f"{doc_head}\n" + f'#{command}({delimiter}{content}{delimiter})\n'
 
     @classmethod
     async def _create_browser(cls, *tex_strings: str, **kwargs):
@@ -134,10 +139,6 @@ class Tex(StringMobject):
             svg = await typst_to_svg_async(
                 cls._make_mitex_source(content, text_mode=text_mode)
             )
-            if not isinstance(svg, str):
-                raise TypeError(
-                    f"MiTeX browser renderer returned {type(svg).__name__}; expected SVG text."
-                )
             return svg
 
         svg = await render(is_labelled=use_labelled_svg)
@@ -164,12 +165,11 @@ class Tex(StringMobject):
                 cls._make_mitex_source("0", text_mode=text_mode)
             )
             svg_height = SVGMobject(svg_string=reference_svg, height=None).get_height()
-            if svg_height <= 0:
-                raise ValueError("MiTeX returned an invalid reference glyph height")
             scale_cache[scale_key] = (
                 1.0 / (manim_config.tex.font_size_for_unit_height * svg_height)
             )
         obj.scale(scale_cache[scale_key] * font_size)
+        obj.scale_stroke_widths(scale_cache[scale_key] * font_size)
         # Native Tex scales before assigning font_size, so retain that behavior.
         obj.font_size = font_size
         return obj

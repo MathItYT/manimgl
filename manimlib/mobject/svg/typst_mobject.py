@@ -32,7 +32,7 @@ def get_typst_mob_scale_factor() -> float:
     # gives a height of 1 manim unit. Compensates for platform dvisvgm differences.
     font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
     svg_string = typst_to_svg("#set text(size: 10pt)\n0")
-    svg_height = SVGMobject(svg_string=svg_string).get_height()
+    svg_height = SVGMobject(svg_string=svg_string, height=None).get_height()
     return 1.0 / (font_size_for_unit_height * svg_height)
 
 
@@ -47,7 +47,7 @@ async def get_typst_mob_scale_factor_async() -> float:
         )
     font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
     svg_string = await typst_to_svg_async("#set text(size: 10pt)\n0")
-    svg_height = SVGMobject(svg_string=svg_string).get_height()
+    svg_height = SVGMobject(svg_string=svg_string, height=None).get_height()
     return 1.0 / (font_size_for_unit_height * svg_height)
 
 
@@ -108,6 +108,7 @@ class SingleStringTypst(StringMobject):
             isolate=isolate,
             protect=protect,
             stroke_width=None,
+            height=None,
             **kwargs,
         )
 
