@@ -514,9 +514,15 @@ document.getElementById("fullscreen").addEventListener("click",async()=>{
 </body></html>`);
       popup.document.close();
       // Use the popup's actual canvas as ManimGL's render target; no frame-copy loop.
-      canvas = popup.document.getElementById("manim-canvas");
+      // Create the node in the opener's JS realm, then adopt it into the popup.
+      // rendercanvas checks instanceof HTMLCanvasElement against the opener's realm.
+      const canvasPlaceholder = popup.document.getElementById("manim-canvas");
+      canvas = document.createElement("canvas");
+      canvas.id = "manim-canvas";
       canvas.width = 1920;
       canvas.height = 1080;
+      canvas.tabIndex = 0;
+      canvasPlaceholder.replaceWith(canvas);
       window.__manimCanvasElement = canvas;
       window.__manimCanvasWindowClosed = () => {
         if (canvasPreviewWindow === popup) {
