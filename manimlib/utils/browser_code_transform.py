@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-import re
 
 SYNC_CREATE_MOBJECTS = {'Text', 'MarkupText', 'Code'}
 ASYNC_CREATE_MOBJECTS = {'Typst', 'TypstText', 'Tex', 'TexText', 'DecimalNumber', 'Integer', 'VideoMobject', 'Sprite'}
