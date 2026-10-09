@@ -92,8 +92,6 @@ class Tex(StringMobject):
 
     @staticmethod
     def _make_mitex_source(content: str, *, text_mode: bool = False) -> str:
-        longest = max((len(match.group(0)) for match in re.finditer(r"`+", content)), default=0)
-        delimiter = "`" * (longest + 1)
 
         font_rule = f'#set text(font: "New Computer Modern")\n'
         doc_head = (
@@ -104,8 +102,9 @@ class Tex(StringMobject):
             f'#let _mc(c, it) = if c != "" {{ text(fill: rgb(c), it) }} else {{ it }}\n'
         ).strip()
 
+        delimiter = "`"
         command = "mitext" if text_mode else "mitex"
-        return f"{doc_head}\n" + f'#{command}({delimiter}{content}{delimiter})\n'
+        return f"{doc_head}\n" + f'#{command}({delimiter}\n{content}\n{delimiter})\n'
 
     @classmethod
     async def _create_browser(cls, *tex_strings: str, **kwargs):
