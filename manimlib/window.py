@@ -254,6 +254,17 @@ class Window(object):
         """
         self.frame_view = frame_view
         self.canvas.force_draw()
+        if sys.platform == "emscripten":
+            # In the browser editor, begin MediaRecorder only when ManimGL has
+            # an actual scene frame to show. This prevents the setup/construct
+            # interval from becoming a leading blank delay in the exported clip.
+            from js import window
+            start_recording = getattr(window, "__manimStartRecorderOnFirstFrame", None)
+            if start_recording:
+                start_recording()
+            request_capture = getattr(window, "__manimRequestCaptureFrame", None)
+            if request_capture:
+                request_capture()
         self.undrawn_event = False
         self.poll_events()
 
