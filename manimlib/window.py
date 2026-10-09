@@ -100,7 +100,8 @@ class Window(object):
         device=None,
     ):
         self.scene: Optional[Scene] = None
-        self.canvas_id = canvas_id
+        # PyodideRenderCanvas accepts either an element id or the actual DOM canvas.
+        self.canvas_id = canvas_id if isinstance(canvas_id, str) else "manim-canvas"
         self.frame_view = None
         self.pressed_keys: set[int] = set()
         self.pointer_position = np.zeros(2)
@@ -217,7 +218,7 @@ class Window(object):
         eval(
             """
             (() => {
-                const canvas = document.getElementById(%r);
+                const canvas = window.__manimCanvasElement || document.getElementById(%r);
                 if (!canvas || canvas.__manimPointerTrackingInstalled) {
                     return;
                 }
@@ -404,7 +405,11 @@ class Window(object):
         if sys.platform == "emscripten":
             from js import document
 
-            canvas = document.getElementById(self.canvas_id)
+            # The canvas may live in the detached popup document. Use the exact
+            # element owned by rendercanvas instead of looking it up in the editor DOM.
+            canvas = getattr(self.canvas, "_canvas_element", None)
+            if canvas is None:
+                canvas = document.getElementById(self.canvas_id)
             if canvas is not None:
                 pointer = getattr(canvas, "__manimPointer", None)
                 if pointer is not None:
