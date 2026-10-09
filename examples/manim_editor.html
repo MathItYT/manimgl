@@ -545,7 +545,7 @@ window.addEventListener("keydown",event=>{
   try{window.opener.dispatchEvent(new KeyboardEvent("keydown",{key:event.key,code:event.code,bubbles:true,cancelable:true,altKey:event.altKey,ctrlKey:event.ctrlKey,metaKey:event.metaKey,shiftKey:event.shiftKey}))}catch(e){}
 });
 window.addEventListener("beforeunload",()=>{active=false});
-</script>
+<\/script>
 </body></html>`);
       popup.document.close();
       popup.addEventListener("beforeunload", () => {
@@ -1882,7 +1882,6 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         runButton.disabled = false;
         runRecordButton.disabled = false;
         recordButton.disabled = false;
-        canvasWindowButton.disabled = false;
         canvasWindowButton.disabled = false;
         refreshAssets();
         setStatus("Listo. Código y assets se guardan automáticamente en este navegador.");
