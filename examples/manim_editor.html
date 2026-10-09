@@ -508,9 +508,23 @@ button{border:0;border-radius:6px;padding:8px 13px;background:#2b3342;color:#fff
 const mirror=document.getElementById("mirror");
 const ctx=mirror.getContext("2d");
 let active=true;
-function draw(){
+let lastDrawTime=0;
+const previewFrameInterval=1000/30;
+function draw(timestamp){
   if(!active)return;
-  try{ctx.drawImage(window.opener.document.getElementById("manim-canvas"),0,0,1920,1080)}catch(e){}
+  // Avoid continuously copying the opener's canvas at display refresh rate:
+  // that can contend with Manim's own frame uploads and produce visible flicker,
+  // especially after entering fullscreen. A steady 30 Hz preview is sufficient
+  // for the mirror; the original canvas and recording remain at their own rate.
+  if(timestamp-lastDrawTime>=previewFrameInterval){
+    try{
+      const source=window.opener?.document.getElementById("manim-canvas");
+      if(source && source.width===1920 && source.height===1080){
+        ctx.drawImage(source,0,0,1920,1080);
+      }
+    }catch(e){}
+    lastDrawTime=timestamp;
+  }
   requestAnimationFrame(draw);
 }
 requestAnimationFrame(draw);
