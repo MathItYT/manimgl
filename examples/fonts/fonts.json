@@ -1,0 +1,1457 @@
+[
+  {
+    "name": "NewCM08-Book.otf",
+    "fileName": "NewCM08-Book.otf",
+    "url": "./files/001-NewCM08-Book.otf"
+  },
+  {
+    "name": "NewCM08-BookItalic.otf",
+    "fileName": "NewCM08-BookItalic.otf",
+    "url": "./files/002-NewCM08-BookItalic.otf"
+  },
+  {
+    "name": "NewCM08-Italic.otf",
+    "fileName": "NewCM08-Italic.otf",
+    "url": "./files/003-NewCM08-Italic.otf"
+  },
+  {
+    "name": "NewCM08-Regular.otf",
+    "fileName": "NewCM08-Regular.otf",
+    "url": "./files/004-NewCM08-Regular.otf"
+  },
+  {
+    "name": "NewCM08Devanagari-Book.otf",
+    "fileName": "NewCM08Devanagari-Book.otf",
+    "url": "./files/005-NewCM08Devanagari-Book.otf"
+  },
+  {
+    "name": "NewCM08Devanagari-Regular.otf",
+    "fileName": "NewCM08Devanagari-Regular.otf",
+    "url": "./files/006-NewCM08Devanagari-Regular.otf"
+  },
+  {
+    "name": "NewCM10-Bold.otf",
+    "fileName": "NewCM10-Bold.otf",
+    "url": "./files/007-NewCM10-Bold.otf"
+  },
+  {
+    "name": "NewCM10-BoldItalic.otf",
+    "fileName": "NewCM10-BoldItalic.otf",
+    "url": "./files/008-NewCM10-BoldItalic.otf"
+  },
+  {
+    "name": "NewCM10-Book.otf",
+    "fileName": "NewCM10-Book.otf",
+    "url": "./files/009-NewCM10-Book.otf"
+  },
+  {
+    "name": "NewCM10-BookItalic.otf",
+    "fileName": "NewCM10-BookItalic.otf",
+    "url": "./files/010-NewCM10-BookItalic.otf"
+  },
+  {
+    "name": "NewCM10-Italic.otf",
+    "fileName": "NewCM10-Italic.otf",
+    "url": "./files/011-NewCM10-Italic.otf"
+  },
+  {
+    "name": "NewCM10-Regular.otf",
+    "fileName": "NewCM10-Regular.otf",
+    "url": "./files/012-NewCM10-Regular.otf"
+  },
+  {
+    "name": "NewCM10Devanagari-Bold.otf",
+    "fileName": "NewCM10Devanagari-Bold.otf",
+    "url": "./files/013-NewCM10Devanagari-Bold.otf"
+  },
+  {
+    "name": "NewCM10Devanagari-Book.otf",
+    "fileName": "NewCM10Devanagari-Book.otf",
+    "url": "./files/014-NewCM10Devanagari-Book.otf"
+  },
+  {
+    "name": "NewCM10Devanagari-Regular.otf",
+    "fileName": "NewCM10Devanagari-Regular.otf",
+    "url": "./files/015-NewCM10Devanagari-Regular.otf"
+  },
+  {
+    "name": "NewCMMath-Bold.otf",
+    "fileName": "NewCMMath-Bold.otf",
+    "url": "./files/016-NewCMMath-Bold.otf"
+  },
+  {
+    "name": "NewCMMath-Book.otf",
+    "fileName": "NewCMMath-Book.otf",
+    "url": "./files/017-NewCMMath-Book.otf"
+  },
+  {
+    "name": "NewCMMath-Regular.otf",
+    "fileName": "NewCMMath-Regular.otf",
+    "url": "./files/018-NewCMMath-Regular.otf"
+  },
+  {
+    "name": "NewCMMono10-Bold.otf",
+    "fileName": "NewCMMono10-Bold.otf",
+    "url": "./files/019-NewCMMono10-Bold.otf"
+  },
+  {
+    "name": "NewCMMono10-BoldOblique.otf",
+    "fileName": "NewCMMono10-BoldOblique.otf",
+    "url": "./files/020-NewCMMono10-BoldOblique.otf"
+  },
+  {
+    "name": "NewCMMono10-Book.otf",
+    "fileName": "NewCMMono10-Book.otf",
+    "url": "./files/021-NewCMMono10-Book.otf"
+  },
+  {
+    "name": "NewCMMono10-BookItalic.otf",
+    "fileName": "NewCMMono10-BookItalic.otf",
+    "url": "./files/022-NewCMMono10-BookItalic.otf"
+  },
+  {
+    "name": "NewCMMono10-Italic.otf",
+    "fileName": "NewCMMono10-Italic.otf",
+    "url": "./files/023-NewCMMono10-Italic.otf"
+  },
+  {
+    "name": "NewCMMono10-Regular.otf",
+    "fileName": "NewCMMono10-Regular.otf",
+    "url": "./files/024-NewCMMono10-Regular.otf"
+  },
+  {
+    "name": "NewCMSans08-Book.otf",
+    "fileName": "NewCMSans08-Book.otf",
+    "url": "./files/025-NewCMSans08-Book.otf"
+  },
+  {
+    "name": "NewCMSans08-BookOblique.otf",
+    "fileName": "NewCMSans08-BookOblique.otf",
+    "url": "./files/026-NewCMSans08-BookOblique.otf"
+  },
+  {
+    "name": "NewCMSans08-Oblique.otf",
+    "fileName": "NewCMSans08-Oblique.otf",
+    "url": "./files/027-NewCMSans08-Oblique.otf"
+  },
+  {
+    "name": "NewCMSans08-Regular.otf",
+    "fileName": "NewCMSans08-Regular.otf",
+    "url": "./files/028-NewCMSans08-Regular.otf"
+  },
+  {
+    "name": "NewCMSans10-Bold.otf",
+    "fileName": "NewCMSans10-Bold.otf",
+    "url": "./files/029-NewCMSans10-Bold.otf"
+  },
+  {
+    "name": "NewCMSans10-BoldOblique.otf",
+    "fileName": "NewCMSans10-BoldOblique.otf",
+    "url": "./files/030-NewCMSans10-BoldOblique.otf"
+  },
+  {
+    "name": "NewCMSans10-Book.otf",
+    "fileName": "NewCMSans10-Book.otf",
+    "url": "./files/031-NewCMSans10-Book.otf"
+  },
+  {
+    "name": "NewCMSans10-BookOblique.otf",
+    "fileName": "NewCMSans10-BookOblique.otf",
+    "url": "./files/032-NewCMSans10-BookOblique.otf"
+  },
+  {
+    "name": "NewCMSans10-Oblique.otf",
+    "fileName": "NewCMSans10-Oblique.otf",
+    "url": "./files/033-NewCMSans10-Oblique.otf"
+  },
+  {
+    "name": "NewCMSans10-Regular.otf",
+    "fileName": "NewCMSans10-Regular.otf",
+    "url": "./files/034-NewCMSans10-Regular.otf"
+  },
+  {
+    "name": "NewCMSansMath-Regular.otf",
+    "fileName": "NewCMSansMath-Regular.otf",
+    "url": "./files/035-NewCMSansMath-Regular.otf"
+  },
+  {
+    "name": "NewCMUncial08-Bold.otf",
+    "fileName": "NewCMUncial08-Bold.otf",
+    "url": "./files/036-NewCMUncial08-Bold.otf"
+  },
+  {
+    "name": "NewCMUncial08-Book.otf",
+    "fileName": "NewCMUncial08-Book.otf",
+    "url": "./files/037-NewCMUncial08-Book.otf"
+  },
+  {
+    "name": "NewCMUncial08-Regular.otf",
+    "fileName": "NewCMUncial08-Regular.otf",
+    "url": "./files/038-NewCMUncial08-Regular.otf"
+  },
+  {
+    "name": "NewCMUncial10-Bold.otf",
+    "fileName": "NewCMUncial10-Bold.otf",
+    "url": "./files/039-NewCMUncial10-Bold.otf"
+  },
+  {
+    "name": "NewCMUncial10-Book.otf",
+    "fileName": "NewCMUncial10-Book.otf",
+    "url": "./files/040-NewCMUncial10-Book.otf"
+  },
+  {
+    "name": "NewCMUncial10-Regular.otf",
+    "fileName": "NewCMUncial10-Regular.otf",
+    "url": "./files/041-NewCMUncial10-Regular.otf"
+  },
+  {
+    "name": "JetBrainsMono-Thin.ttf",
+    "fileName": "JetBrainsMono-Thin.ttf",
+    "url": "./files/042-JetBrainsMono-Thin.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ThinItalic.ttf",
+    "fileName": "JetBrainsMono-ThinItalic.ttf",
+    "url": "./files/043-JetBrainsMono-ThinItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraLight.ttf",
+    "fileName": "JetBrainsMono-ExtraLight.ttf",
+    "url": "./files/044-JetBrainsMono-ExtraLight.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraLightItalic.ttf",
+    "fileName": "JetBrainsMono-ExtraLightItalic.ttf",
+    "url": "./files/045-JetBrainsMono-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Light.ttf",
+    "fileName": "JetBrainsMono-Light.ttf",
+    "url": "./files/046-JetBrainsMono-Light.ttf"
+  },
+  {
+    "name": "JetBrainsMono-LightItalic.ttf",
+    "fileName": "JetBrainsMono-LightItalic.ttf",
+    "url": "./files/047-JetBrainsMono-LightItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Regular.ttf",
+    "fileName": "JetBrainsMono-Regular.ttf",
+    "url": "./files/048-JetBrainsMono-Regular.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Italic.ttf",
+    "fileName": "JetBrainsMono-Italic.ttf",
+    "url": "./files/049-JetBrainsMono-Italic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Medium.ttf",
+    "fileName": "JetBrainsMono-Medium.ttf",
+    "url": "./files/050-JetBrainsMono-Medium.ttf"
+  },
+  {
+    "name": "JetBrainsMono-MediumItalic.ttf",
+    "fileName": "JetBrainsMono-MediumItalic.ttf",
+    "url": "./files/051-JetBrainsMono-MediumItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-SemiBold.ttf",
+    "fileName": "JetBrainsMono-SemiBold.ttf",
+    "url": "./files/052-JetBrainsMono-SemiBold.ttf"
+  },
+  {
+    "name": "JetBrainsMono-SemiBoldItalic.ttf",
+    "fileName": "JetBrainsMono-SemiBoldItalic.ttf",
+    "url": "./files/053-JetBrainsMono-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Bold.ttf",
+    "fileName": "JetBrainsMono-Bold.ttf",
+    "url": "./files/054-JetBrainsMono-Bold.ttf"
+  },
+  {
+    "name": "JetBrainsMono-BoldItalic.ttf",
+    "fileName": "JetBrainsMono-BoldItalic.ttf",
+    "url": "./files/055-JetBrainsMono-BoldItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraBold.ttf",
+    "fileName": "JetBrainsMono-ExtraBold.ttf",
+    "url": "./files/056-JetBrainsMono-ExtraBold.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraBoldItalic.ttf",
+    "fileName": "JetBrainsMono-ExtraBoldItalic.ttf",
+    "url": "./files/057-JetBrainsMono-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Black.ttf",
+    "fileName": "FiraSans-Black.ttf",
+    "url": "./files/058-FiraSans-Black.ttf"
+  },
+  {
+    "name": "FiraSans-BlackItalic.ttf",
+    "fileName": "FiraSans-BlackItalic.ttf",
+    "url": "./files/059-FiraSans-BlackItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Bold.ttf",
+    "fileName": "FiraSans-Bold.ttf",
+    "url": "./files/060-FiraSans-Bold.ttf"
+  },
+  {
+    "name": "FiraSans-BoldItalic.ttf",
+    "fileName": "FiraSans-BoldItalic.ttf",
+    "url": "./files/061-FiraSans-BoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraBold.ttf",
+    "fileName": "FiraSans-ExtraBold.ttf",
+    "url": "./files/062-FiraSans-ExtraBold.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraBoldItalic.ttf",
+    "fileName": "FiraSans-ExtraBoldItalic.ttf",
+    "url": "./files/063-FiraSans-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraLight.ttf",
+    "fileName": "FiraSans-ExtraLight.ttf",
+    "url": "./files/064-FiraSans-ExtraLight.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraLightItalic.ttf",
+    "fileName": "FiraSans-ExtraLightItalic.ttf",
+    "url": "./files/065-FiraSans-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Italic.ttf",
+    "fileName": "FiraSans-Italic.ttf",
+    "url": "./files/066-FiraSans-Italic.ttf"
+  },
+  {
+    "name": "FiraSans-Light.ttf",
+    "fileName": "FiraSans-Light.ttf",
+    "url": "./files/067-FiraSans-Light.ttf"
+  },
+  {
+    "name": "FiraSans-LightItalic.ttf",
+    "fileName": "FiraSans-LightItalic.ttf",
+    "url": "./files/068-FiraSans-LightItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Medium.ttf",
+    "fileName": "FiraSans-Medium.ttf",
+    "url": "./files/069-FiraSans-Medium.ttf"
+  },
+  {
+    "name": "FiraSans-MediumItalic.ttf",
+    "fileName": "FiraSans-MediumItalic.ttf",
+    "url": "./files/070-FiraSans-MediumItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Regular.ttf",
+    "fileName": "FiraSans-Regular.ttf",
+    "url": "./files/071-FiraSans-Regular.ttf"
+  },
+  {
+    "name": "FiraSans-SemiBold.ttf",
+    "fileName": "FiraSans-SemiBold.ttf",
+    "url": "./files/072-FiraSans-SemiBold.ttf"
+  },
+  {
+    "name": "FiraSans-SemiBoldItalic.ttf",
+    "fileName": "FiraSans-SemiBoldItalic.ttf",
+    "url": "./files/073-FiraSans-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Thin.ttf",
+    "fileName": "FiraSans-Thin.ttf",
+    "url": "./files/074-FiraSans-Thin.ttf"
+  },
+  {
+    "name": "FiraSans-ThinItalic.ttf",
+    "fileName": "FiraSans-ThinItalic.ttf",
+    "url": "./files/075-FiraSans-ThinItalic.ttf"
+  },
+  {
+    "name": "Lato-Black.ttf",
+    "fileName": "Lato-Black.ttf",
+    "url": "./files/076-Lato-Black.ttf"
+  },
+  {
+    "name": "Lato-BlackItalic.ttf",
+    "fileName": "Lato-BlackItalic.ttf",
+    "url": "./files/077-Lato-BlackItalic.ttf"
+  },
+  {
+    "name": "Lato-Bold.ttf",
+    "fileName": "Lato-Bold.ttf",
+    "url": "./files/078-Lato-Bold.ttf"
+  },
+  {
+    "name": "Lato-BoldItalic.ttf",
+    "fileName": "Lato-BoldItalic.ttf",
+    "url": "./files/079-Lato-BoldItalic.ttf"
+  },
+  {
+    "name": "Lato-ExtraBold.ttf",
+    "fileName": "Lato-ExtraBold.ttf",
+    "url": "./files/080-Lato-ExtraBold.ttf"
+  },
+  {
+    "name": "Lato-ExtraBoldItalic.ttf",
+    "fileName": "Lato-ExtraBoldItalic.ttf",
+    "url": "./files/081-Lato-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "Lato-ExtraLight.ttf",
+    "fileName": "Lato-ExtraLight.ttf",
+    "url": "./files/082-Lato-ExtraLight.ttf"
+  },
+  {
+    "name": "Lato-ExtraLightItalic.ttf",
+    "fileName": "Lato-ExtraLightItalic.ttf",
+    "url": "./files/083-Lato-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "Lato-Italic.ttf",
+    "fileName": "Lato-Italic.ttf",
+    "url": "./files/084-Lato-Italic.ttf"
+  },
+  {
+    "name": "Lato-Light.ttf",
+    "fileName": "Lato-Light.ttf",
+    "url": "./files/085-Lato-Light.ttf"
+  },
+  {
+    "name": "Lato-LightItalic.ttf",
+    "fileName": "Lato-LightItalic.ttf",
+    "url": "./files/086-Lato-LightItalic.ttf"
+  },
+  {
+    "name": "Lato-Medium.ttf",
+    "fileName": "Lato-Medium.ttf",
+    "url": "./files/087-Lato-Medium.ttf"
+  },
+  {
+    "name": "Lato-MediumItalic.ttf",
+    "fileName": "Lato-MediumItalic.ttf",
+    "url": "./files/088-Lato-MediumItalic.ttf"
+  },
+  {
+    "name": "Lato-Regular.ttf",
+    "fileName": "Lato-Regular.ttf",
+    "url": "./files/089-Lato-Regular.ttf"
+  },
+  {
+    "name": "Lato-SemiBold.ttf",
+    "fileName": "Lato-SemiBold.ttf",
+    "url": "./files/090-Lato-SemiBold.ttf"
+  },
+  {
+    "name": "Lato-SemiBoldItalic.ttf",
+    "fileName": "Lato-SemiBoldItalic.ttf",
+    "url": "./files/091-Lato-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "Lato-Thin.ttf",
+    "fileName": "Lato-Thin.ttf",
+    "url": "./files/092-Lato-Thin.ttf"
+  },
+  {
+    "name": "Lato-ThinItalic.ttf",
+    "fileName": "Lato-ThinItalic.ttf",
+    "url": "./files/093-Lato-ThinItalic.ttf"
+  },
+  {
+    "name": "Barlow-Black.ttf",
+    "fileName": "Barlow-Black.ttf",
+    "url": "./files/094-Barlow-Black.ttf"
+  },
+  {
+    "name": "Barlow-BlackItalic.ttf",
+    "fileName": "Barlow-BlackItalic.ttf",
+    "url": "./files/095-Barlow-BlackItalic.ttf"
+  },
+  {
+    "name": "Barlow-Bold.ttf",
+    "fileName": "Barlow-Bold.ttf",
+    "url": "./files/096-Barlow-Bold.ttf"
+  },
+  {
+    "name": "Barlow-BoldItalic.ttf",
+    "fileName": "Barlow-BoldItalic.ttf",
+    "url": "./files/097-Barlow-BoldItalic.ttf"
+  },
+  {
+    "name": "Barlow-ExtraBold.ttf",
+    "fileName": "Barlow-ExtraBold.ttf",
+    "url": "./files/098-Barlow-ExtraBold.ttf"
+  },
+  {
+    "name": "Barlow-ExtraBoldItalic.ttf",
+    "fileName": "Barlow-ExtraBoldItalic.ttf",
+    "url": "./files/099-Barlow-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "Barlow-ExtraLight.ttf",
+    "fileName": "Barlow-ExtraLight.ttf",
+    "url": "./files/100-Barlow-ExtraLight.ttf"
+  },
+  {
+    "name": "Barlow-ExtraLightItalic.ttf",
+    "fileName": "Barlow-ExtraLightItalic.ttf",
+    "url": "./files/101-Barlow-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "Barlow-Italic.ttf",
+    "fileName": "Barlow-Italic.ttf",
+    "url": "./files/102-Barlow-Italic.ttf"
+  },
+  {
+    "name": "Barlow-Light.ttf",
+    "fileName": "Barlow-Light.ttf",
+    "url": "./files/103-Barlow-Light.ttf"
+  },
+  {
+    "name": "Barlow-LightItalic.ttf",
+    "fileName": "Barlow-LightItalic.ttf",
+    "url": "./files/104-Barlow-LightItalic.ttf"
+  },
+  {
+    "name": "Barlow-Medium.ttf",
+    "fileName": "Barlow-Medium.ttf",
+    "url": "./files/105-Barlow-Medium.ttf"
+  },
+  {
+    "name": "Barlow-MediumItalic.ttf",
+    "fileName": "Barlow-MediumItalic.ttf",
+    "url": "./files/106-Barlow-MediumItalic.ttf"
+  },
+  {
+    "name": "Barlow-Regular.ttf",
+    "fileName": "Barlow-Regular.ttf",
+    "url": "./files/107-Barlow-Regular.ttf"
+  },
+  {
+    "name": "Barlow-SemiBold.ttf",
+    "fileName": "Barlow-SemiBold.ttf",
+    "url": "./files/108-Barlow-SemiBold.ttf"
+  },
+  {
+    "name": "Barlow-SemiBoldItalic.ttf",
+    "fileName": "Barlow-SemiBoldItalic.ttf",
+    "url": "./files/109-Barlow-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "Barlow-Thin.ttf",
+    "fileName": "Barlow-Thin.ttf",
+    "url": "./files/110-Barlow-Thin.ttf"
+  },
+  {
+    "name": "Barlow-ThinItalic.ttf",
+    "fileName": "Barlow-ThinItalic.ttf",
+    "url": "./files/111-Barlow-ThinItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Bold.ttf",
+    "fileName": "IBMPlexMono-Bold.ttf",
+    "url": "./files/112-IBMPlexMono-Bold.ttf"
+  },
+  {
+    "name": "IBMPlexMono-BoldItalic.ttf",
+    "fileName": "IBMPlexMono-BoldItalic.ttf",
+    "url": "./files/113-IBMPlexMono-BoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-ExtraLight.ttf",
+    "fileName": "IBMPlexMono-ExtraLight.ttf",
+    "url": "./files/114-IBMPlexMono-ExtraLight.ttf"
+  },
+  {
+    "name": "IBMPlexMono-ExtraLightItalic.ttf",
+    "fileName": "IBMPlexMono-ExtraLightItalic.ttf",
+    "url": "./files/115-IBMPlexMono-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Italic.ttf",
+    "fileName": "IBMPlexMono-Italic.ttf",
+    "url": "./files/116-IBMPlexMono-Italic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Light.ttf",
+    "fileName": "IBMPlexMono-Light.ttf",
+    "url": "./files/117-IBMPlexMono-Light.ttf"
+  },
+  {
+    "name": "IBMPlexMono-LightItalic.ttf",
+    "fileName": "IBMPlexMono-LightItalic.ttf",
+    "url": "./files/118-IBMPlexMono-LightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Medium.ttf",
+    "fileName": "IBMPlexMono-Medium.ttf",
+    "url": "./files/119-IBMPlexMono-Medium.ttf"
+  },
+  {
+    "name": "IBMPlexMono-MediumItalic.ttf",
+    "fileName": "IBMPlexMono-MediumItalic.ttf",
+    "url": "./files/120-IBMPlexMono-MediumItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Regular.ttf",
+    "fileName": "IBMPlexMono-Regular.ttf",
+    "url": "./files/121-IBMPlexMono-Regular.ttf"
+  },
+  {
+    "name": "IBMPlexMono-SemiBold.ttf",
+    "fileName": "IBMPlexMono-SemiBold.ttf",
+    "url": "./files/122-IBMPlexMono-SemiBold.ttf"
+  },
+  {
+    "name": "IBMPlexMono-SemiBoldItalic.ttf",
+    "fileName": "IBMPlexMono-SemiBoldItalic.ttf",
+    "url": "./files/123-IBMPlexMono-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Thin.ttf",
+    "fileName": "IBMPlexMono-Thin.ttf",
+    "url": "./files/124-IBMPlexMono-Thin.ttf"
+  },
+  {
+    "name": "IBMPlexMono-ThinItalic.ttf",
+    "fileName": "IBMPlexMono-ThinItalic.ttf",
+    "url": "./files/125-IBMPlexMono-ThinItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Bold.ttf",
+    "fileName": "IBMPlexSerif-Bold.ttf",
+    "url": "./files/126-IBMPlexSerif-Bold.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-BoldItalic.ttf",
+    "fileName": "IBMPlexSerif-BoldItalic.ttf",
+    "url": "./files/127-IBMPlexSerif-BoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-ExtraLight.ttf",
+    "fileName": "IBMPlexSerif-ExtraLight.ttf",
+    "url": "./files/128-IBMPlexSerif-ExtraLight.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-ExtraLightItalic.ttf",
+    "fileName": "IBMPlexSerif-ExtraLightItalic.ttf",
+    "url": "./files/129-IBMPlexSerif-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Italic.ttf",
+    "fileName": "IBMPlexSerif-Italic.ttf",
+    "url": "./files/130-IBMPlexSerif-Italic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Light.ttf",
+    "fileName": "IBMPlexSerif-Light.ttf",
+    "url": "./files/131-IBMPlexSerif-Light.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-LightItalic.ttf",
+    "fileName": "IBMPlexSerif-LightItalic.ttf",
+    "url": "./files/132-IBMPlexSerif-LightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Medium.ttf",
+    "fileName": "IBMPlexSerif-Medium.ttf",
+    "url": "./files/133-IBMPlexSerif-Medium.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-MediumItalic.ttf",
+    "fileName": "IBMPlexSerif-MediumItalic.ttf",
+    "url": "./files/134-IBMPlexSerif-MediumItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Regular.ttf",
+    "fileName": "IBMPlexSerif-Regular.ttf",
+    "url": "./files/135-IBMPlexSerif-Regular.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-SemiBold.ttf",
+    "fileName": "IBMPlexSerif-SemiBold.ttf",
+    "url": "./files/136-IBMPlexSerif-SemiBold.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-SemiBoldItalic.ttf",
+    "fileName": "IBMPlexSerif-SemiBoldItalic.ttf",
+    "url": "./files/137-IBMPlexSerif-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Thin.ttf",
+    "fileName": "IBMPlexSerif-Thin.ttf",
+    "url": "./files/138-IBMPlexSerif-Thin.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-ThinItalic.ttf",
+    "fileName": "IBMPlexSerif-ThinItalic.ttf",
+    "url": "./files/139-IBMPlexSerif-ThinItalic.ttf"
+  },
+  {
+    "name": "DMMono-Italic.ttf",
+    "fileName": "DMMono-Italic.ttf",
+    "url": "./files/140-DMMono-Italic.ttf"
+  },
+  {
+    "name": "DMMono-Light.ttf",
+    "fileName": "DMMono-Light.ttf",
+    "url": "./files/141-DMMono-Light.ttf"
+  },
+  {
+    "name": "DMMono-LightItalic.ttf",
+    "fileName": "DMMono-LightItalic.ttf",
+    "url": "./files/142-DMMono-LightItalic.ttf"
+  },
+  {
+    "name": "DMMono-Medium.ttf",
+    "fileName": "DMMono-Medium.ttf",
+    "url": "./files/143-DMMono-Medium.ttf"
+  },
+  {
+    "name": "DMMono-MediumItalic.ttf",
+    "fileName": "DMMono-MediumItalic.ttf",
+    "url": "./files/144-DMMono-MediumItalic.ttf"
+  },
+  {
+    "name": "DMMono-Regular.ttf",
+    "fileName": "DMMono-Regular.ttf",
+    "url": "./files/145-DMMono-Regular.ttf"
+  },
+  {
+    "name": "SpaceMono-Bold.ttf",
+    "fileName": "SpaceMono-Bold.ttf",
+    "url": "./files/146-SpaceMono-Bold.ttf"
+  },
+  {
+    "name": "SpaceMono-BoldItalic.ttf",
+    "fileName": "SpaceMono-BoldItalic.ttf",
+    "url": "./files/147-SpaceMono-BoldItalic.ttf"
+  },
+  {
+    "name": "SpaceMono-Italic.ttf",
+    "fileName": "SpaceMono-Italic.ttf",
+    "url": "./files/148-SpaceMono-Italic.ttf"
+  },
+  {
+    "name": "SpaceMono-Regular.ttf",
+    "fileName": "SpaceMono-Regular.ttf",
+    "url": "./files/149-SpaceMono-Regular.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-Bold.ttf",
+    "fileName": "PT_Sans-Web-Bold.ttf",
+    "url": "./files/150-PT_Sans-Web-Bold.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-BoldItalic.ttf",
+    "fileName": "PT_Sans-Web-BoldItalic.ttf",
+    "url": "./files/151-PT_Sans-Web-BoldItalic.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-Italic.ttf",
+    "fileName": "PT_Sans-Web-Italic.ttf",
+    "url": "./files/152-PT_Sans-Web-Italic.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-Regular.ttf",
+    "fileName": "PT_Sans-Web-Regular.ttf",
+    "url": "./files/153-PT_Sans-Web-Regular.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-Bold.ttf",
+    "fileName": "PT_Serif-Web-Bold.ttf",
+    "url": "./files/154-PT_Serif-Web-Bold.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-BoldItalic.ttf",
+    "fileName": "PT_Serif-Web-BoldItalic.ttf",
+    "url": "./files/155-PT_Serif-Web-BoldItalic.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-Italic.ttf",
+    "fileName": "PT_Serif-Web-Italic.ttf",
+    "url": "./files/156-PT_Serif-Web-Italic.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-Regular.ttf",
+    "fileName": "PT_Serif-Web-Regular.ttf",
+    "url": "./files/157-PT_Serif-Web-Regular.ttf"
+  },
+  {
+    "name": "FiraMono-Bold.ttf",
+    "fileName": "FiraMono-Bold.ttf",
+    "url": "./files/158-FiraMono-Bold.ttf"
+  },
+  {
+    "name": "FiraMono-Medium.ttf",
+    "fileName": "FiraMono-Medium.ttf",
+    "url": "./files/159-FiraMono-Medium.ttf"
+  },
+  {
+    "name": "FiraMono-Regular.ttf",
+    "fileName": "FiraMono-Regular.ttf",
+    "url": "./files/160-FiraMono-Regular.ttf"
+  },
+  {
+    "name": "Inconsolata[wdth,wght].ttf",
+    "fileName": "Inconsolata[wdth,wght].ttf",
+    "url": "./files/161-Inconsolata[wdth,wght].ttf"
+  },
+  {
+    "name": "Inconsolata-Black.ttf",
+    "fileName": "Inconsolata-Black.ttf",
+    "url": "./files/162-Inconsolata-Black.ttf"
+  },
+  {
+    "name": "Inconsolata-Bold.ttf",
+    "fileName": "Inconsolata-Bold.ttf",
+    "url": "./files/163-Inconsolata-Bold.ttf"
+  },
+  {
+    "name": "Inconsolata-ExtraBold.ttf",
+    "fileName": "Inconsolata-ExtraBold.ttf",
+    "url": "./files/164-Inconsolata-ExtraBold.ttf"
+  },
+  {
+    "name": "Inconsolata-ExtraLight.ttf",
+    "fileName": "Inconsolata-ExtraLight.ttf",
+    "url": "./files/165-Inconsolata-ExtraLight.ttf"
+  },
+  {
+    "name": "Inconsolata-Light.ttf",
+    "fileName": "Inconsolata-Light.ttf",
+    "url": "./files/166-Inconsolata-Light.ttf"
+  },
+  {
+    "name": "Inconsolata-Medium.ttf",
+    "fileName": "Inconsolata-Medium.ttf",
+    "url": "./files/167-Inconsolata-Medium.ttf"
+  },
+  {
+    "name": "Inconsolata-Regular.ttf",
+    "fileName": "Inconsolata-Regular.ttf",
+    "url": "./files/168-Inconsolata-Regular.ttf"
+  },
+  {
+    "name": "Inconsolata-SemiBold.ttf",
+    "fileName": "Inconsolata-SemiBold.ttf",
+    "url": "./files/169-Inconsolata-SemiBold.ttf"
+  },
+  {
+    "name": "Ligconsolata-Bold.ttf",
+    "fileName": "Ligconsolata-Bold.ttf",
+    "url": "./files/170-Ligconsolata-Bold.ttf"
+  },
+  {
+    "name": "Ligconsolata-Regular.ttf",
+    "fileName": "Ligconsolata-Regular.ttf",
+    "url": "./files/171-Ligconsolata-Regular.ttf"
+  },
+  {
+    "name": "Inter-Italic[opsz,wght].ttf",
+    "fileName": "Inter-Italic[opsz,wght].ttf",
+    "url": "./files/172-Inter-Italic[opsz,wght].ttf"
+  },
+  {
+    "name": "Inter[opsz,wght].ttf",
+    "fileName": "Inter[opsz,wght].ttf",
+    "url": "./files/173-Inter[opsz,wght].ttf"
+  },
+  {
+    "name": "Roboto-Italic[wdth,wght].ttf",
+    "fileName": "Roboto-Italic[wdth,wght].ttf",
+    "url": "./files/174-Roboto-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Roboto[wdth,wght].ttf",
+    "fileName": "Roboto[wdth,wght].ttf",
+    "url": "./files/175-Roboto[wdth,wght].ttf"
+  },
+  {
+    "name": "OpenSans-Italic[wdth,wght].ttf",
+    "fileName": "OpenSans-Italic[wdth,wght].ttf",
+    "url": "./files/176-OpenSans-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "OpenSans[wdth,wght].ttf",
+    "fileName": "OpenSans[wdth,wght].ttf",
+    "url": "./files/177-OpenSans[wdth,wght].ttf"
+  },
+  {
+    "name": "Montserrat-Italic[wght].ttf",
+    "fileName": "Montserrat-Italic[wght].ttf",
+    "url": "./files/178-Montserrat-Italic[wght].ttf"
+  },
+  {
+    "name": "Montserrat[wght].ttf",
+    "fileName": "Montserrat[wght].ttf",
+    "url": "./files/179-Montserrat[wght].ttf"
+  },
+  {
+    "name": "Oswald[wght].ttf",
+    "fileName": "Oswald[wght].ttf",
+    "url": "./files/180-Oswald[wght].ttf"
+  },
+  {
+    "name": "Merriweather-Italic[opsz,wdth,wght].ttf",
+    "fileName": "Merriweather-Italic[opsz,wdth,wght].ttf",
+    "url": "./files/181-Merriweather-Italic[opsz,wdth,wght].ttf"
+  },
+  {
+    "name": "Merriweather[opsz,wdth,wght].ttf",
+    "fileName": "Merriweather[opsz,wdth,wght].ttf",
+    "url": "./files/182-Merriweather[opsz,wdth,wght].ttf"
+  },
+  {
+    "name": "SourceSans3-Italic[wght].ttf",
+    "fileName": "SourceSans3-Italic[wght].ttf",
+    "url": "./files/183-SourceSans3-Italic[wght].ttf"
+  },
+  {
+    "name": "SourceSans3[wght].ttf",
+    "fileName": "SourceSans3[wght].ttf",
+    "url": "./files/184-SourceSans3[wght].ttf"
+  },
+  {
+    "name": "SourceSerif4-Italic[opsz,wght].ttf",
+    "fileName": "SourceSerif4-Italic[opsz,wght].ttf",
+    "url": "./files/185-SourceSerif4-Italic[opsz,wght].ttf"
+  },
+  {
+    "name": "SourceSerif4[opsz,wght].ttf",
+    "fileName": "SourceSerif4[opsz,wght].ttf",
+    "url": "./files/186-SourceSerif4[opsz,wght].ttf"
+  },
+  {
+    "name": "IBMPlexSans-Italic[wdth,wght].ttf",
+    "fileName": "IBMPlexSans-Italic[wdth,wght].ttf",
+    "url": "./files/187-IBMPlexSans-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "IBMPlexSans[wdth,wght].ttf",
+    "fileName": "IBMPlexSans[wdth,wght].ttf",
+    "url": "./files/188-IBMPlexSans[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSans-Italic[wdth,wght].ttf",
+    "fileName": "NotoSans-Italic[wdth,wght].ttf",
+    "url": "./files/189-NotoSans-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSans[wdth,wght].ttf",
+    "fileName": "NotoSans[wdth,wght].ttf",
+    "url": "./files/190-NotoSans[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSerif-Italic[wdth,wght].ttf",
+    "fileName": "NotoSerif-Italic[wdth,wght].ttf",
+    "url": "./files/191-NotoSerif-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSerif[wdth,wght].ttf",
+    "fileName": "NotoSerif[wdth,wght].ttf",
+    "url": "./files/192-NotoSerif[wdth,wght].ttf"
+  },
+  {
+    "name": "WorkSans-Italic[wght].ttf",
+    "fileName": "WorkSans-Italic[wght].ttf",
+    "url": "./files/193-WorkSans-Italic[wght].ttf"
+  },
+  {
+    "name": "WorkSans[wght].ttf",
+    "fileName": "WorkSans[wght].ttf",
+    "url": "./files/194-WorkSans[wght].ttf"
+  },
+  {
+    "name": "DMSans-Italic[opsz,wght].ttf",
+    "fileName": "DMSans-Italic[opsz,wght].ttf",
+    "url": "./files/195-DMSans-Italic[opsz,wght].ttf"
+  },
+  {
+    "name": "DMSans[opsz,wght].ttf",
+    "fileName": "DMSans[opsz,wght].ttf",
+    "url": "./files/196-DMSans[opsz,wght].ttf"
+  },
+  {
+    "name": "SpaceGrotesk[wght].ttf",
+    "fileName": "SpaceGrotesk[wght].ttf",
+    "url": "./files/197-SpaceGrotesk[wght].ttf"
+  },
+  {
+    "name": "Manrope[wght].ttf",
+    "fileName": "Manrope[wght].ttf",
+    "url": "./files/198-Manrope[wght].ttf"
+  },
+  {
+    "name": "PlusJakartaSans-Italic[wght].ttf",
+    "fileName": "PlusJakartaSans-Italic[wght].ttf",
+    "url": "./files/199-PlusJakartaSans-Italic[wght].ttf"
+  },
+  {
+    "name": "PlusJakartaSans[wght].ttf",
+    "fileName": "PlusJakartaSans[wght].ttf",
+    "url": "./files/200-PlusJakartaSans[wght].ttf"
+  },
+  {
+    "name": "Lexend[wght].ttf",
+    "fileName": "Lexend[wght].ttf",
+    "url": "./files/201-Lexend[wght].ttf"
+  },
+  {
+    "name": "Sora[wght].ttf",
+    "fileName": "Sora[wght].ttf",
+    "url": "./files/202-Sora[wght].ttf"
+  },
+  {
+    "name": "Cabin-Italic[wdth,wght].ttf",
+    "fileName": "Cabin-Italic[wdth,wght].ttf",
+    "url": "./files/203-Cabin-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Cabin[wdth,wght].ttf",
+    "fileName": "Cabin[wdth,wght].ttf",
+    "url": "./files/204-Cabin[wdth,wght].ttf"
+  },
+  {
+    "name": "LibreBaskerville-Italic[wght].ttf",
+    "fileName": "LibreBaskerville-Italic[wght].ttf",
+    "url": "./files/205-LibreBaskerville-Italic[wght].ttf"
+  },
+  {
+    "name": "LibreBaskerville[wght].ttf",
+    "fileName": "LibreBaskerville[wght].ttf",
+    "url": "./files/206-LibreBaskerville[wght].ttf"
+  },
+  {
+    "name": "PlayfairDisplay-Italic[wght].ttf",
+    "fileName": "PlayfairDisplay-Italic[wght].ttf",
+    "url": "./files/207-PlayfairDisplay-Italic[wght].ttf"
+  },
+  {
+    "name": "PlayfairDisplay[wght].ttf",
+    "fileName": "PlayfairDisplay[wght].ttf",
+    "url": "./files/208-PlayfairDisplay[wght].ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-Bold.ttf",
+    "fileName": "AtkinsonHyperlegible-Bold.ttf",
+    "url": "./files/209-AtkinsonHyperlegible-Bold.ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-BoldItalic.ttf",
+    "fileName": "AtkinsonHyperlegible-BoldItalic.ttf",
+    "url": "./files/210-AtkinsonHyperlegible-BoldItalic.ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-Italic.ttf",
+    "fileName": "AtkinsonHyperlegible-Italic.ttf",
+    "url": "./files/211-AtkinsonHyperlegible-Italic.ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-Regular.ttf",
+    "fileName": "AtkinsonHyperlegible-Regular.ttf",
+    "url": "./files/212-AtkinsonHyperlegible-Regular.ttf"
+  },
+  {
+    "name": "Archivo-Italic[wdth,wght].ttf",
+    "fileName": "Archivo-Italic[wdth,wght].ttf",
+    "url": "./files/213-Archivo-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Archivo[wdth,wght].ttf",
+    "fileName": "Archivo[wdth,wght].ttf",
+    "url": "./files/214-Archivo[wdth,wght].ttf"
+  },
+  {
+    "name": "Nunito-Italic[wght].ttf",
+    "fileName": "Nunito-Italic[wght].ttf",
+    "url": "./files/215-Nunito-Italic[wght].ttf"
+  },
+  {
+    "name": "Nunito[wght].ttf",
+    "fileName": "Nunito[wght].ttf",
+    "url": "./files/216-Nunito[wght].ttf"
+  },
+  {
+    "name": "Raleway-Italic[wght].ttf",
+    "fileName": "Raleway-Italic[wght].ttf",
+    "url": "./files/217-Raleway-Italic[wght].ttf"
+  },
+  {
+    "name": "Raleway[wght].ttf",
+    "fileName": "Raleway[wght].ttf",
+    "url": "./files/218-Raleway[wght].ttf"
+  },
+  {
+    "name": "Rubik-Italic[wght].ttf",
+    "fileName": "Rubik-Italic[wght].ttf",
+    "url": "./files/219-Rubik-Italic[wght].ttf"
+  },
+  {
+    "name": "Rubik[wght].ttf",
+    "fileName": "Rubik[wght].ttf",
+    "url": "./files/220-Rubik[wght].ttf"
+  },
+  {
+    "name": "Bitter-Italic[wght].ttf",
+    "fileName": "Bitter-Italic[wght].ttf",
+    "url": "./files/221-Bitter-Italic[wght].ttf"
+  },
+  {
+    "name": "Bitter[wght].ttf",
+    "fileName": "Bitter[wght].ttf",
+    "url": "./files/222-Bitter[wght].ttf"
+  },
+  {
+    "name": "CrimsonPro-Italic[wght].ttf",
+    "fileName": "CrimsonPro-Italic[wght].ttf",
+    "url": "./files/223-CrimsonPro-Italic[wght].ttf"
+  },
+  {
+    "name": "CrimsonPro[wght].ttf",
+    "fileName": "CrimsonPro[wght].ttf",
+    "url": "./files/224-CrimsonPro[wght].ttf"
+  },
+  {
+    "name": "Karla-Italic[wght].ttf",
+    "fileName": "Karla-Italic[wght].ttf",
+    "url": "./files/225-Karla-Italic[wght].ttf"
+  },
+  {
+    "name": "Karla[wght].ttf",
+    "fileName": "Karla[wght].ttf",
+    "url": "./files/226-Karla[wght].ttf"
+  },
+  {
+    "name": "PublicSans-Italic[wght].ttf",
+    "fileName": "PublicSans-Italic[wght].ttf",
+    "url": "./files/227-PublicSans-Italic[wght].ttf"
+  },
+  {
+    "name": "PublicSans[wght].ttf",
+    "fileName": "PublicSans[wght].ttf",
+    "url": "./files/228-PublicSans[wght].ttf"
+  },
+  {
+    "name": "Urbanist-Italic[wght].ttf",
+    "fileName": "Urbanist-Italic[wght].ttf",
+    "url": "./files/229-Urbanist-Italic[wght].ttf"
+  },
+  {
+    "name": "Urbanist[wght].ttf",
+    "fileName": "Urbanist[wght].ttf",
+    "url": "./files/230-Urbanist[wght].ttf"
+  },
+  {
+    "name": "Figtree-Italic[wght].ttf",
+    "fileName": "Figtree-Italic[wght].ttf",
+    "url": "./files/231-Figtree-Italic[wght].ttf"
+  },
+  {
+    "name": "Figtree[wght].ttf",
+    "fileName": "Figtree[wght].ttf",
+    "url": "./files/232-Figtree[wght].ttf"
+  },
+  {
+    "name": "Outfit[wght].ttf",
+    "fileName": "Outfit[wght].ttf",
+    "url": "./files/233-Outfit[wght].ttf"
+  },
+  {
+    "name": "RedHatDisplay-Italic[wght].ttf",
+    "fileName": "RedHatDisplay-Italic[wght].ttf",
+    "url": "./files/234-RedHatDisplay-Italic[wght].ttf"
+  },
+  {
+    "name": "RedHatDisplay[wght].ttf",
+    "fileName": "RedHatDisplay[wght].ttf",
+    "url": "./files/235-RedHatDisplay[wght].ttf"
+  },
+  {
+    "name": "RedHatText-Italic[wght].ttf",
+    "fileName": "RedHatText-Italic[wght].ttf",
+    "url": "./files/236-RedHatText-Italic[wght].ttf"
+  },
+  {
+    "name": "RedHatText[wght].ttf",
+    "fileName": "RedHatText[wght].ttf",
+    "url": "./files/237-RedHatText[wght].ttf"
+  },
+  {
+    "name": "Mulish-Italic[wght].ttf",
+    "fileName": "Mulish-Italic[wght].ttf",
+    "url": "./files/238-Mulish-Italic[wght].ttf"
+  },
+  {
+    "name": "Mulish[wght].ttf",
+    "fileName": "Mulish[wght].ttf",
+    "url": "./files/239-Mulish[wght].ttf"
+  },
+  {
+    "name": "Quicksand[wght].ttf",
+    "fileName": "Quicksand[wght].ttf",
+    "url": "./files/240-Quicksand[wght].ttf"
+  },
+  {
+    "name": "Assistant[wght].ttf",
+    "fileName": "Assistant[wght].ttf",
+    "url": "./files/241-Assistant[wght].ttf"
+  },
+  {
+    "name": "Heebo[wght].ttf",
+    "fileName": "Heebo[wght].ttf",
+    "url": "./files/242-Heebo[wght].ttf"
+  },
+  {
+    "name": "TitilliumWeb-Black.ttf",
+    "fileName": "TitilliumWeb-Black.ttf",
+    "url": "./files/243-TitilliumWeb-Black.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Bold.ttf",
+    "fileName": "TitilliumWeb-Bold.ttf",
+    "url": "./files/244-TitilliumWeb-Bold.ttf"
+  },
+  {
+    "name": "TitilliumWeb-BoldItalic.ttf",
+    "fileName": "TitilliumWeb-BoldItalic.ttf",
+    "url": "./files/245-TitilliumWeb-BoldItalic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-ExtraLight.ttf",
+    "fileName": "TitilliumWeb-ExtraLight.ttf",
+    "url": "./files/246-TitilliumWeb-ExtraLight.ttf"
+  },
+  {
+    "name": "TitilliumWeb-ExtraLightItalic.ttf",
+    "fileName": "TitilliumWeb-ExtraLightItalic.ttf",
+    "url": "./files/247-TitilliumWeb-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Italic.ttf",
+    "fileName": "TitilliumWeb-Italic.ttf",
+    "url": "./files/248-TitilliumWeb-Italic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Light.ttf",
+    "fileName": "TitilliumWeb-Light.ttf",
+    "url": "./files/249-TitilliumWeb-Light.ttf"
+  },
+  {
+    "name": "TitilliumWeb-LightItalic.ttf",
+    "fileName": "TitilliumWeb-LightItalic.ttf",
+    "url": "./files/250-TitilliumWeb-LightItalic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Regular.ttf",
+    "fileName": "TitilliumWeb-Regular.ttf",
+    "url": "./files/251-TitilliumWeb-Regular.ttf"
+  },
+  {
+    "name": "TitilliumWeb-SemiBold.ttf",
+    "fileName": "TitilliumWeb-SemiBold.ttf",
+    "url": "./files/252-TitilliumWeb-SemiBold.ttf"
+  },
+  {
+    "name": "TitilliumWeb-SemiBoldItalic.ttf",
+    "fileName": "TitilliumWeb-SemiBoldItalic.ttf",
+    "url": "./files/253-TitilliumWeb-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "Asap-Italic[wdth,wght].ttf",
+    "fileName": "Asap-Italic[wdth,wght].ttf",
+    "url": "./files/254-Asap-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Asap[wdth,wght].ttf",
+    "fileName": "Asap[wdth,wght].ttf",
+    "url": "./files/255-Asap[wdth,wght].ttf"
+  },
+  {
+    "name": "AsapCondensed-Black.ttf",
+    "fileName": "AsapCondensed-Black.ttf",
+    "url": "./files/256-AsapCondensed-Black.ttf"
+  },
+  {
+    "name": "AsapCondensed-BlackItalic.ttf",
+    "fileName": "AsapCondensed-BlackItalic.ttf",
+    "url": "./files/257-AsapCondensed-BlackItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Bold.ttf",
+    "fileName": "AsapCondensed-Bold.ttf",
+    "url": "./files/258-AsapCondensed-Bold.ttf"
+  },
+  {
+    "name": "AsapCondensed-BoldItalic.ttf",
+    "fileName": "AsapCondensed-BoldItalic.ttf",
+    "url": "./files/259-AsapCondensed-BoldItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraBold.ttf",
+    "fileName": "AsapCondensed-ExtraBold.ttf",
+    "url": "./files/260-AsapCondensed-ExtraBold.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraBoldItalic.ttf",
+    "fileName": "AsapCondensed-ExtraBoldItalic.ttf",
+    "url": "./files/261-AsapCondensed-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraLight.ttf",
+    "fileName": "AsapCondensed-ExtraLight.ttf",
+    "url": "./files/262-AsapCondensed-ExtraLight.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraLightItalic.ttf",
+    "fileName": "AsapCondensed-ExtraLightItalic.ttf",
+    "url": "./files/263-AsapCondensed-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Italic.ttf",
+    "fileName": "AsapCondensed-Italic.ttf",
+    "url": "./files/264-AsapCondensed-Italic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Light.ttf",
+    "fileName": "AsapCondensed-Light.ttf",
+    "url": "./files/265-AsapCondensed-Light.ttf"
+  },
+  {
+    "name": "AsapCondensed-LightItalic.ttf",
+    "fileName": "AsapCondensed-LightItalic.ttf",
+    "url": "./files/266-AsapCondensed-LightItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Medium.ttf",
+    "fileName": "AsapCondensed-Medium.ttf",
+    "url": "./files/267-AsapCondensed-Medium.ttf"
+  },
+  {
+    "name": "AsapCondensed-MediumItalic.ttf",
+    "fileName": "AsapCondensed-MediumItalic.ttf",
+    "url": "./files/268-AsapCondensed-MediumItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Regular.ttf",
+    "fileName": "AsapCondensed-Regular.ttf",
+    "url": "./files/269-AsapCondensed-Regular.ttf"
+  },
+  {
+    "name": "AsapCondensed-SemiBold.ttf",
+    "fileName": "AsapCondensed-SemiBold.ttf",
+    "url": "./files/270-AsapCondensed-SemiBold.ttf"
+  },
+  {
+    "name": "AsapCondensed-SemiBoldItalic.ttf",
+    "fileName": "AsapCondensed-SemiBoldItalic.ttf",
+    "url": "./files/271-AsapCondensed-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Black.ttf",
+    "fileName": "BarlowCondensed-Black.ttf",
+    "url": "./files/272-BarlowCondensed-Black.ttf"
+  },
+  {
+    "name": "BarlowCondensed-BlackItalic.ttf",
+    "fileName": "BarlowCondensed-BlackItalic.ttf",
+    "url": "./files/273-BarlowCondensed-BlackItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Bold.ttf",
+    "fileName": "BarlowCondensed-Bold.ttf",
+    "url": "./files/274-BarlowCondensed-Bold.ttf"
+  },
+  {
+    "name": "BarlowCondensed-BoldItalic.ttf",
+    "fileName": "BarlowCondensed-BoldItalic.ttf",
+    "url": "./files/275-BarlowCondensed-BoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraBold.ttf",
+    "fileName": "BarlowCondensed-ExtraBold.ttf",
+    "url": "./files/276-BarlowCondensed-ExtraBold.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraBoldItalic.ttf",
+    "fileName": "BarlowCondensed-ExtraBoldItalic.ttf",
+    "url": "./files/277-BarlowCondensed-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraLight.ttf",
+    "fileName": "BarlowCondensed-ExtraLight.ttf",
+    "url": "./files/278-BarlowCondensed-ExtraLight.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraLightItalic.ttf",
+    "fileName": "BarlowCondensed-ExtraLightItalic.ttf",
+    "url": "./files/279-BarlowCondensed-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Italic.ttf",
+    "fileName": "BarlowCondensed-Italic.ttf",
+    "url": "./files/280-BarlowCondensed-Italic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Light.ttf",
+    "fileName": "BarlowCondensed-Light.ttf",
+    "url": "./files/281-BarlowCondensed-Light.ttf"
+  },
+  {
+    "name": "BarlowCondensed-LightItalic.ttf",
+    "fileName": "BarlowCondensed-LightItalic.ttf",
+    "url": "./files/282-BarlowCondensed-LightItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Medium.ttf",
+    "fileName": "BarlowCondensed-Medium.ttf",
+    "url": "./files/283-BarlowCondensed-Medium.ttf"
+  },
+  {
+    "name": "BarlowCondensed-MediumItalic.ttf",
+    "fileName": "BarlowCondensed-MediumItalic.ttf",
+    "url": "./files/284-BarlowCondensed-MediumItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Regular.ttf",
+    "fileName": "BarlowCondensed-Regular.ttf",
+    "url": "./files/285-BarlowCondensed-Regular.ttf"
+  },
+  {
+    "name": "BarlowCondensed-SemiBold.ttf",
+    "fileName": "BarlowCondensed-SemiBold.ttf",
+    "url": "./files/286-BarlowCondensed-SemiBold.ttf"
+  },
+  {
+    "name": "BarlowCondensed-SemiBoldItalic.ttf",
+    "fileName": "BarlowCondensed-SemiBoldItalic.ttf",
+    "url": "./files/287-BarlowCondensed-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Thin.ttf",
+    "fileName": "BarlowCondensed-Thin.ttf",
+    "url": "./files/288-BarlowCondensed-Thin.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ThinItalic.ttf",
+    "fileName": "BarlowCondensed-ThinItalic.ttf",
+    "url": "./files/289-BarlowCondensed-ThinItalic.ttf"
+  },
+  {
+    "name": "BarlowSemiCondensed-Black.ttf",
+    "fileName": "BarlowSemiCondensed-Black.ttf",
+    "url": "./files/290-BarlowSemiCondensed-Black.ttf"
+  },
+  {
+    "name": "BarlowSemiCondensed-BlackItalic.ttf",
+    "fileName": "BarlowSemiCondensed-BlackItalic.ttf",
+    "url": "./files/291-BarlowSemiCondensed-BlackItalic.ttf"
+  }
+]
