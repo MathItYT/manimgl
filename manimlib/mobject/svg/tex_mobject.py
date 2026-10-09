@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 from functools import lru_cache
@@ -74,9 +75,113 @@ class Tex(StringMobject):
         )
 
         self.set_color_by_tex_to_color_map(self.tex_to_color_map)
-        self.scale(get_tex_mob_scale_factor() * font_size)
+        # The browser renders TeX through MiTeX inside typst-wasm. Its SVG is
+        # asynchronous, so browser scaling is applied by create() after rendering.
+        if sys.platform != "emscripten":
+            self.scale(get_tex_mob_scale_factor() * font_size)
 
         self.font_size = font_size  # Important for this to go after the scale call
+
+    @classmethod
+    def create(cls, *tex_strings: str, **kwargs):
+        """Create Tex/TexText, using MiTeX in the browser and native LaTeX otherwise."""
+        if sys.platform != "emscripten":
+            return cls(*tex_strings, **kwargs)
+        return cls._create_browser(*tex_strings, **kwargs)
+
+    @staticmethod
+    def _make_mitex_source(content: str, *, text_mode: bool = False) -> str:
+        # Typst raw blocks use backticks as delimiters. Increase the delimiter
+        # length when the LaTeX input itself contains backticks (for example \\verb).
+        longest = max((len(match.group(0)) for match in re.finditer(r"`+", content)), default=0)
+        delimiter = "`" * (longest + 1)
+        command = "mitext" if text_mode else "mitex"
+        return (
+            '#import "@preview/mitex:0.2.7": *\\n'
+            '#set page(width: auto, height: auto, margin: 0pt, fill: none)\\n'
+            '#set text(size: 10pt, ligatures: false)\\n'
+            f'#{command}({delimiter}{content}{delimiter})\\n'
+        )
+
+    @classmethod
+    async def _create_browser(cls, *tex_strings: str, **kwargs):
+        from manimlib.utils.browser_typst import typst_to_svg_async
+
+        use_labelled_svg = kwargs.get("use_labelled_svg", True)
+        font_size = kwargs.get("font_size", 48)
+        text_mode = not bool(cls.tex_environment)
+
+        # Build a probe with an empty SVG. This preserves Tex's native parsing,
+        # isolation spans, color-label insertion, and options without invoking
+        # the native LaTeX executable on the browser.
+        probe_kwargs = dict(kwargs)
+        for private_key in ("_svg_override", "_labelled_svg_override"):
+            probe_kwargs.pop(private_key, None)
+        probe_kwargs["use_labelled_svg"] = True
+        probe_kwargs["_svg_override"] = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" '
+            'viewBox="0 0 1 1"/>'
+        )
+        probe = cls(*tex_strings, **probe_kwargs)
+
+        async def render(is_labelled: bool) -> str:
+            content = probe.get_content(is_labelled=is_labelled)
+            # \centering is a layout command rather than equation content and
+            # is not needed in Typst's auto-sized SVG page.
+            if probe.alignment:
+                content = content.replace(probe.alignment, "")
+            if probe.additional_preamble:
+                content = probe.additional_preamble + "\\n" + content
+            svg = await typst_to_svg_async(
+                cls._make_mitex_source(content, text_mode=text_mode)
+            )
+            if not isinstance(svg, str):
+                raise TypeError(
+                    f"MiTeX browser renderer returned {type(svg).__name__}; expected SVG text."
+                )
+            return svg
+
+        svg = await render(is_labelled=use_labelled_svg)
+        labelled_svg = None if use_labelled_svg else await render(is_labelled=True)
+
+        final_kwargs = dict(kwargs)
+        final_kwargs.pop("_svg_override", None)
+        final_kwargs.pop("_labelled_svg_override", None)
+        final_kwargs["_svg_override"] = svg
+        final_kwargs["use_labelled_svg"] = use_labelled_svg
+        if labelled_svg is not None:
+            final_kwargs["_labelled_svg_override"] = labelled_svg
+
+        obj = cls(*tex_strings, **final_kwargs)
+
+        # Calibrate with the same MiTeX mode/environment so browser glyph units
+        # are mapped to Manim units consistently with the requested font_size.
+        scale_key = (text_mode, cls.tex_environment)
+        scale_cache = getattr(Tex, "_browser_scale_cache", None)
+        if scale_cache is None:
+            scale_cache = {}
+            Tex._browser_scale_cache = scale_cache
+        if scale_key not in scale_cache:
+            if text_mode:
+                reference_content = "0"
+            elif cls.tex_environment:
+                reference_content = (
+                    f"\\\\begin{{{cls.tex_environment}}}0"
+                    f"\\\\end{{{cls.tex_environment}}}"
+                )
+            else:
+                reference_content = "0"
+            reference_svg = await typst_to_svg_async(
+                cls._make_mitex_source(reference_content, text_mode=text_mode)
+            )
+            svg_height = get_svg_content_height(reference_svg)
+            if svg_height <= 0:
+                raise ValueError("MiTeX returned an invalid reference glyph height")
+            scale_cache[scale_key] = (
+                1.0 / (manim_config.tex.font_size_for_unit_height * svg_height)
+            )
+        obj.scale(scale_cache[scale_key] * font_size)
+        return obj
 
     def get_svg_string_by_content(self, content: str) -> str:
         return latex_to_svg(content, self.template, self.additional_preamble, short_tex=self.tex_string)
