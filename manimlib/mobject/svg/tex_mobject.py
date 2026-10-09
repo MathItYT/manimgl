@@ -92,7 +92,6 @@ class Tex(StringMobject):
 
     @staticmethod
     def _make_mitex_source(content: str, *, text_mode: bool = False) -> str:
-
         font_rule = f'#set text(font: "New Computer Modern")\n'
         doc_head = (
             f'#set page(width: auto, height: auto, margin: 0pt, fill: none)\n'
@@ -104,7 +103,7 @@ class Tex(StringMobject):
 
         delimiter = "`"
         command = "mitext" if text_mode else "mitex"
-        return f"{doc_head}\n" + f'#{command}({delimiter}\n{content}\n{delimiter})\n'
+        return f"#import \"@preview/mitex:0.2.7\": *\n{doc_head}\n" + f'#{command}({delimiter}\n{content}\n{delimiter})\n'
 
     @classmethod
     async def _create_browser(cls, *tex_strings: str, **kwargs):
