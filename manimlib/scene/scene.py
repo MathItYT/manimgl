@@ -979,12 +979,7 @@ class Scene(object):
             return self.hold_loop()
         while self.hold_on_wait:
             self.window.poll_events()
-            await self.update_frame_async(
-                dt=1 / self.camera.fps,
-                force_draw=True,
-            )
-            browser_audio.sync(self.time, self._interactive_sound_events)
-            self.emit_frame()
+            await self.update_frame_async(dt=1 / self.camera.fps)
             await self._browser_frame()
         self.hold_on_wait = True
 
