@@ -154,25 +154,15 @@ class Tex(StringMobject):
 
         obj = cls(*tex_strings, **final_kwargs)
 
-        # Calibrate with the same MiTeX mode/environment so browser glyph units
-        # are mapped to Manim units consistently with the requested font_size.
+        # Calibrate independently for math and text-mode MiTeX output.
         scale_key = (text_mode, cls.tex_environment)
         scale_cache = getattr(Tex, "_browser_scale_cache", None)
         if scale_cache is None:
             scale_cache = {}
             Tex._browser_scale_cache = scale_cache
         if scale_key not in scale_cache:
-            if text_mode:
-                reference_content = "0"
-            elif cls.tex_environment:
-                reference_content = (
-                    f"\\begin{{{cls.tex_environment}}}0"
-                    f"\\end{{{cls.tex_environment}}}"
-                )
-            else:
-                reference_content = "0"
             reference_svg = await typst_to_svg_async(
-                cls._make_mitex_source(reference_content, text_mode=text_mode)
+                cls._make_mitex_source("0", text_mode=text_mode)
             )
             svg_height = get_svg_content_height(reference_svg)
             if svg_height <= 0:
