@@ -1417,6 +1417,11 @@ class MotionBlur(PostProcessEffect):
 
         self._cached_strength = 0.0
 
+        # Suaviza la entrada/salida del blur para evitar picos al iniciar
+        # movimiento después de varios frames estáticos.
+        self._smoothed_strength = 0.0
+        self._strength_smoothing = 0.28
+
         self._initialized = False
 
     # ==================================================================
@@ -1440,6 +1445,7 @@ class MotionBlur(PostProcessEffect):
         )
 
         self._cached_strength = 0.0
+        self._smoothed_strength = 0.0
 
     # ==================================================================
     # WORLD POSITION
@@ -2214,6 +2220,23 @@ class MotionBlur(PostProcessEffect):
             dir_x = self._cached_dir[0]
             dir_y = self._cached_dir[1]
             active_strength = 0.0
+
+        # ==============================================================
+        # SMOOTH STRENGTH
+        # ==============================================================
+        #
+        # A sudden transition from rest to motion can produce a large
+        # one-frame displacement. Ease the blur in and out instead of
+        # feeding that value directly to the shader.
+        #
+        alpha = self._strength_smoothing
+        self._smoothed_strength += alpha * (
+            active_strength - self._smoothed_strength
+        )
+        active_strength = min(
+            max(self._smoothed_strength, 0.0),
+            self.max_blur,
+        )
 
         # ==============================================================
         # COMMIT FRAME
