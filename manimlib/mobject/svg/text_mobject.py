@@ -136,7 +136,7 @@ async def markup_to_svg_pyodide_async(
         )
     from js import window
 
-    result = window.manimPangoTextToSvgAsync(
+    result = window.manimPangoTextToSvg(
         markup_str,
         justify,
         indent,
