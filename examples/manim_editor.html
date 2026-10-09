@@ -13,6 +13,10 @@
     #toolbar { height:48px; min-height:48px; display:flex; align-items:center; gap:10px; padding:7px 10px; background:var(--panel); border-bottom:1px solid var(--line); }
     button { border:0; border-radius:6px; padding:7px 13px; background:#2b3342; color:#fff; font-weight:600; cursor:pointer; }
     button.primary { background:var(--accent); }
+    button.record { background:#a92f43; }
+    button.recording { background:#d23b50; }
+    .toolbar-option { display:flex; align-items:center; gap:5px; color:var(--muted); font-size:12px; white-space:nowrap; }
+    .toolbar-option input { accent-color:var(--accent); }
     button:disabled { opacity:.45; cursor:default; }
     #status { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); font:12px monospace; }
     #main { flex:1; min-height:0; display:grid; grid-template-columns:minmax(380px, 46%) 1fr; }
@@ -316,7 +320,14 @@
 <body>
   <div id="toolbar">
     <button id="run" class="primary" disabled>▶ Ejecutar</button>
+    <button id="run-record" class="record" disabled>● Ejecutar y grabar</button>
     <button id="stop" disabled>■ Detener</button>
+    <button id="record" class="record" disabled>● Grabar</button>
+    <button id="record-stop" disabled>■ Finalizar grabación</button>
+    <label class="toolbar-option" title="Mezcla el micrófono con el audio de la escena">
+      <input id="record-mic" type="checkbox">
+      Micrófono
+    </label>
     <button id="format">Transformar a web</button>
     <button id="projects-toggle">Proyectos</button>
     <button id="assets-toggle">Assets</button>
@@ -378,6 +389,52 @@
     import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
 
     const canvas = document.getElementById("manim-canvas");
+
+    // Route Manim's HTMLAudioElements through Web Audio so the scene soundtrack
+    // can be mixed into the same MediaRecorder stream as the canvas and microphone.
+    function ensureRecordingAudioGraph() {
+      if (!window.__manimAudioContext) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+          throw new Error("Este navegador no admite Web Audio para grabar el audio de la escena.");
+        }
+        window.__manimAudioContext = new AudioContextClass();
+        window.__manimAudioSources = new Map();
+      }
+      const context = window.__manimAudioContext;
+      const sources = window.__manimAudioSources;
+
+      window.__manimAttachAudioForRecording = audio => {
+        if (sources.has(audio)) return;
+        const source = context.createMediaElementSource(audio);
+        source.connect(context.destination);
+        if (window.__manimRecordingAudioDestination) {
+          source.connect(window.__manimRecordingAudioDestination);
+        }
+        sources.set(audio, source);
+      };
+      window.__manimConnectRecordingAudio = async destination => {
+        await context.resume();
+        window.__manimRecordingAudioDestination = destination;
+        for (const source of sources.values()) source.connect(destination);
+      };
+      window.__manimDisconnectRecordingAudio = destination => {
+        for (const source of sources.values()) {
+          try { source.disconnect(destination); } catch (_) {}
+        }
+        if (window.__manimRecordingAudioDestination === destination) {
+          window.__manimRecordingAudioDestination = null;
+        }
+      };
+      return context;
+    }
+
+    let mediaRecorder = null;
+    let recordingChunks = [];
+    let recordingStream = null;
+    let recordingMicStream = null;
+    let recordingMicSource = null;
+    let recordingAudioDestination = null;
 
     function resizeManimCanvas() {
       const preview = document.getElementById("preview");
@@ -566,7 +623,11 @@ class Demo(Scene):
     const webCode = document.getElementById("web-code");
     const errors = document.getElementById("errors");
     const runButton = document.getElementById("run");
+    const runRecordButton = document.getElementById("run-record");
     const stopButton = document.getElementById("stop");
+    const recordButton = document.getElementById("record");
+    const recordStopButton = document.getElementById("record-stop");
+    const recordMicCheckbox = document.getElementById("record-mic");
     const assetsPanel = document.getElementById("assets-panel");
     const projectsPanel = document.getElementById("projects-panel");
     const projectsList = document.getElementById("projects-list");
@@ -1088,6 +1149,139 @@ _editor_scene = await run_scene_from_class(_scene_class, "manim-canvas", size=($
 _editor_scene_token = ${token}`;
     }
 
+    function getRecordingMimeType() {
+      if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== "function") return "";
+      const candidates = [
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ];
+      return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
+    }
+
+    async function startRecording() {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") return;
+      if (!canvas.captureStream || !window.MediaRecorder) {
+        throw new Error("Este navegador no admite la grabación de vídeo (MediaRecorder/captureStream).");
+      }
+
+      let micStream = null;
+      let destination = null;
+      let stream = null;
+      try {
+        const context = ensureRecordingAudioGraph();
+        await context.resume();
+        destination = context.createMediaStreamDestination();
+        await window.__manimConnectRecordingAudio(destination);
+
+        if (recordMicCheckbox.checked) {
+          if (!navigator.mediaDevices?.getUserMedia) {
+            throw new Error("Este navegador no permite acceder al micrófono. Usa HTTPS o localhost.");
+          }
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          recordingMicSource = context.createMediaStreamSource(micStream);
+          recordingMicSource.connect(destination);
+        }
+
+        stream = canvas.captureStream(30);
+        for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
+        const mimeType = getRecordingMimeType();
+        mediaRecorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream);
+        recordingChunks = [];
+        recordingStream = stream;
+        recordingMicStream = micStream;
+        recordingAudioDestination = destination;
+
+        mediaRecorder.addEventListener("dataavailable", event => {
+          if (event.data && event.data.size > 0) recordingChunks.push(event.data);
+        });
+        mediaRecorder.addEventListener("error", event => {
+          const error = event.error || new Error("Error durante la grabación.");
+          showError(error);
+          setStatus("Error al grabar la escena.");
+        });
+        mediaRecorder.addEventListener("stop", () => {
+          const type = mediaRecorder?.mimeType || "video/webm";
+          const blob = new Blob(recordingChunks, { type });
+          if (blob.size > 0) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "manimgl-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            setStatus("Grabación lista: se descargó el vídeo con audio.");
+          } else {
+            setStatus("La grabación terminó, pero no se generaron datos de vídeo.");
+          }
+          for (const track of recordingStream?.getTracks() || []) track.stop();
+          for (const track of recordingMicStream?.getTracks() || []) track.stop();
+          try {
+            if (recordingMicSource && recordingAudioDestination) {
+              recordingMicSource.disconnect(recordingAudioDestination);
+            }
+          } catch (_) {}
+          if (recordingAudioDestination) {
+            window.__manimDisconnectRecordingAudio(recordingAudioDestination);
+          }
+          recordingStream = null;
+          recordingMicStream = null;
+          recordingMicSource = null;
+          recordingAudioDestination = null;
+          mediaRecorder = null;
+          recordingChunks = [];
+          recordButton.disabled = false;
+          recordButton.classList.remove("recording");
+          recordButton.textContent = "● Grabar";
+          recordStopButton.disabled = true;
+          runRecordButton.disabled = !pyodide;
+        });
+        mediaRecorder.start(1000);
+        recordButton.disabled = true;
+        recordButton.classList.add("recording");
+        recordButton.textContent = "● Grabando…";
+        recordStopButton.disabled = false;
+        runRecordButton.disabled = true;
+        setStatus(recordMicCheckbox.checked
+          ? "Grabando escena y micrófono…"
+          : "Grabando escena y audio…");
+      } catch (error) {
+        if (stream) for (const track of stream.getTracks()) track.stop();
+        if (micStream) for (const track of micStream.getTracks()) track.stop();
+        if (destination) window.__manimDisconnectRecordingAudio(destination);
+        if (recordingMicSource && destination) {
+          try { recordingMicSource.disconnect(destination); } catch (_) {}
+        }
+        recordingMicSource = null;
+        throw error;
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        recordStopButton.disabled = true;
+        mediaRecorder.stop();
+        setStatus("Finalizando y preparando el archivo de vídeo…");
+      }
+    }
+
+    async function runAndRecord() {
+      if (!pyodide || running) return;
+      try {
+        await startRecording();
+        await runScene();
+      } catch (error) {
+        showError(error);
+        setStatus("No se pudo iniciar la grabación: " + String(error?.message || error));
+      } finally {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") stopRecording();
+      }
+    }
+
     async function runScene() {
       if (!pyodide || running) return;
       running = true;
@@ -1245,6 +1439,14 @@ _editor_scene_token = ${token}`;
     });
 
     runButton.addEventListener("click", runScene);
+    runRecordButton.addEventListener("click", runAndRecord);
+    recordButton.addEventListener("click", () => {
+      startRecording().catch(error => {
+        showError(error);
+        setStatus("No se pudo iniciar la grabación: " + String(error?.message || error));
+      });
+    });
+    recordStopButton.addEventListener("click", stopRecording);
     stopButton.addEventListener("click", stopScene);
     document.getElementById("format").addEventListener("click", transformOnly);
 
@@ -1578,6 +1780,8 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         }
         setLoading(false);
         runButton.disabled = false;
+        runRecordButton.disabled = false;
+        recordButton.disabled = false;
         refreshAssets();
         setStatus("Listo. Código y assets se guardan automáticamente en este navegador.");
         await transformOnly();
