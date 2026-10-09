@@ -554,7 +554,6 @@ window.addEventListener("beforeunload",()=>{active=false});
       setStatus("Canvas Full HD abierto en otra ventana. Puedes activar pantalla completa antes de ejecutar.");
     }
 
-    canvasWindowButton.addEventListener("click", openCanvasWindow);
 
     const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
     const WHEEL_MANIFEST = "./browser_wasm/dist/wheels/wheels.json";
@@ -1539,6 +1538,7 @@ _editor_scene_token = ${token}`;
     });
 
     runButton.addEventListener("click", runScene);
+    canvasWindowButton.addEventListener("click", openCanvasWindow);
     runRecordButton.addEventListener("click", runAndRecord);
     recordButton.addEventListener("click", () => {
       startRecording().catch(error => {
