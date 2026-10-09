@@ -163,7 +163,7 @@ class Tex(StringMobject):
             reference_svg = await typst_to_svg_async(
                 cls._make_mitex_source("0", text_mode=text_mode)
             )
-            svg_height = SVGMobject(reference_svg, height=None).get_height()
+            svg_height = SVGMobject(svg_string=reference_svg, height=None).get_height()
             if svg_height <= 0:
                 raise ValueError("MiTeX returned an invalid reference glyph height")
             scale_cache[scale_key] = (
