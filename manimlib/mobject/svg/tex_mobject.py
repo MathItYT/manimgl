@@ -166,8 +166,8 @@ class Tex(StringMobject):
                 reference_content = "0"
             elif cls.tex_environment:
                 reference_content = (
-                    f"\\\\begin{{{cls.tex_environment}}}0"
-                    f"\\\\end{{{cls.tex_environment}}}"
+                    f"\\begin{{{cls.tex_environment}}}0"
+                    f"\\end{{{cls.tex_environment}}}"
                 )
             else:
                 reference_content = "0"
@@ -181,6 +181,8 @@ class Tex(StringMobject):
                 1.0 / (manim_config.tex.font_size_for_unit_height * svg_height)
             )
         obj.scale(scale_cache[scale_key] * font_size)
+        # Native Tex scales before assigning font_size, so retain that behavior.
+        obj.font_size = font_size
         return obj
 
     def get_svg_string_by_content(self, content: str) -> str:
