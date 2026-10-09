@@ -77,8 +77,46 @@ if ! pkg-config --exists pangocairo; then
         ./build.sh > "$LOCAL_BUILD"
     chmod +x "$LOCAL_BUILD"
 
-    bash "$LOCAL_BUILD"
-    rm -f "$LOCAL_BUILD"
+    # Meson may leave behind a build.dat written by a different Meson
+    # version. Capture the complete output so we can identify that specific
+    # cache error and recover without deleting the whole dependency checkout.
+    BUILD_LOG="$PWD/.manim_build_pango.log"
+
+    if bash "$LOCAL_BUILD" 2>&1 | tee "$BUILD_LOG"; then
+        rm -f "$LOCAL_BUILD" "$BUILD_LOG"
+    else
+        build_status=${PIPESTATUS[0]}
+        STALE_BUILD_FILE="$(awk -F"'" '/ERROR: Build data file/ && /references functions or classes that don.t exist/ { print $2; exit }' "$BUILD_LOG")"
+        STALE_BUILD_DIR="${STALE_BUILD_FILE%/meson-private/build.dat}"
+
+        case "$STALE_BUILD_DIR" in
+            "$PANGO_CAIRO_WASM_DIR"/*)
+                if [[ -n "$STALE_BUILD_FILE" && -f "$STALE_BUILD_FILE" ]]; then
+                    echo "Detected stale Meson metadata: $STALE_BUILD_FILE" >&2
+                    echo "Removing only this configured build directory and retrying..." >&2
+                    rm -rf -- "$STALE_BUILD_DIR"
+
+                    if bash "$LOCAL_BUILD" 2>&1 | tee "$BUILD_LOG"; then
+                        rm -f "$LOCAL_BUILD" "$BUILD_LOG"
+                    else
+                        build_status=${PIPESTATUS[0]}
+                        rm -f "$LOCAL_BUILD"
+                        echo "PangoCairo build failed again after Meson cache recovery; see $BUILD_LOG." >&2
+                        exit "$build_status"
+                    fi
+                else
+                    rm -f "$LOCAL_BUILD"
+                    echo "PangoCairo build failed; see $BUILD_LOG." >&2
+                    exit "$build_status"
+                fi
+                ;;
+            *)
+                rm -f "$LOCAL_BUILD"
+                echo "PangoCairo build failed; see $BUILD_LOG." >&2
+                exit "$build_status"
+                ;;
+        esac
+    fi
 fi
 
 # Refresh the check after the dependency build.
