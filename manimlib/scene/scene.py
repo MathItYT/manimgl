@@ -1100,6 +1100,11 @@ class Scene(object):
         from manimlib.utils.browser_scheduler import next_animation_frame
 
         previous_time = await next_animation_frame()
+        # MotionBlur eases out over several rendered frames after input stops.
+        # Keep drawing briefly after the last browser event so that release
+        # frames are presented even when the scene has no active updaters.
+        postprocess_settle_until = 0.0
+        postprocess_settle_seconds = 0.5
 
         while not self.is_window_closing():
             current_time = await next_animation_frame()
@@ -1107,6 +1112,7 @@ class Scene(object):
             previous_time = current_time
 
             self.window.poll_events()
+            has_undrawn_event = self.window.has_undrawn_event()
 
             # Unlike native interact(), the browser cannot use a blocking
             # loop. requestAnimationFrame is therefore the interactive clock:
@@ -1114,8 +1120,14 @@ class Scene(object):
             # while still avoiding unnecessary redraws for an idle scene.
             if self.should_update_mobjects():
                 await self.update_frame_async(dt=dt, force_draw=True)
-            elif self.window.has_undrawn_event():
+            elif has_undrawn_event:
+                postprocess_settle_until = (
+                    current_time + postprocess_settle_seconds
+                )
                 await self.update_frame_async(force_draw=True)
+            elif current_time < postprocess_settle_until:
+                # Motion blur's temporal strength decays during these frames.
+                await self.update_frame_async(dt=dt, force_draw=True)
 
     # Helpers for interactive development
 
