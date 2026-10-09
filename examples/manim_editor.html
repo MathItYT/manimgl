@@ -670,6 +670,10 @@ class Demo(Scene):
 import sys
 import traceback
 from manimlib import *
+from manimlib.config import manim_config
+
+# Inter is the default text family in the browser editor.
+manim_config.text.font = "Inter"
 
 async def _browser_add_number_line_numbers(line):
     await line.add_numbers_async(excluding=line.numbers_to_exclude)
