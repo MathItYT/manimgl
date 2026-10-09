@@ -112,6 +112,44 @@
       font-size:10px;
     }
     #asset-input { display:none; }
+    #fonts-panel {
+      position:absolute;
+      z-index:9;
+      top:8px;
+      right:8px;
+      bottom:8px;
+      width:min(390px, calc(100% - 16px));
+      display:none;
+      flex-direction:column;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:rgba(17,22,32,.99);
+      box-shadow:0 12px 32px rgba(0,0,0,.4);
+      overflow:hidden;
+    }
+    #fonts-panel.open { display:flex; }
+    #fonts-header {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px;
+      border-bottom:1px solid var(--line);
+    }
+    #fonts-title { flex:1; font-size:13px; font-weight:700; }
+    #fonts-summary { padding:8px 10px 0; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
+    #fonts-search { margin:8px; padding:8px; border:1px solid var(--line); border-radius:5px; background:#0b0e14; color:var(--text); }
+    #fonts-list { flex:1; min-height:0; overflow:auto; padding:4px 8px; }
+    .catalog-font { display:flex; align-items:center; gap:8px; padding:7px 5px; border-radius:5px; font:11px ui-monospace,monospace; }
+    .catalog-font:hover { background:#1b2230; }
+    .catalog-font input { accent-color:var(--accent); }
+    .catalog-font span { flex:1; min-width:0; overflow-wrap:anywhere; }
+    .catalog-font small { color:var(--muted); }
+    #fonts-actions { display:flex; flex-wrap:wrap; gap:6px; padding:9px; border-top:1px solid var(--line); }
+    #fonts-actions button { flex:1; min-width:105px; }
+    #fonts-panel.drop-active {
+      border:2px dashed var(--accent);
+      background:rgba(71,125,255,.10);
+    }
     #assets-panel.drop-active {
       border:2px dashed var(--accent);
       background:rgba(71,125,255,.10);
@@ -216,12 +254,26 @@
     <button id="stop" disabled>■ Detener</button>
     <button id="format">Transformar a web</button>
     <button id="assets-toggle">Assets</button>
+    <button id="fonts-toggle">Fuentes</button>
     <div id="status">Inicializando Pyodide…</div>
   </div>
   <div id="main">
 
     <section id="editor-wrap">
       <div id="editor"></div>
+      <div id="fonts-panel" aria-label="Catálogo de fuentes">
+        <div id="fonts-header">
+          <div id="fonts-title">Fuentes</div>
+          <button id="fonts-close" title="Cerrar">×</button>
+        </div>
+        <div id="fonts-summary">Cargando el catálogo…</div>
+        <input id="fonts-search" type="search" placeholder="Buscar fuente…" aria-label="Buscar fuente">
+        <div id="fonts-list"></div>
+        <div id="fonts-actions">
+          <button id="fonts-load-selected" class="primary">Cargar seleccionadas</button>
+          <button id="fonts-load-all">Cargar todo el catálogo</button>
+        </div>
+      </div>
       <div id="assets-panel">
         <div id="assets-header">
           <div id="assets-title">Assets</div>
@@ -813,11 +865,8 @@ _editor_scene_token = ${token}`;
         const pango = await import("./browser_wasm/dist/pango_text_loader.js");
         await pango.initializePangoText();
 
-        setStatus("Cargando catálogo tipográfico para Pango y Typst…");
+        setStatus("Cargando las fuentes básicas…");
 
-        // Cada archivo se registra en los dos motores: Pango (texto) y Typst (Tex).
-        // Los archivos variables incluyen sus pesos; los estilos itálicos se cargan
-        // como archivos separados cuando la familia los publica.
         async function registerCatalogFont(fileName, url) {
           const response = await fetch(url, { cache: "force-cache" });
           if (!response.ok) {
@@ -825,7 +874,8 @@ _editor_scene_token = ${token}`;
           }
 
           const bytes = await response.arrayBuffer();
-          const signature = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
+          if (bytes.byteLength < 4) throw new Error("Archivo de fuente vacío o incompleto");
+          const signature = new Uint8Array(bytes, 0, 4);
           const signatureText = Array.from(signature, byte =>
             byte.toString(16).padStart(2, "0")
           ).join("");
@@ -840,27 +890,21 @@ _editor_scene_token = ${token}`;
           }
 
           const result = { name: fileName, pango: null, typst: false, errors: [] };
-
-          // Registrar cada motor por separado: un fallo de Pango no debe impedir
-          // que Typst reciba el mismo TTF, ni al revés.
           try {
             result.pango = await window.manimRegisterPangoFont(bytes.slice(0), fileName);
           } catch (error) {
             result.errors.push("Pango: " + String(error?.message || error));
           }
-
           try {
             const compiler = window.manimTypstCompiler;
             if (!compiler || typeof compiler.addFonts !== "function") {
               throw new Error("El compilador Typst del navegador no expone addFonts()");
             }
-            // addFonts es variádico; conservar esta forma también para fuentes TTF.
             await compiler.addFonts(...[new Uint8Array(bytes.slice(0))]);
             result.typst = true;
           } catch (error) {
             result.errors.push("Typst: " + String(error?.message || error));
           }
-
           if (!result.pango && !result.typst) {
             throw new Error(result.errors.join(" | ") || "Ningún motor aceptó la fuente");
           }
@@ -868,7 +912,7 @@ _editor_scene_token = ${token}`;
         }
 
         const fontManifestUrl = new URL("./fonts/fonts.json", document.baseURI);
-        const fontManifestResponse = await fetch(fontManifestUrl, { cache: "no-store" });
+        const fontManifestResponse = await fetch(fontManifestUrl, { cache: "force-cache" });
         if (!fontManifestResponse.ok) {
           throw new Error("No se pudo cargar fonts/fonts.json: HTTP " + fontManifestResponse.status);
         }
@@ -883,52 +927,170 @@ _editor_scene_token = ${token}`;
           throw new Error("fonts/fonts.json no contiene fuentes disponibles.");
         }
 
-        let pangoLoaded = 0;
-        let typstLoaded = 0;
-        let fontsLoaded = 0;
-        const fontFailures = [];
-        const engineFailures = [];
-        // Solo se solicitan archivos enumerados en fonts/fonts.json y alojados junto al editor.
-        // La carga secuencial evita saturar la memoria WASM del navegador.
-        for (let index = 0; index < availableFonts.length; index++) {
-          const font = availableFonts[index];
-          const fileName = font.fileName || font.name;
-          const url = new URL(font.url, fontManifestUrl).href;
-          try {
-            const result = await registerCatalogFont(fileName, url);
-            if (result.pango) {
-              pangoLoaded++;
-              window.manimBrowserFontFamily = String(result.pango.family);
-            }
-            if (result.typst) typstLoaded++;
-            if (result.pango || result.typst) fontsLoaded++;
-            if (result.errors.length) {
-              engineFailures.push(fileName + ": " + result.errors.join(" | "));
-            }
-          } catch (error) {
-            fontFailures.push(fileName + ": " + String(error?.message || error));
-            console.warn("[font catalog]", fileName, error);
-          }
-          if ((index + 1) % 5 === 0 || index + 1 === availableFonts.length) {
-            setStatus("Fuentes: Pango " + pangoLoaded + ", Typst " + typstLoaded + " / " + availableFonts.length);
-          }
-        }
-        if (!fontsLoaded) {
-          throw new Error("No se pudo registrar ninguna fuente alojada en fonts/.");
-        }
-        console.info("Fuentes locales:", {
-          disponibles: availableFonts.length,
-          registradasEnPango: pangoLoaded,
-          registradasEnTypst: typstLoaded,
-          fallidasEnAmbos: fontFailures,
-          fallidasEnUnMotor: engineFailures,
-        });
-        setStatus("Fuentes listas: Pango " + pangoLoaded + "/" + availableFonts.length +
-          ", Typst " + typstLoaded + "/" + availableFonts.length + ".");
-        if (fontFailures.length || engineFailures.length) {
-          console.warn("[font catalog] Fuentes con errores:", { fontFailures, engineFailures });
+        const basicFontNames = new Set([
+          "NewCM10-Regular.otf",
+          "NewCM10-Bold.otf",
+          "NewCM10-Italic.otf",
+          "NewCM10-BoldItalic.otf",
+          "NewCMMath-Regular.otf",
+          "NewCMMono10-Regular.otf",
+          "JetBrainsMono-Regular.ttf",
+          "Inter[opsz,wght].ttf",
+        ]);
+        const loadedFontNames = new Set();
+        const loadingFontNames = new Set();
+        const failedFontNames = new Map();
+        const fontStats = { pango: 0, typst: 0, success: 0 };
+        const fontsPanel = document.getElementById("fonts-panel");
+        const fontsList = document.getElementById("fonts-list");
+        const fontsSummary = document.getElementById("fonts-summary");
+        const fontsSearch = document.getElementById("fonts-search");
+        const fontsToggle = document.getElementById("fonts-toggle");
+        const fontsLoadSelected = document.getElementById("fonts-load-selected");
+        const fontsLoadAll = document.getElementById("fonts-load-all");
+
+        function updateFontsSummary(message) {
+          fontsSummary.textContent = message || (
+            loadedFontNames.size + " de " + availableFonts.length +
+            " fuentes cargadas · Pango " + fontStats.pango + " · Typst " + fontStats.typst
+          );
         }
 
+        function renderFontCatalog() {
+          const query = fontsSearch.value.trim().toLocaleLowerCase();
+          const fragment = document.createDocumentFragment();
+          const filtered = availableFonts.filter(font =>
+            (font.name + " " + (font.fileName || "")).toLocaleLowerCase().includes(query)
+          );
+          for (const font of filtered) {
+            const fileName = font.fileName || font.name;
+            const row = document.createElement("label");
+            row.className = "catalog-font";
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = fileName;
+            checkbox.disabled = loadedFontNames.has(fileName) || loadingFontNames.has(fileName);
+            checkbox.checked = loadedFontNames.has(fileName);
+            const name = document.createElement("span");
+            name.textContent = font.name;
+            const state = document.createElement("small");
+            state.textContent = loadedFontNames.has(fileName)
+              ? "Cargada"
+              : loadingFontNames.has(fileName)
+                ? "Cargando…"
+                : failedFontNames.has(fileName) ? "Error" : "";
+            row.append(checkbox, name, state);
+            fragment.appendChild(row);
+          }
+          fontsList.replaceChildren(fragment);
+          if (!filtered.length) {
+            const empty = document.createElement("div");
+            empty.className = "asset-empty";
+            empty.textContent = "No hay fuentes que coincidan con la búsqueda.";
+            fontsList.appendChild(empty);
+          }
+          updateFontsSummary();
+        }
+
+        async function loadCatalogFont(font) {
+          const fileName = font.fileName || font.name;
+          if (loadedFontNames.has(fileName) || loadingFontNames.has(fileName)) return;
+          loadingFontNames.add(fileName);
+          failedFontNames.delete(fileName);
+          renderFontCatalog();
+          updateFontsSummary("Cargando " + fileName + "…");
+          try {
+            const url = new URL(font.url, fontManifestUrl).href;
+            const result = await registerCatalogFont(fileName, url);
+            if (result.pango) {
+              fontStats.pango++;
+              window.manimBrowserFontFamily = String(result.pango.family);
+            }
+            if (result.typst) fontStats.typst++;
+            loadedFontNames.add(fileName);
+            fontStats.success++;
+            if (result.errors.length) {
+              failedFontNames.set(fileName, result.errors.join(" | "));
+              console.warn("[font catalog] Registro parcial:", fileName, result.errors);
+            }
+          } catch (error) {
+            failedFontNames.set(fileName, String(error?.message || error));
+            console.warn("[font catalog]", fileName, error);
+          } finally {
+            loadingFontNames.delete(fileName);
+            renderFontCatalog();
+          }
+        }
+
+        async function loadFontBatch(fonts) {
+          const pending = fonts.filter(font => {
+            const fileName = font.fileName || font.name;
+            return !loadedFontNames.has(fileName) && !loadingFontNames.has(fileName);
+          });
+          if (!pending.length) {
+            updateFontsSummary("Las fuentes seleccionadas ya están cargadas.");
+            return;
+          }
+          fontsLoadSelected.disabled = true;
+          fontsLoadAll.disabled = true;
+          let done = 0;
+          try {
+            for (const font of pending) {
+              await loadCatalogFont(font);
+              done++;
+              updateFontsSummary("Cargando fuentes adicionales: " + done + "/" + pending.length);
+            }
+          } finally {
+            fontsLoadSelected.disabled = false;
+            fontsLoadAll.disabled = false;
+            renderFontCatalog();
+            updateFontsSummary();
+          }
+        }
+
+        fontsToggle.addEventListener("click", () => {
+          fontsPanel.classList.toggle("open");
+          assetsPanel.classList.remove("open");
+          if (fontsPanel.classList.contains("open")) fontsSearch.focus();
+        });
+        document.getElementById("fonts-close").addEventListener("click", () =>
+          fontsPanel.classList.remove("open")
+        );
+        fontsSearch.addEventListener("input", renderFontCatalog);
+        fontsLoadSelected.addEventListener("click", () => {
+          const selectedNames = new Set(
+            Array.from(fontsList.querySelectorAll('input[type="checkbox"]:checked'))
+              .map(input => input.value)
+              .filter(name => !loadedFontNames.has(name))
+          );
+          loadFontBatch(availableFonts.filter(font =>
+            selectedNames.has(font.fileName || font.name)
+          ));
+        });
+        fontsLoadAll.addEventListener("click", () => loadFontBatch(availableFonts));
+        renderFontCatalog();
+
+        // Cargar solo un conjunto pequeño de fuentes habituales. El resto del catálogo
+        // permanece disponible en "Fuentes" y se descarga únicamente cuando se solicita.
+        const basicFonts = availableFonts.filter(font =>
+          basicFontNames.has(font.fileName || font.name) ||
+          basicFontNames.has(font.name)
+        );
+        for (const font of basicFonts) await loadCatalogFont(font);
+        if (!loadedFontNames.size) {
+          throw new Error("No se pudo registrar ninguna de las fuentes básicas.");
+        }
+        updateFontsSummary();
+        console.info("Catálogo de fuentes:", {
+          disponibles: availableFonts.length,
+          cargadasInicialmente: loadedFontNames.size,
+          cargadasEnPango: fontStats.pango,
+          cargadasEnTypst: fontStats.typst,
+          fallidas: Array.from(failedFontNames.entries()),
+        });
+        setStatus("Fuentes básicas listas (" + loadedFontNames.size + "/" + availableFonts.length +
+          "). Las demás se cargan desde «Fuentes».");
+        
         setLoading(true, "Cargando Pyodide…");
         const { loadPyodide } = await import(PYODIDE_URL);
         pyodide = await loadPyodide();
