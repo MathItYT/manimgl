@@ -482,6 +482,92 @@
     canvasResizeObserver.observe(
       document.getElementById("preview"),
     );
+
+    let canvasPreviewWindow = null;
+
+    function openCanvasWindow() {
+      if (canvasPreviewWindow && !canvasPreviewWindow.closed) {
+        canvasPreviewWindow.focus();
+        return;
+      }
+
+      const popup = window.open("", "manimgl-canvas-preview", "popup=yes,width=1280,height=720");
+      if (!popup) {
+        setStatus("El navegador bloqueó la ventana del canvas. Permite las ventanas emergentes para este sitio.");
+        return;
+      }
+      canvasPreviewWindow = popup;
+      popup.document.open();
+      popup.document.write(`<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ManimGL — Canvas Full HD</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#000;color:#fff;font:14px system-ui,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column}#bar{display:flex;align-items:center;gap:10px;padding:9px 12px;background:#111620}
+button{border:0;border-radius:6px;padding:8px 13px;background:#2b3342;color:#fff;font-weight:600;cursor:pointer}
+#hint{color:#aab4c5;font-size:12px}#stage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+#mirror{display:block;width:100%;height:100%;object-fit:contain;outline:none;touch-action:none}
+:fullscreen #bar{position:fixed;top:8px;left:8px;z-index:2;background:#111620dd;border-radius:8px;opacity:.35}
+:fullscreen #bar:hover{opacity:1}
+</style>
+</head>
+<body>
+<div id="bar"><button id="fullscreen">⛶ Pantalla completa</button><span id="hint">Canvas Full HD · Abre pantalla completa antes de ejecutar la escena en el editor</span></div>
+<div id="stage"><canvas id="mirror" width="1920" height="1080" tabindex="0"></canvas></div>
+<script>
+const mirror=document.getElementById("mirror");
+const ctx=mirror.getContext("2d");
+let active=true;
+function draw(){
+  if(!active)return;
+  try{ctx.drawImage(window.opener.document.getElementById("manim-canvas"),0,0,1920,1080)}catch(e){}
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+document.getElementById("fullscreen").addEventListener("click",async()=>{
+  try{
+    if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+    document.getElementById("fullscreen").textContent=document.fullscreenElement?"⛶ Salir de pantalla completa":"⛶ Pantalla completa";
+  }catch(e){document.getElementById("hint").textContent="No se pudo activar pantalla completa: "+e.message}
+});
+function forwardPointer(event){
+  const source=window.opener.document.getElementById("manim-canvas");
+  const rect=mirror.getBoundingClientRect(), target=source.getBoundingClientRect();
+  const x=(event.clientX-rect.left)/rect.width, y=(event.clientY-rect.top)/rect.height;
+  const init={bubbles:true,cancelable:true,clientX:target.left+x*target.width,clientY:target.top+y*target.height,
+    button:event.button,buttons:event.buttons,pointerId:event.pointerId||1,pointerType:event.pointerType||"mouse",
+    pressure:event.pressure||0,altKey:event.altKey,ctrlKey:event.ctrlKey,metaKey:event.metaKey,shiftKey:event.shiftKey};
+  try{
+    if(event.type.startsWith("pointer") && window.opener.PointerEvent) source.dispatchEvent(new PointerEvent(event.type,init));
+    else source.dispatchEvent(new MouseEvent(event.type.replace(/^pointer/,"mouse"),init));
+    source.focus();
+  }catch(e){}
+  event.preventDefault();
+}
+["pointerdown","pointerup","pointermove","pointercancel"].forEach(type=>mirror.addEventListener(type,forwardPointer));
+mirror.addEventListener("wheel",event=>{
+  try{window.opener.document.getElementById("manim-canvas").dispatchEvent(new WheelEvent("wheel",{bubbles:true,cancelable:true,deltaX:event.deltaX,deltaY:event.deltaY,deltaMode:event.deltaMode,clientX:event.clientX,clientY:event.clientY,ctrlKey:event.ctrlKey,shiftKey:event.shiftKey}))}catch(e){}
+  event.preventDefault();
+},{passive:false});
+window.addEventListener("keydown",event=>{
+  try{window.opener.dispatchEvent(new KeyboardEvent("keydown",{key:event.key,code:event.code,bubbles:true,cancelable:true,altKey:event.altKey,ctrlKey:event.ctrlKey,metaKey:event.metaKey,shiftKey:event.shiftKey}))}catch(e){}
+});
+window.addEventListener("beforeunload",()=>{active=false});
+</script>
+</body></html>`);
+      popup.document.close();
+      popup.addEventListener("beforeunload", () => {
+        if (canvasPreviewWindow === popup) canvasPreviewWindow = null;
+      });
+      setStatus("Canvas Full HD abierto en otra ventana. Puedes activar pantalla completa antes de ejecutar.");
+    }
+
+    canvasWindowButton.addEventListener("click", openCanvasWindow);
+
     const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs";
     const WHEEL_MANIFEST = "./browser_wasm/dist/wheels/wheels.json";
 
@@ -646,6 +732,8 @@ class Demo(Scene):
     const recordStopButton = document.getElementById("record-stop");
     const recordFpsSelect = document.getElementById("record-fps");
     const recordMicCheckbox = document.getElementById("record-mic");
+    const recordInteractiveCheckbox = document.getElementById("record-interactive");
+    const canvasWindowButton = document.getElementById("canvas-window");
     const assetsPanel = document.getElementById("assets-panel");
     const projectsPanel = document.getElementById("projects-panel");
     const projectsList = document.getElementById("projects-list");
@@ -1802,6 +1890,7 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         runButton.disabled = false;
         runRecordButton.disabled = false;
         recordButton.disabled = false;
+        canvasWindowButton.disabled = false;
         refreshAssets();
         setStatus("Listo. Código y assets se guardan automáticamente en este navegador.");
         await transformOnly();
