@@ -53,6 +53,16 @@ class BrowserAudio:
         audio.preload = "auto"
         audio.src = self._url(sound_file)
         audio.load()
+        # The browser editor installs this hook to mix scene audio into recordings.
+        # Audio playback remains routed to the speakers when no recording is active.
+        try:
+            from js import window
+            attach_for_recording = getattr(window, "__manimAttachAudioForRecording", None)
+            if attach_for_recording is not None:
+                attach_for_recording(audio)
+        except Exception:
+            # Audio must still work if the editor has no recorder integration.
+            pass
         self._players[sound_file] = audio
 
     def _get(self, sound_file: str):
