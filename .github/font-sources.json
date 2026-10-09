@@ -1,0 +1,1457 @@
+[
+  {
+    "name": "NewCM08-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-Book.otf",
+    "file": "files/001-NewCM08-Book.otf"
+  },
+  {
+    "name": "NewCM08-BookItalic.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-BookItalic.otf",
+    "file": "files/002-NewCM08-BookItalic.otf"
+  },
+  {
+    "name": "NewCM08-Italic.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-Italic.otf",
+    "file": "files/003-NewCM08-Italic.otf"
+  },
+  {
+    "name": "NewCM08-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08-Regular.otf",
+    "file": "files/004-NewCM08-Regular.otf"
+  },
+  {
+    "name": "NewCM08Devanagari-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08Devanagari-Book.otf",
+    "file": "files/005-NewCM08Devanagari-Book.otf"
+  },
+  {
+    "name": "NewCM08Devanagari-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM08Devanagari-Regular.otf",
+    "file": "files/006-NewCM08Devanagari-Regular.otf"
+  },
+  {
+    "name": "NewCM10-Bold.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Bold.otf",
+    "file": "files/007-NewCM10-Bold.otf"
+  },
+  {
+    "name": "NewCM10-BoldItalic.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-BoldItalic.otf",
+    "file": "files/008-NewCM10-BoldItalic.otf"
+  },
+  {
+    "name": "NewCM10-Book.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Book.otf",
+    "file": "files/009-NewCM10-Book.otf"
+  },
+  {
+    "name": "NewCM10-BookItalic.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-BookItalic.otf",
+    "file": "files/010-NewCM10-BookItalic.otf"
+  },
+  {
+    "name": "NewCM10-Italic.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Italic.otf",
+    "file": "files/011-NewCM10-Italic.otf"
+  },
+  {
+    "name": "NewCM10-Regular.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCM10-Regular.otf",
+    "file": "files/012-NewCM10-Regular.otf"
+  },
+  {
+    "name": "NewCM10Devanagari-Bold.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10Devanagari-Bold.otf",
+    "file": "files/013-NewCM10Devanagari-Bold.otf"
+  },
+  {
+    "name": "NewCM10Devanagari-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10Devanagari-Book.otf",
+    "file": "files/014-NewCM10Devanagari-Book.otf"
+  },
+  {
+    "name": "NewCM10Devanagari-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCM10Devanagari-Regular.otf",
+    "file": "files/015-NewCM10Devanagari-Regular.otf"
+  },
+  {
+    "name": "NewCMMath-Bold.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Bold.otf",
+    "file": "files/016-NewCMMath-Bold.otf"
+  },
+  {
+    "name": "NewCMMath-Book.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Book.otf",
+    "file": "files/017-NewCMMath-Book.otf"
+  },
+  {
+    "name": "NewCMMath-Regular.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMath-Regular.otf",
+    "file": "files/018-NewCMMath-Regular.otf"
+  },
+  {
+    "name": "NewCMMono10-Bold.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Bold.otf",
+    "file": "files/019-NewCMMono10-Bold.otf"
+  },
+  {
+    "name": "NewCMMono10-BoldOblique.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-BoldOblique.otf",
+    "file": "files/020-NewCMMono10-BoldOblique.otf"
+  },
+  {
+    "name": "NewCMMono10-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-Book.otf",
+    "file": "files/021-NewCMMono10-Book.otf"
+  },
+  {
+    "name": "NewCMMono10-BookItalic.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMMono10-BookItalic.otf",
+    "file": "files/022-NewCMMono10-BookItalic.otf"
+  },
+  {
+    "name": "NewCMMono10-Italic.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Italic.otf",
+    "file": "files/023-NewCMMono10-Italic.otf"
+  },
+  {
+    "name": "NewCMMono10-Regular.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMMono10-Regular.otf",
+    "file": "files/024-NewCMMono10-Regular.otf"
+  },
+  {
+    "name": "NewCMSans08-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-Book.otf",
+    "file": "files/025-NewCMSans08-Book.otf"
+  },
+  {
+    "name": "NewCMSans08-BookOblique.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-BookOblique.otf",
+    "file": "files/026-NewCMSans08-BookOblique.otf"
+  },
+  {
+    "name": "NewCMSans08-Oblique.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-Oblique.otf",
+    "file": "files/027-NewCMSans08-Oblique.otf"
+  },
+  {
+    "name": "NewCMSans08-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans08-Regular.otf",
+    "file": "files/028-NewCMSans08-Regular.otf"
+  },
+  {
+    "name": "NewCMSans10-Bold.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Bold.otf",
+    "file": "files/029-NewCMSans10-Bold.otf"
+  },
+  {
+    "name": "NewCMSans10-BoldOblique.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-BoldOblique.otf",
+    "file": "files/030-NewCMSans10-BoldOblique.otf"
+  },
+  {
+    "name": "NewCMSans10-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-Book.otf",
+    "file": "files/031-NewCMSans10-Book.otf"
+  },
+  {
+    "name": "NewCMSans10-BookOblique.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSans10-BookOblique.otf",
+    "file": "files/032-NewCMSans10-BookOblique.otf"
+  },
+  {
+    "name": "NewCMSans10-Oblique.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Oblique.otf",
+    "file": "files/033-NewCMSans10-Oblique.otf"
+  },
+  {
+    "name": "NewCMSans10-Regular.otf",
+    "source": "https://raw.githubusercontent.com/fisicaUSC/revista/principal/fontes/NewComputerModern/NewCMSans10-Regular.otf",
+    "file": "files/034-NewCMSans10-Regular.otf"
+  },
+  {
+    "name": "NewCMSansMath-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMSansMath-Regular.otf",
+    "file": "files/035-NewCMSansMath-Regular.otf"
+  },
+  {
+    "name": "NewCMUncial08-Bold.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial08-Bold.otf",
+    "file": "files/036-NewCMUncial08-Bold.otf"
+  },
+  {
+    "name": "NewCMUncial08-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial08-Book.otf",
+    "file": "files/037-NewCMUncial08-Book.otf"
+  },
+  {
+    "name": "NewCMUncial08-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial08-Regular.otf",
+    "file": "files/038-NewCMUncial08-Regular.otf"
+  },
+  {
+    "name": "NewCMUncial10-Bold.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial10-Bold.otf",
+    "file": "files/039-NewCMUncial10-Bold.otf"
+  },
+  {
+    "name": "NewCMUncial10-Book.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial10-Book.otf",
+    "file": "files/040-NewCMUncial10-Book.otf"
+  },
+  {
+    "name": "NewCMUncial10-Regular.otf",
+    "source": "https://ftp.up.pt/pub/CTAN/fonts/newcomputermodern/otf/NewCMUncial10-Regular.otf",
+    "file": "files/041-NewCMUncial10-Regular.otf"
+  },
+  {
+    "name": "JetBrainsMono-Thin.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Thin.ttf",
+    "file": "files/042-JetBrainsMono-Thin.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ThinItalic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ThinItalic.ttf",
+    "file": "files/043-JetBrainsMono-ThinItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraLight.ttf",
+    "file": "files/044-JetBrainsMono-ExtraLight.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraLightItalic.ttf",
+    "file": "files/045-JetBrainsMono-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Light.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Light.ttf",
+    "file": "files/046-JetBrainsMono-Light.ttf"
+  },
+  {
+    "name": "JetBrainsMono-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-LightItalic.ttf",
+    "file": "files/047-JetBrainsMono-LightItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Regular.ttf",
+    "file": "files/048-JetBrainsMono-Regular.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Italic.ttf",
+    "file": "files/049-JetBrainsMono-Italic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Medium.ttf",
+    "file": "files/050-JetBrainsMono-Medium.ttf"
+  },
+  {
+    "name": "JetBrainsMono-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-MediumItalic.ttf",
+    "file": "files/051-JetBrainsMono-MediumItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-SemiBold.ttf",
+    "file": "files/052-JetBrainsMono-SemiBold.ttf"
+  },
+  {
+    "name": "JetBrainsMono-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-SemiBoldItalic.ttf",
+    "file": "files/053-JetBrainsMono-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-Bold.ttf",
+    "file": "files/054-JetBrainsMono-Bold.ttf"
+  },
+  {
+    "name": "JetBrainsMono-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-BoldItalic.ttf",
+    "file": "files/055-JetBrainsMono-BoldItalic.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraBold.ttf",
+    "file": "files/056-JetBrainsMono-ExtraBold.ttf"
+  },
+  {
+    "name": "JetBrainsMono-ExtraBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/JetBrains/JetBrainsMono/master/fonts/ttf/JetBrainsMono-ExtraBoldItalic.ttf",
+    "file": "files/057-JetBrainsMono-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Black.ttf",
+    "file": "files/058-FiraSans-Black.ttf"
+  },
+  {
+    "name": "FiraSans-BlackItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-BlackItalic.ttf",
+    "file": "files/059-FiraSans-BlackItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Bold.ttf",
+    "file": "files/060-FiraSans-Bold.ttf"
+  },
+  {
+    "name": "FiraSans-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-BoldItalic.ttf",
+    "file": "files/061-FiraSans-BoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraBold.ttf",
+    "file": "files/062-FiraSans-ExtraBold.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraBoldItalic.ttf",
+    "file": "files/063-FiraSans-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraLight.ttf",
+    "file": "files/064-FiraSans-ExtraLight.ttf"
+  },
+  {
+    "name": "FiraSans-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ExtraLightItalic.ttf",
+    "file": "files/065-FiraSans-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Italic.ttf",
+    "file": "files/066-FiraSans-Italic.ttf"
+  },
+  {
+    "name": "FiraSans-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Light.ttf",
+    "file": "files/067-FiraSans-Light.ttf"
+  },
+  {
+    "name": "FiraSans-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-LightItalic.ttf",
+    "file": "files/068-FiraSans-LightItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Medium.ttf",
+    "file": "files/069-FiraSans-Medium.ttf"
+  },
+  {
+    "name": "FiraSans-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-MediumItalic.ttf",
+    "file": "files/070-FiraSans-MediumItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Regular.ttf",
+    "file": "files/071-FiraSans-Regular.ttf"
+  },
+  {
+    "name": "FiraSans-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-SemiBold.ttf",
+    "file": "files/072-FiraSans-SemiBold.ttf"
+  },
+  {
+    "name": "FiraSans-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-SemiBoldItalic.ttf",
+    "file": "files/073-FiraSans-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "FiraSans-Thin.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-Thin.ttf",
+    "file": "files/074-FiraSans-Thin.ttf"
+  },
+  {
+    "name": "FiraSans-ThinItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firasans/FiraSans-ThinItalic.ttf",
+    "file": "files/075-FiraSans-ThinItalic.ttf"
+  },
+  {
+    "name": "Lato-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Black.ttf",
+    "file": "files/076-Lato-Black.ttf"
+  },
+  {
+    "name": "Lato-BlackItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-BlackItalic.ttf",
+    "file": "files/077-Lato-BlackItalic.ttf"
+  },
+  {
+    "name": "Lato-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Bold.ttf",
+    "file": "files/078-Lato-Bold.ttf"
+  },
+  {
+    "name": "Lato-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-BoldItalic.ttf",
+    "file": "files/079-Lato-BoldItalic.ttf"
+  },
+  {
+    "name": "Lato-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraBold.ttf",
+    "file": "files/080-Lato-ExtraBold.ttf"
+  },
+  {
+    "name": "Lato-ExtraBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraBoldItalic.ttf",
+    "file": "files/081-Lato-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "Lato-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraLight.ttf",
+    "file": "files/082-Lato-ExtraLight.ttf"
+  },
+  {
+    "name": "Lato-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ExtraLightItalic.ttf",
+    "file": "files/083-Lato-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "Lato-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Italic.ttf",
+    "file": "files/084-Lato-Italic.ttf"
+  },
+  {
+    "name": "Lato-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Light.ttf",
+    "file": "files/085-Lato-Light.ttf"
+  },
+  {
+    "name": "Lato-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-LightItalic.ttf",
+    "file": "files/086-Lato-LightItalic.ttf"
+  },
+  {
+    "name": "Lato-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Medium.ttf",
+    "file": "files/087-Lato-Medium.ttf"
+  },
+  {
+    "name": "Lato-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-MediumItalic.ttf",
+    "file": "files/088-Lato-MediumItalic.ttf"
+  },
+  {
+    "name": "Lato-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Regular.ttf",
+    "file": "files/089-Lato-Regular.ttf"
+  },
+  {
+    "name": "Lato-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-SemiBold.ttf",
+    "file": "files/090-Lato-SemiBold.ttf"
+  },
+  {
+    "name": "Lato-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-SemiBoldItalic.ttf",
+    "file": "files/091-Lato-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "Lato-Thin.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Thin.ttf",
+    "file": "files/092-Lato-Thin.ttf"
+  },
+  {
+    "name": "Lato-ThinItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-ThinItalic.ttf",
+    "file": "files/093-Lato-ThinItalic.ttf"
+  },
+  {
+    "name": "Barlow-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Black.ttf",
+    "file": "files/094-Barlow-Black.ttf"
+  },
+  {
+    "name": "Barlow-BlackItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-BlackItalic.ttf",
+    "file": "files/095-Barlow-BlackItalic.ttf"
+  },
+  {
+    "name": "Barlow-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Bold.ttf",
+    "file": "files/096-Barlow-Bold.ttf"
+  },
+  {
+    "name": "Barlow-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-BoldItalic.ttf",
+    "file": "files/097-Barlow-BoldItalic.ttf"
+  },
+  {
+    "name": "Barlow-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraBold.ttf",
+    "file": "files/098-Barlow-ExtraBold.ttf"
+  },
+  {
+    "name": "Barlow-ExtraBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraBoldItalic.ttf",
+    "file": "files/099-Barlow-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "Barlow-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraLight.ttf",
+    "file": "files/100-Barlow-ExtraLight.ttf"
+  },
+  {
+    "name": "Barlow-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ExtraLightItalic.ttf",
+    "file": "files/101-Barlow-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "Barlow-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Italic.ttf",
+    "file": "files/102-Barlow-Italic.ttf"
+  },
+  {
+    "name": "Barlow-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Light.ttf",
+    "file": "files/103-Barlow-Light.ttf"
+  },
+  {
+    "name": "Barlow-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-LightItalic.ttf",
+    "file": "files/104-Barlow-LightItalic.ttf"
+  },
+  {
+    "name": "Barlow-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Medium.ttf",
+    "file": "files/105-Barlow-Medium.ttf"
+  },
+  {
+    "name": "Barlow-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-MediumItalic.ttf",
+    "file": "files/106-Barlow-MediumItalic.ttf"
+  },
+  {
+    "name": "Barlow-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Regular.ttf",
+    "file": "files/107-Barlow-Regular.ttf"
+  },
+  {
+    "name": "Barlow-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-SemiBold.ttf",
+    "file": "files/108-Barlow-SemiBold.ttf"
+  },
+  {
+    "name": "Barlow-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-SemiBoldItalic.ttf",
+    "file": "files/109-Barlow-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "Barlow-Thin.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-Thin.ttf",
+    "file": "files/110-Barlow-Thin.ttf"
+  },
+  {
+    "name": "Barlow-ThinItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlow/Barlow-ThinItalic.ttf",
+    "file": "files/111-Barlow-ThinItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Bold.ttf",
+    "file": "files/112-IBMPlexMono-Bold.ttf"
+  },
+  {
+    "name": "IBMPlexMono-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-BoldItalic.ttf",
+    "file": "files/113-IBMPlexMono-BoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-ExtraLight.ttf",
+    "file": "files/114-IBMPlexMono-ExtraLight.ttf"
+  },
+  {
+    "name": "IBMPlexMono-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-ExtraLightItalic.ttf",
+    "file": "files/115-IBMPlexMono-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Italic.ttf",
+    "file": "files/116-IBMPlexMono-Italic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Light.ttf",
+    "file": "files/117-IBMPlexMono-Light.ttf"
+  },
+  {
+    "name": "IBMPlexMono-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-LightItalic.ttf",
+    "file": "files/118-IBMPlexMono-LightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Medium.ttf",
+    "file": "files/119-IBMPlexMono-Medium.ttf"
+  },
+  {
+    "name": "IBMPlexMono-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-MediumItalic.ttf",
+    "file": "files/120-IBMPlexMono-MediumItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf",
+    "file": "files/121-IBMPlexMono-Regular.ttf"
+  },
+  {
+    "name": "IBMPlexMono-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-SemiBold.ttf",
+    "file": "files/122-IBMPlexMono-SemiBold.ttf"
+  },
+  {
+    "name": "IBMPlexMono-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-SemiBoldItalic.ttf",
+    "file": "files/123-IBMPlexMono-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexMono-Thin.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Thin.ttf",
+    "file": "files/124-IBMPlexMono-Thin.ttf"
+  },
+  {
+    "name": "IBMPlexMono-ThinItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-ThinItalic.ttf",
+    "file": "files/125-IBMPlexMono-ThinItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Bold.ttf",
+    "file": "files/126-IBMPlexSerif-Bold.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-BoldItalic.ttf",
+    "file": "files/127-IBMPlexSerif-BoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-ExtraLight.ttf",
+    "file": "files/128-IBMPlexSerif-ExtraLight.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-ExtraLightItalic.ttf",
+    "file": "files/129-IBMPlexSerif-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Italic.ttf",
+    "file": "files/130-IBMPlexSerif-Italic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Light.ttf",
+    "file": "files/131-IBMPlexSerif-Light.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-LightItalic.ttf",
+    "file": "files/132-IBMPlexSerif-LightItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Medium.ttf",
+    "file": "files/133-IBMPlexSerif-Medium.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-MediumItalic.ttf",
+    "file": "files/134-IBMPlexSerif-MediumItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Regular.ttf",
+    "file": "files/135-IBMPlexSerif-Regular.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-SemiBold.ttf",
+    "file": "files/136-IBMPlexSerif-SemiBold.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-SemiBoldItalic.ttf",
+    "file": "files/137-IBMPlexSerif-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-Thin.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Thin.ttf",
+    "file": "files/138-IBMPlexSerif-Thin.ttf"
+  },
+  {
+    "name": "IBMPlexSerif-ThinItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-ThinItalic.ttf",
+    "file": "files/139-IBMPlexSerif-ThinItalic.ttf"
+  },
+  {
+    "name": "DMMono-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Italic.ttf",
+    "file": "files/140-DMMono-Italic.ttf"
+  },
+  {
+    "name": "DMMono-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Light.ttf",
+    "file": "files/141-DMMono-Light.ttf"
+  },
+  {
+    "name": "DMMono-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-LightItalic.ttf",
+    "file": "files/142-DMMono-LightItalic.ttf"
+  },
+  {
+    "name": "DMMono-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Medium.ttf",
+    "file": "files/143-DMMono-Medium.ttf"
+  },
+  {
+    "name": "DMMono-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-MediumItalic.ttf",
+    "file": "files/144-DMMono-MediumItalic.ttf"
+  },
+  {
+    "name": "DMMono-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/DMMono-Regular.ttf",
+    "file": "files/145-DMMono-Regular.ttf"
+  },
+  {
+    "name": "SpaceMono-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Bold.ttf",
+    "file": "files/146-SpaceMono-Bold.ttf"
+  },
+  {
+    "name": "SpaceMono-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-BoldItalic.ttf",
+    "file": "files/147-SpaceMono-BoldItalic.ttf"
+  },
+  {
+    "name": "SpaceMono-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Italic.ttf",
+    "file": "files/148-SpaceMono-Italic.ttf"
+  },
+  {
+    "name": "SpaceMono-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacemono/SpaceMono-Regular.ttf",
+    "file": "files/149-SpaceMono-Regular.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-Bold.ttf",
+    "file": "files/150-PT_Sans-Web-Bold.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-BoldItalic.ttf",
+    "file": "files/151-PT_Sans-Web-BoldItalic.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-Italic.ttf",
+    "file": "files/152-PT_Sans-Web-Italic.ttf"
+  },
+  {
+    "name": "PT_Sans-Web-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptsans/PT_Sans-Web-Regular.ttf",
+    "file": "files/153-PT_Sans-Web-Regular.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Bold.ttf",
+    "file": "files/154-PT_Serif-Web-Bold.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-BoldItalic.ttf",
+    "file": "files/155-PT_Serif-Web-BoldItalic.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Italic.ttf",
+    "file": "files/156-PT_Serif-Web-Italic.ttf"
+  },
+  {
+    "name": "PT_Serif-Web-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ptserif/PT_Serif-Web-Regular.ttf",
+    "file": "files/157-PT_Serif-Web-Regular.ttf"
+  },
+  {
+    "name": "FiraMono-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Bold.ttf",
+    "file": "files/158-FiraMono-Bold.ttf"
+  },
+  {
+    "name": "FiraMono-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Medium.ttf",
+    "file": "files/159-FiraMono-Medium.ttf"
+  },
+  {
+    "name": "FiraMono-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/firamono/FiraMono-Regular.ttf",
+    "file": "files/160-FiraMono-Regular.ttf"
+  },
+  {
+    "name": "Inconsolata[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/Inconsolata%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/161-Inconsolata[wdth,wght].ttf"
+  },
+  {
+    "name": "Inconsolata-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Black.ttf",
+    "file": "files/162-Inconsolata-Black.ttf"
+  },
+  {
+    "name": "Inconsolata-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Bold.ttf",
+    "file": "files/163-Inconsolata-Bold.ttf"
+  },
+  {
+    "name": "Inconsolata-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-ExtraBold.ttf",
+    "file": "files/164-Inconsolata-ExtraBold.ttf"
+  },
+  {
+    "name": "Inconsolata-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-ExtraLight.ttf",
+    "file": "files/165-Inconsolata-ExtraLight.ttf"
+  },
+  {
+    "name": "Inconsolata-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Light.ttf",
+    "file": "files/166-Inconsolata-Light.ttf"
+  },
+  {
+    "name": "Inconsolata-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Medium.ttf",
+    "file": "files/167-Inconsolata-Medium.ttf"
+  },
+  {
+    "name": "Inconsolata-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Regular.ttf",
+    "file": "files/168-Inconsolata-Regular.ttf"
+  },
+  {
+    "name": "Inconsolata-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-SemiBold.ttf",
+    "file": "files/169-Inconsolata-SemiBold.ttf"
+  },
+  {
+    "name": "Ligconsolata-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Ligconsolata-Bold.ttf",
+    "file": "files/170-Ligconsolata-Bold.ttf"
+  },
+  {
+    "name": "Ligconsolata-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Ligconsolata-Regular.ttf",
+    "file": "files/171-Ligconsolata-Regular.ttf"
+  },
+  {
+    "name": "Inter-Italic[opsz,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter-Italic%5Bopsz%2Cwght%5D.ttf",
+    "file": "files/172-Inter-Italic[opsz,wght].ttf"
+  },
+  {
+    "name": "Inter[opsz,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf",
+    "file": "files/173-Inter[opsz,wght].ttf"
+  },
+  {
+    "name": "Roboto-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/174-Roboto-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Roboto[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/175-Roboto[wdth,wght].ttf"
+  },
+  {
+    "name": "OpenSans-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/opensans/OpenSans-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/176-OpenSans-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "OpenSans[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/177-OpenSans[wdth,wght].ttf"
+  },
+  {
+    "name": "Montserrat-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat-Italic%5Bwght%5D.ttf",
+    "file": "files/178-Montserrat-Italic[wght].ttf"
+  },
+  {
+    "name": "Montserrat[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf",
+    "file": "files/179-Montserrat[wght].ttf"
+  },
+  {
+    "name": "Oswald[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf",
+    "file": "files/180-Oswald[wght].ttf"
+  },
+  {
+    "name": "Merriweather-Italic[opsz,wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/Merriweather-Italic%5Bopsz%2Cwdth%2Cwght%5D.ttf",
+    "file": "files/181-Merriweather-Italic[opsz,wdth,wght].ttf"
+  },
+  {
+    "name": "Merriweather[opsz,wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/merriweather/Merriweather%5Bopsz%2Cwdth%2Cwght%5D.ttf",
+    "file": "files/182-Merriweather[opsz,wdth,wght].ttf"
+  },
+  {
+    "name": "SourceSans3-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/SourceSans3-Italic%5Bwght%5D.ttf",
+    "file": "files/183-SourceSans3-Italic[wght].ttf"
+  },
+  {
+    "name": "SourceSans3[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/sourcesans3/SourceSans3%5Bwght%5D.ttf",
+    "file": "files/184-SourceSans3[wght].ttf"
+  },
+  {
+    "name": "SourceSerif4-Italic[opsz,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4-Italic%5Bopsz%2Cwght%5D.ttf",
+    "file": "files/185-SourceSerif4-Italic[opsz,wght].ttf"
+  },
+  {
+    "name": "SourceSerif4[opsz,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/SourceSerif4%5Bopsz%2Cwght%5D.ttf",
+    "file": "files/186-SourceSerif4[opsz,wght].ttf"
+  },
+  {
+    "name": "IBMPlexSans-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/187-IBMPlexSans-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "IBMPlexSans[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/188-IBMPlexSans[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSans-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/189-NotoSans-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSans[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/190-NotoSans[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSerif-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserif/NotoSerif-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/191-NotoSerif-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "NotoSerif[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserif/NotoSerif%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/192-NotoSerif[wdth,wght].ttf"
+  },
+  {
+    "name": "WorkSans-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/worksans/WorkSans-Italic%5Bwght%5D.ttf",
+    "file": "files/193-WorkSans-Italic[wght].ttf"
+  },
+  {
+    "name": "WorkSans[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/worksans/WorkSans%5Bwght%5D.ttf",
+    "file": "files/194-WorkSans[wght].ttf"
+  },
+  {
+    "name": "DMSans-Italic[opsz,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/DMSans-Italic%5Bopsz%2Cwght%5D.ttf",
+    "file": "files/195-DMSans-Italic[opsz,wght].ttf"
+  },
+  {
+    "name": "DMSans[opsz,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/DMSans%5Bopsz%2Cwght%5D.ttf",
+    "file": "files/196-DMSans[opsz,wght].ttf"
+  },
+  {
+    "name": "SpaceGrotesk[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf",
+    "file": "files/197-SpaceGrotesk[wght].ttf"
+  },
+  {
+    "name": "Manrope[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf",
+    "file": "files/198-Manrope[wght].ttf"
+  },
+  {
+    "name": "PlusJakartaSans-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/plusjakartasans/PlusJakartaSans-Italic%5Bwght%5D.ttf",
+    "file": "files/199-PlusJakartaSans-Italic[wght].ttf"
+  },
+  {
+    "name": "PlusJakartaSans[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/plusjakartasans/PlusJakartaSans%5Bwght%5D.ttf",
+    "file": "files/200-PlusJakartaSans[wght].ttf"
+  },
+  {
+    "name": "Lexend[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/lexend/Lexend%5Bwght%5D.ttf",
+    "file": "files/201-Lexend[wght].ttf"
+  },
+  {
+    "name": "Sora[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/sora/Sora%5Bwght%5D.ttf",
+    "file": "files/202-Sora[wght].ttf"
+  },
+  {
+    "name": "Cabin-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/cabin/Cabin-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/203-Cabin-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Cabin[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/cabin/Cabin%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/204-Cabin[wdth,wght].ttf"
+  },
+  {
+    "name": "LibreBaskerville-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville-Italic%5Bwght%5D.ttf",
+    "file": "files/205-LibreBaskerville-Italic[wght].ttf"
+  },
+  {
+    "name": "LibreBaskerville[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville%5Bwght%5D.ttf",
+    "file": "files/206-LibreBaskerville[wght].ttf"
+  },
+  {
+    "name": "PlayfairDisplay-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay-Italic%5Bwght%5D.ttf",
+    "file": "files/207-PlayfairDisplay-Italic[wght].ttf"
+  },
+  {
+    "name": "PlayfairDisplay[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
+    "file": "files/208-PlayfairDisplay[wght].ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Bold.ttf",
+    "file": "files/209-AtkinsonHyperlegible-Bold.ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-BoldItalic.ttf",
+    "file": "files/210-AtkinsonHyperlegible-BoldItalic.ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Italic.ttf",
+    "file": "files/211-AtkinsonHyperlegible-Italic.ttf"
+  },
+  {
+    "name": "AtkinsonHyperlegible-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf",
+    "file": "files/212-AtkinsonHyperlegible-Regular.ttf"
+  },
+  {
+    "name": "Archivo-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/archivo/Archivo-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/213-Archivo-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Archivo[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/archivo/Archivo%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/214-Archivo[wdth,wght].ttf"
+  },
+  {
+    "name": "Nunito-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito-Italic%5Bwght%5D.ttf",
+    "file": "files/215-Nunito-Italic[wght].ttf"
+  },
+  {
+    "name": "Nunito[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/nunito/Nunito%5Bwght%5D.ttf",
+    "file": "files/216-Nunito[wght].ttf"
+  },
+  {
+    "name": "Raleway-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/raleway/Raleway-Italic%5Bwght%5D.ttf",
+    "file": "files/217-Raleway-Italic[wght].ttf"
+  },
+  {
+    "name": "Raleway[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/raleway/Raleway%5Bwght%5D.ttf",
+    "file": "files/218-Raleway[wght].ttf"
+  },
+  {
+    "name": "Rubik-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/rubik/Rubik-Italic%5Bwght%5D.ttf",
+    "file": "files/219-Rubik-Italic[wght].ttf"
+  },
+  {
+    "name": "Rubik[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/rubik/Rubik%5Bwght%5D.ttf",
+    "file": "files/220-Rubik[wght].ttf"
+  },
+  {
+    "name": "Bitter-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter-Italic%5Bwght%5D.ttf",
+    "file": "files/221-Bitter-Italic[wght].ttf"
+  },
+  {
+    "name": "Bitter[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf",
+    "file": "files/222-Bitter[wght].ttf"
+  },
+  {
+    "name": "CrimsonPro-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro-Italic%5Bwght%5D.ttf",
+    "file": "files/223-CrimsonPro-Italic[wght].ttf"
+  },
+  {
+    "name": "CrimsonPro[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/crimsonpro/CrimsonPro%5Bwght%5D.ttf",
+    "file": "files/224-CrimsonPro[wght].ttf"
+  },
+  {
+    "name": "Karla-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/karla/Karla-Italic%5Bwght%5D.ttf",
+    "file": "files/225-Karla-Italic[wght].ttf"
+  },
+  {
+    "name": "Karla[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/karla/Karla%5Bwght%5D.ttf",
+    "file": "files/226-Karla[wght].ttf"
+  },
+  {
+    "name": "PublicSans-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/publicsans/PublicSans-Italic%5Bwght%5D.ttf",
+    "file": "files/227-PublicSans-Italic[wght].ttf"
+  },
+  {
+    "name": "PublicSans[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/publicsans/PublicSans%5Bwght%5D.ttf",
+    "file": "files/228-PublicSans[wght].ttf"
+  },
+  {
+    "name": "Urbanist-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/urbanist/Urbanist-Italic%5Bwght%5D.ttf",
+    "file": "files/229-Urbanist-Italic[wght].ttf"
+  },
+  {
+    "name": "Urbanist[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/urbanist/Urbanist%5Bwght%5D.ttf",
+    "file": "files/230-Urbanist[wght].ttf"
+  },
+  {
+    "name": "Figtree-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/figtree/Figtree-Italic%5Bwght%5D.ttf",
+    "file": "files/231-Figtree-Italic[wght].ttf"
+  },
+  {
+    "name": "Figtree[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/figtree/Figtree%5Bwght%5D.ttf",
+    "file": "files/232-Figtree[wght].ttf"
+  },
+  {
+    "name": "Outfit[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/outfit/Outfit%5Bwght%5D.ttf",
+    "file": "files/233-Outfit[wght].ttf"
+  },
+  {
+    "name": "RedHatDisplay-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/redhatdisplay/RedHatDisplay-Italic%5Bwght%5D.ttf",
+    "file": "files/234-RedHatDisplay-Italic[wght].ttf"
+  },
+  {
+    "name": "RedHatDisplay[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/redhatdisplay/RedHatDisplay%5Bwght%5D.ttf",
+    "file": "files/235-RedHatDisplay[wght].ttf"
+  },
+  {
+    "name": "RedHatText-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/redhattext/RedHatText-Italic%5Bwght%5D.ttf",
+    "file": "files/236-RedHatText-Italic[wght].ttf"
+  },
+  {
+    "name": "RedHatText[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/redhattext/RedHatText%5Bwght%5D.ttf",
+    "file": "files/237-RedHatText[wght].ttf"
+  },
+  {
+    "name": "Mulish-Italic[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/mulish/Mulish-Italic%5Bwght%5D.ttf",
+    "file": "files/238-Mulish-Italic[wght].ttf"
+  },
+  {
+    "name": "Mulish[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/mulish/Mulish%5Bwght%5D.ttf",
+    "file": "files/239-Mulish[wght].ttf"
+  },
+  {
+    "name": "Quicksand[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/quicksand/Quicksand%5Bwght%5D.ttf",
+    "file": "files/240-Quicksand[wght].ttf"
+  },
+  {
+    "name": "Assistant[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/assistant/Assistant%5Bwght%5D.ttf",
+    "file": "files/241-Assistant[wght].ttf"
+  },
+  {
+    "name": "Heebo[wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/heebo/Heebo%5Bwght%5D.ttf",
+    "file": "files/242-Heebo[wght].ttf"
+  },
+  {
+    "name": "TitilliumWeb-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Black.ttf",
+    "file": "files/243-TitilliumWeb-Black.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Bold.ttf",
+    "file": "files/244-TitilliumWeb-Bold.ttf"
+  },
+  {
+    "name": "TitilliumWeb-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-BoldItalic.ttf",
+    "file": "files/245-TitilliumWeb-BoldItalic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-ExtraLight.ttf",
+    "file": "files/246-TitilliumWeb-ExtraLight.ttf"
+  },
+  {
+    "name": "TitilliumWeb-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-ExtraLightItalic.ttf",
+    "file": "files/247-TitilliumWeb-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Italic.ttf",
+    "file": "files/248-TitilliumWeb-Italic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Light.ttf",
+    "file": "files/249-TitilliumWeb-Light.ttf"
+  },
+  {
+    "name": "TitilliumWeb-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-LightItalic.ttf",
+    "file": "files/250-TitilliumWeb-LightItalic.ttf"
+  },
+  {
+    "name": "TitilliumWeb-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-Regular.ttf",
+    "file": "files/251-TitilliumWeb-Regular.ttf"
+  },
+  {
+    "name": "TitilliumWeb-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-SemiBold.ttf",
+    "file": "files/252-TitilliumWeb-SemiBold.ttf"
+  },
+  {
+    "name": "TitilliumWeb-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/titilliumweb/TitilliumWeb-SemiBoldItalic.ttf",
+    "file": "files/253-TitilliumWeb-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "Asap-Italic[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asap/Asap-Italic%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/254-Asap-Italic[wdth,wght].ttf"
+  },
+  {
+    "name": "Asap[wdth,wght].ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asap/Asap%5Bwdth%2Cwght%5D.ttf",
+    "file": "files/255-Asap[wdth,wght].ttf"
+  },
+  {
+    "name": "AsapCondensed-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Black.ttf",
+    "file": "files/256-AsapCondensed-Black.ttf"
+  },
+  {
+    "name": "AsapCondensed-BlackItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-BlackItalic.ttf",
+    "file": "files/257-AsapCondensed-BlackItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Bold.ttf",
+    "file": "files/258-AsapCondensed-Bold.ttf"
+  },
+  {
+    "name": "AsapCondensed-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-BoldItalic.ttf",
+    "file": "files/259-AsapCondensed-BoldItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraBold.ttf",
+    "file": "files/260-AsapCondensed-ExtraBold.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraBoldItalic.ttf",
+    "file": "files/261-AsapCondensed-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraLight.ttf",
+    "file": "files/262-AsapCondensed-ExtraLight.ttf"
+  },
+  {
+    "name": "AsapCondensed-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-ExtraLightItalic.ttf",
+    "file": "files/263-AsapCondensed-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Italic.ttf",
+    "file": "files/264-AsapCondensed-Italic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Light.ttf",
+    "file": "files/265-AsapCondensed-Light.ttf"
+  },
+  {
+    "name": "AsapCondensed-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-LightItalic.ttf",
+    "file": "files/266-AsapCondensed-LightItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Medium.ttf",
+    "file": "files/267-AsapCondensed-Medium.ttf"
+  },
+  {
+    "name": "AsapCondensed-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-MediumItalic.ttf",
+    "file": "files/268-AsapCondensed-MediumItalic.ttf"
+  },
+  {
+    "name": "AsapCondensed-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-Regular.ttf",
+    "file": "files/269-AsapCondensed-Regular.ttf"
+  },
+  {
+    "name": "AsapCondensed-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-SemiBold.ttf",
+    "file": "files/270-AsapCondensed-SemiBold.ttf"
+  },
+  {
+    "name": "AsapCondensed-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/asapcondensed/AsapCondensed-SemiBoldItalic.ttf",
+    "file": "files/271-AsapCondensed-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Black.ttf",
+    "file": "files/272-BarlowCondensed-Black.ttf"
+  },
+  {
+    "name": "BarlowCondensed-BlackItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-BlackItalic.ttf",
+    "file": "files/273-BarlowCondensed-BlackItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Bold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Bold.ttf",
+    "file": "files/274-BarlowCondensed-Bold.ttf"
+  },
+  {
+    "name": "BarlowCondensed-BoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-BoldItalic.ttf",
+    "file": "files/275-BarlowCondensed-BoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraBold.ttf",
+    "file": "files/276-BarlowCondensed-ExtraBold.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraBoldItalic.ttf",
+    "file": "files/277-BarlowCondensed-ExtraBoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraLight.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraLight.ttf",
+    "file": "files/278-BarlowCondensed-ExtraLight.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ExtraLightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ExtraLightItalic.ttf",
+    "file": "files/279-BarlowCondensed-ExtraLightItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Italic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Italic.ttf",
+    "file": "files/280-BarlowCondensed-Italic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Light.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Light.ttf",
+    "file": "files/281-BarlowCondensed-Light.ttf"
+  },
+  {
+    "name": "BarlowCondensed-LightItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-LightItalic.ttf",
+    "file": "files/282-BarlowCondensed-LightItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Medium.ttf",
+    "file": "files/283-BarlowCondensed-Medium.ttf"
+  },
+  {
+    "name": "BarlowCondensed-MediumItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-MediumItalic.ttf",
+    "file": "files/284-BarlowCondensed-MediumItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Regular.ttf",
+    "file": "files/285-BarlowCondensed-Regular.ttf"
+  },
+  {
+    "name": "BarlowCondensed-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-SemiBold.ttf",
+    "file": "files/286-BarlowCondensed-SemiBold.ttf"
+  },
+  {
+    "name": "BarlowCondensed-SemiBoldItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-SemiBoldItalic.ttf",
+    "file": "files/287-BarlowCondensed-SemiBoldItalic.ttf"
+  },
+  {
+    "name": "BarlowCondensed-Thin.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-Thin.ttf",
+    "file": "files/288-BarlowCondensed-Thin.ttf"
+  },
+  {
+    "name": "BarlowCondensed-ThinItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/BarlowCondensed-ThinItalic.ttf",
+    "file": "files/289-BarlowCondensed-ThinItalic.ttf"
+  },
+  {
+    "name": "BarlowSemiCondensed-Black.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowsemicondensed/BarlowSemiCondensed-Black.ttf",
+    "file": "files/290-BarlowSemiCondensed-Black.ttf"
+  },
+  {
+    "name": "BarlowSemiCondensed-BlackItalic.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowsemicondensed/BarlowSemiCondensed-BlackItalic.ttf",
+    "file": "files/291-BarlowSemiCondensed-BlackItalic.ttf"
+  }
+]
