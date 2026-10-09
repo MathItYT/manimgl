@@ -362,7 +362,7 @@ class Demo(Scene):
     function getSavedSource() {
       try {
         const saved = localStorage.getItem(CODE_STORAGE_KEY);
-        return saved && saved.trim() ? saved : DEFAULT_SOURCE;
+        return saved !== null ? saved : DEFAULT_SOURCE;
       } catch (error) {
         console.warn("[editor persistence] No se pudo leer el código guardado:", error);
         return DEFAULT_SOURCE;
