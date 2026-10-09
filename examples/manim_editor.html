@@ -24,7 +24,7 @@
     #editor { position:absolute; inset:0; }
     #preview-wrap { min-width:0; min-height:0; display:flex; flex-direction:column; }
     #preview { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; padding:16px; }
-    #manim-canvas { display:block; object-fit:contain; outline:none; background:#000; }
+    #manim-canvas { display:block; width:100%; height:100%; max-width:100%; max-height:100%; object-fit:contain; outline:none; background:#000; }
     #web-code { max-height:28%; overflow:auto; margin:0 12px 12px; padding:10px; border:1px solid var(--line); border-radius:7px; background:#0e121a; color:#aeb9ca; font:11px/1.45 ui-monospace,monospace; white-space:pre-wrap; }
     #errors { max-height:25%; overflow:auto; margin:0 12px 12px; padding:10px; border:1px solid #512b36; border-radius:7px; background:#1b1015; color:#ff9cac; font:12px/1.45 ui-monospace,monospace; white-space:pre-wrap; display:none; }
     #loading { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:rgba(4,6,10,.82); }
@@ -321,6 +321,7 @@
   <div id="toolbar">
     <button id="run" class="primary" disabled>▶ Ejecutar</button>
     <button id="run-record" class="record" disabled>● Ejecutar y grabar</button>
+    <button id="canvas-window" disabled>↗ Abrir canvas</button>
     <button id="stop" disabled>■ Detener</button>
     <button id="record" class="record" disabled>● Grabar</button>
     <button id="record-stop" disabled>■ Finalizar grabación</button>
@@ -330,6 +331,10 @@
         <option value="30">30</option>
         <option value="60" selected>60</option>
       </select>
+    </label>
+    <label class="toolbar-option" title="Si está activado, la grabación continúa al terminar construct() para permitir interacción; si no, se detiene al terminar la escena.">
+      <input id="record-interactive" type="checkbox" checked>
+      Grabar modo interactivo
     </label>
     <label class="toolbar-option" title="Mezcla el micrófono con el audio de la escena">
       <input id="record-mic" type="checkbox">
@@ -453,35 +458,18 @@
     let recordingMicSource = null;
     let recordingAudioDestination = null;
 
+    // Keep the render target at true Full HD regardless of the editor preview size.
+    // CSS scales it down on screen; captureStream() therefore records 1920x1080.
     function resizeManimCanvas() {
-      const preview = document.getElementById("preview");
-      if (!preview) return;
-
-      const rect = preview.getBoundingClientRect();
-      const width = Math.max(1, Math.floor(rect.width));
-      const height = Math.max(1, Math.floor(rect.height));
-      const aspect = 16 / 9;
-
-      let canvasWidth = width;
-      let canvasHeight = Math.floor(canvasWidth / aspect);
-
-      if (canvasHeight > height) {
-        canvasHeight = height;
-        canvasWidth = Math.floor(canvasHeight * aspect);
-      }
-
-      canvas.width = Math.max(1, canvasWidth);
-      canvas.height = Math.max(1, canvasHeight);
+      if (canvas.width !== 1920) canvas.width = 1920;
+      if (canvas.height !== 1080) canvas.height = 1080;
     }
 
-    canvas.width = 1005;
-    canvas.height = 1005 * 9 / 16;
+    canvas.width = 1920;
+    canvas.height = 1080;
 
-    const canvasResizeObserver =
-      new ResizeObserver(resizeManimCanvas);
-    canvasResizeObserver.observe(
-      document.getElementById("preview"),
-    );
+    const canvasResizeObserver = new ResizeObserver(resizeManimCanvas);
+    canvasResizeObserver.observe(document.getElementById("preview"));
 
     let canvasPreviewWindow = null;
 
@@ -732,6 +720,8 @@ class Demo(Scene):
     const recordStopButton = document.getElementById("record-stop");
     const recordFpsSelect = document.getElementById("record-fps");
     const recordMicCheckbox = document.getElementById("record-mic");
+    const recordInteractiveCheckbox = document.getElementById("record-interactive");
+    const canvasWindowButton = document.getElementById("canvas-window");
     const recordInteractiveCheckbox = document.getElementById("record-interactive");
     const canvasWindowButton = document.getElementById("canvas-window");
     const assetsPanel = document.getElementById("assets-panel");
@@ -1380,10 +1370,12 @@ _editor_scene_token = ${token}`;
       if (!pyodide || running) return;
       try {
         await startRecording();
-        // Recording is intentionally independent from scene execution:
-        // keep capturing after construct() finishes so users can interact
-        // with the live scene and stop only when they press "Finalizar grabación".
         await runScene();
+        // Interactive recording is optional. Keep the existing interactive
+        // behavior by default; otherwise stop immediately after the scene run.
+        if (!recordInteractiveCheckbox.checked && mediaRecorder && mediaRecorder.state !== "inactive") {
+          stopRecording();
+        }
       } catch (error) {
         showError(error);
         setStatus("No se pudo iniciar la grabación: " + String(error?.message || error));
@@ -1890,6 +1882,7 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         runButton.disabled = false;
         runRecordButton.disabled = false;
         recordButton.disabled = false;
+        canvasWindowButton.disabled = false;
         canvasWindowButton.disabled = false;
         refreshAssets();
         setStatus("Listo. Código y assets se guardan automáticamente en este navegador.");
