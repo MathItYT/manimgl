@@ -947,6 +947,32 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
       return pythonCompletionRefreshPromise;
     }
 
+    async function getPythonModuleMembers(moduleName) {
+      if (!pyodide || typeof moduleName !== "string" ||
+          !/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(moduleName)) return [];
+      try {
+        const raw = await pyodide.runPythonAsync(
+          "import importlib, json\\n" +
+          "_name = " + JSON.stringify(moduleName) + "\\n" +
+          "try:\\n" +
+          "    _module = importlib.import_module(_name)\\n" +
+          "    _members = [x for x in dir(_module) if not x.startswith('_')]\\n" +
+          "    _result = {'name': _name, 'members': _members[:3000]}\\n" +
+          "except Exception as _error:\\n" +
+          "    _result = {'name': _name, 'members': [], 'error': str(_error)}\\n" +
+          "json.dumps(_result)"
+        );
+        const result = JSON.parse(raw);
+        if (result.name && Array.isArray(result.members) && result.members.length) {
+          pythonCompletionIndex.exports[result.name] = result.members;
+          return result.members;
+        }
+      } catch (error) {
+        console.debug("[Python completions] Module introspection unavailable:", moduleName, error);
+      }
+      return [];
+    }
+
     function getSavedPythonDependencies() {
       try {
         const value = JSON.parse(localStorage.getItem(PYTHON_DEPENDENCIES_KEY) || "[]");
@@ -1181,7 +1207,7 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
       window.__manimLightweightCompletionProvider =
         monaco.languages.registerCompletionItemProvider("python", {
           triggerCharacters: [".", "_"],
-          provideCompletionItems(model, position) {
+          async provideCompletionItems(model, position) {
             const word = model.getWordUntilPosition(position);
             const range = new monaco.Range(
               position.lineNumber, word.startColumn,
@@ -1189,13 +1215,47 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
             );
             const linePrefix = model.getLineContent(position.lineNumber)
               .slice(0, position.column - 1);
-            const memberAccess = /(?:[A-Za-z_]\w*|\))\s*\.\s*([A-Za-z_]\w*)?$/.test(linePrefix);
-            let candidates = memberAccess
-              ? objectMembers.map(label => ({ label, kind: CompletionItemKind.Method }))
-              : globalItems.slice();
+            const source = model.getValue();
+            const memberMatch = linePrefix.match(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\.\s*([A-Za-z_]\w*)?$/);
+            const importContext = linePrefix.match(/^\s*import\s+([\w.]*)$/);
+            const fromContext = linePrefix.match(/^\s*from\s+([\w.]*)\s+import\s+([\w.]*)$/);
+            const CompletionItemKind = monaco.languages.CompletionItemKind;
+            let candidates = [];
+            const liveAliases = {};
+            for (const match of source.matchAll(/^\s*import\s+([\w.]+)(?:\s+as\s+([A-Za-z_]\w*))?/gm)) {
+              liveAliases[match[2] || match[1].split(".")[0]] = match[1];
+            }
+            for (const match of source.matchAll(/^\s*from\s+([\w.]+)\s+import\s+([\w*]+)(?:\s+as\s+([A-Za-z_]\w*))?/gm)) {
+              liveAliases[match[3] || match[2]] = match[1] + "." + match[2];
+            }
 
-            if (!memberAccess) {
-              const source = model.getValue();
+            if (importContext) {
+              candidates = pythonCompletionIndex.modules.map(label => ({
+                label, kind: CompletionItemKind.Module, detail: "Installed Python module",
+              }));
+            } else if (fromContext) {
+              const moduleName = fromContext[1];
+              let exports = pythonCompletionIndex.exports[moduleName];
+              if (!exports && pyodide) {
+                exports = await getPythonModuleMembers(moduleName);
+              }
+              candidates = (exports || []).map(label => ({
+                label, kind: CompletionItemKind.Variable, detail: "Exported by " + moduleName,
+              }));
+            } else if (memberMatch) {
+              const expression = memberMatch[1];
+              const root = expression.split(".")[0];
+              const moduleName = liveAliases[root] || pythonCompletionIndex.aliases[root] || root;
+              const fullModuleName = moduleName + (expression.includes(".") ? "." + expression.split(".").slice(1).join(".") : "");
+              let exports = pythonCompletionIndex.exports[fullModuleName] ||
+                pythonCompletionIndex.exports[moduleName];
+              if (!exports && pyodide) exports = await getPythonModuleMembers(fullModuleName);
+              if (!exports && fullModuleName !== moduleName && pyodide) exports = await getPythonModuleMembers(moduleName);
+              candidates = (exports || objectMembers).map(label => ({
+                label, kind: CompletionItemKind.Method, detail: fullModuleName,
+              }));
+            } else {
+              candidates = globalItems.slice();
               const localNames = new Set();
               const patterns = [
                 /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)/gm,
@@ -1213,32 +1273,7 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
               }
             }
 
-            const prefix = word.word.toLowerCase();
-            // Keep aliases in sync as the user edits import statements.
-            const liveAliases = { ...pythonCompletionIndex.aliases };
-            for (const match of model.getValue().matchAll(/^\\s*import\\s+([\\w.]+)(?:\\s+as\\s+([A-Za-z_]\\w*))?/gm)) {
-              liveAliases[match[2] || match[1].split(".")[0]] = match[1];
-            }
-            const importContext = linePrefix.match(/^\\s*import\\s+([\\w.]*)$/);
-            const fromContext = linePrefix.match(/^\\s*from\\s+([\\w.]*)\\s+import\\s+([\\w.]*)$/);
-            if (importContext) {
-              candidates = pythonCompletionIndex.modules.map(label => ({
-                label, kind: CompletionItemKind.Module, detail: "Installed Python module",
-              }));
-            } else if (fromContext) {
-              const moduleName = fromContext[1];
-              candidates = (pythonCompletionIndex.exports[moduleName] || []).map(label => ({
-                label, kind: CompletionItemKind.Variable, detail: "Exported by " + moduleName,
-              }));
-            } else if (memberAccess) {
-              const memberMatch = linePrefix.match(/([A-Za-z_]\\w*)\\s*\\.\\s*[A-Za-z_\\w]*$/);
-              const moduleName = memberMatch && liveAliases[memberMatch[1]];
-              if (moduleName && pythonCompletionIndex.exports[moduleName]) {
-                candidates = pythonCompletionIndex.exports[moduleName].map(label => ({
-                  label, kind: CompletionItemKind.Method, detail: moduleName,
-                }));
-              }
-            }
+            const prefix = String(word.word || "").toLowerCase();
             const seen = new Set();
             const suggestions = [];
             for (const item of candidates) {
@@ -1248,15 +1283,13 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
               suggestions.push({
                 ...item,
                 label,
-                // Monaco 0.55's suggest filtering can call replaceAll on filterText.
-                // Always provide normalized strings instead of relying on its fallback.
                 filterText: typeof item.filterText === "string" ? item.filterText : label,
                 insertText: typeof item.insertText === "string" ? item.insertText : label,
                 range,
                 sortText: "0" + label,
               });
             }
-            return { suggestions };
+            return { suggestions, incomplete: false };
           },
         });
     }
