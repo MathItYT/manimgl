@@ -509,6 +509,9 @@
     let recordingFrameRate = 60;
     let recordingError = null;
     let recordingStopping = false;
+    let recordingFileHandle = null;
+    let recordingUsesDiskTarget = false;
+    let recordingFileName = "";
     let mediabunnyImportPromise = null;
 
     async function loadMediabunny() {
@@ -1996,6 +1999,20 @@ _editor_scene_token = ${token}`;
         throw new Error("Open the canvas window before recording.");
       }
 
+      // Ask for the destination while user activation is available. StreamTarget
+      // writes to disk instead of retaining the entire WebM in memory.
+      let fileHandle = recordingFileHandle;
+      if (!fileHandle && typeof window.showSaveFilePicker === "function") {
+        fileHandle = await window.showSaveFilePicker({
+          suggestedName: "manimgl-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm",
+          types: [{
+            description: "WebM video",
+            accept: { "video/webm": [".webm"] },
+          }],
+        });
+      }
+      recordingFileHandle = null;
+
       let context = null;
       let destination = null;
       let micStream = null;
@@ -2006,6 +2023,7 @@ _editor_scene_token = ${token}`;
         const {
           Output: MediaOutput,
           BufferTarget,
+          StreamTarget,
           CanvasSource,
           MediaStreamAudioTrackSource,
           WebMOutputFormat,
@@ -2037,9 +2055,22 @@ _editor_scene_token = ${token}`;
           throw new Error("This browser has no WebCodecs video encoder compatible with WebM.");
         }
 
+        let outputTarget;
+        recordingUsesDiskTarget = Boolean(fileHandle);
+        recordingFileName = fileHandle?.name || "";
+        if (fileHandle) {
+          const writable = await fileHandle.createWritable();
+          outputTarget = new StreamTarget(writable, {
+            chunked: true,
+            chunkSize: 2 ** 20,
+          });
+        } else {
+          // Compatibility fallback for browsers without the File System Access API.
+          outputTarget = new BufferTarget();
+        }
         output = new MediaOutput({
           format,
-          target: new BufferTarget(),
+          target: outputTarget,
         });
         videoSource = new CanvasSource(canvas, {
           codec: videoCodec,
@@ -2090,6 +2121,10 @@ _editor_scene_token = ${token}`;
           recordingCaptureCallbackCalls += 1;
           const source = recordingVideoSource;
           if (!recordingActive || recordingStopping || !source || recordingError) return;
+
+          // Bound in-flight WebGPU captures. If encoding or disk writes fall behind,
+          // drop a capture instead of accumulating GPU textures and pending promises.
+          if (recordingPendingFrames.size >= 3) return;
 
           const elapsed = Math.max(0, (performance.now() - recordingStartedAt) / 1000);
           const timestamp = Math.max(elapsed, recordingLastTimestamp + 0.000001);
@@ -2157,6 +2192,8 @@ _editor_scene_token = ${token}`;
         recordingOutput = null;
         recordingVideoSource = null;
         recordingAudioSource = null;
+        recordingUsesDiskTarget = false;
+        recordingFileName = "";
         recordingStopping = false;
         throw error;
       }
@@ -2197,21 +2234,25 @@ _editor_scene_token = ${token}`;
         if (audioSource) audioSource.close();
         await output.finalize();
 
-        const buffer = output.target.buffer;
-        if (!buffer || buffer.byteLength === 0) {
-          throw new Error("WebCodecs encoded frames, but the WebM muxer produced an empty file.");
+        if (recordingUsesDiskTarget) {
+          setStatus("Recording saved to " + (recordingFileName || "the selected WebM file")
+            + " (" + recordingFramesEncoded + " encoded video frames).");
+        } else {
+          const buffer = output.target.buffer;
+          if (!buffer || buffer.byteLength === 0) {
+            throw new Error("WebCodecs encoded frames, but the WebM muxer produced an empty file.");
+          }
+          const blob = new Blob([buffer], { type: "video/webm" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "manimgl-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setStatus("Recording complete: WebM with "
+            + recordingFramesEncoded + " encoded video frames. (This browser kept the file in memory.)");
         }
-        const blob = new Blob([buffer], { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "manimgl-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-        setStatus("Recording complete: WebM with "
-          + recordingFramesEncoded + " encoded video frames.");
       } catch (error) {
         finalizationError = error;
         showError(error);
@@ -2241,6 +2282,8 @@ _editor_scene_token = ${token}`;
         recordingVideoSource = null;
         recordingAudioSource = null;
         recordingPendingFrames.clear();
+        recordingUsesDiskTarget = false;
+        recordingFileName = "";
         recordingStopping = false;
         recordButton.disabled = false;
         recordButton.classList.remove("recording");
@@ -2257,6 +2300,16 @@ _editor_scene_token = ${token}`;
     async function runAndRecord() {
       if (!pyodide || running) return;
       try {
+        // The picker must run from this click handler, before runScene's awaits.
+        if (typeof window.showSaveFilePicker === "function" && !recordingFileHandle) {
+          recordingFileHandle = await window.showSaveFilePicker({
+            suggestedName: "manimgl-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm",
+            types: [{
+              description: "WebM video",
+              accept: { "video/webm": [".webm"] },
+            }],
+          });
+        }
         // Prepare/transform the source first. Start capture only when the runner
         // is ready to execute, so editor/transpilation startup time is not in the clip.
         await runScene(startRecording);
