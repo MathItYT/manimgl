@@ -55,7 +55,7 @@ SubmobjectType = TypeVar('SubmobjectType', bound='Mobject')
 
 
 if TYPE_CHECKING:
-    from typing import Callable, Iterator, Union, Tuple, Optional, Any
+    from typing import Callable, Iterator, Union, Tuple, Optional, Any, Sequence
     import numpy.typing as npt
     from manimlib.typing import ManimColor, Vect3, Vect4Array, Vect3Array, Self
 
