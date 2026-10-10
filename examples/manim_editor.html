@@ -1139,7 +1139,7 @@ class Demo(Scene):
             const memberAccess = /(?:[A-Za-z_]\w*|\))\s*\.\s*([A-Za-z_]\w*)?$/.test(linePrefix);
             let candidates = memberAccess
               ? objectMembers.map(label => ({ label, kind: CompletionItemKind.Method }))
-              : globalItems;
+              : globalItems.slice();
 
             if (!memberAccess) {
               const source = model.getValue();
