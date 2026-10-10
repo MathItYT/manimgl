@@ -904,13 +904,21 @@ class Demo(Scene):
       if (pythonCompletionRefreshPromise) return pythonCompletionRefreshPromise;
       pythonCompletionRefreshPromise = (async () => {
         const raw = await pyodide.runPythonAsync(`
-import json, pkgutil, sys
+import importlib.metadata, json, pkgutil, sys
 _modules = set()
 try:
     _modules.update(item.name for item in pkgutil.iter_modules())
 except Exception:
     pass
 _modules.update(name.split(".", 1)[0] for name in sys.modules if name and not name.startswith("_"))
+# pip distribution names often differ from their import names. Include the
+# mapping published by installed distributions as well as actual importable modules.
+try:
+    for _dist, _names in importlib.metadata.packages_distributions().items():
+        if _names and _dist and not _dist.startswith("_"):
+            _modules.add(_dist)
+except Exception:
+    pass
 _exports = {}
 for _name, _module in list(sys.modules.items()):
     if not _name or _module is None or "." in _name:
@@ -920,7 +928,7 @@ for _name, _module in list(sys.modules.items()):
     except Exception:
         continue
     if _attrs:
-        _exports[_name] = _attrs[:1200]
+        _exports[_name] = _attrs[:3000]
 try:
     import manimlib
     _exports["manimlib"] = [attr for attr in dir(manimlib) if not attr.startswith("_")][:3000]
@@ -932,13 +940,19 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
           const parsed = JSON.parse(raw);
           const aliases = {};
           const source = editor?.getValue() || "";
-          for (const match of source.matchAll(/^\s*import\s+([\w.]+)(?:\s+as\s+([A-Za-z_]\w*))?/gm)) {
+          // Parse aliases directly from the current editor contents. Keep this
+          // separate from the runtime index, which may be refreshed mid-session.
+          for (const match of source.matchAll(/^\\s*import\\s+([\\w.]+)(?:\\s+as\\s+([A-Za-z_]\\w*))?/gm)) {
             aliases[match[2] || match[1].split(".")[0]] = match[1];
+          }
+          for (const match of source.matchAll(/^\\s*from\\s+([\\w.]+)\\s+import\\s+([A-Za-z_]\\w*)(?:\\s+as\\s+([A-Za-z_]\\w*))?/gm)) {
+            aliases[match[3] || match[2]] = match[1] + "." + match[2];
           }
           pythonCompletionIndex = {
             modules: Array.isArray(parsed.modules) ? parsed.modules : [],
             exports: parsed.exports && typeof parsed.exports === "object" ? parsed.exports : {},
             aliases,
+            pending: {},
           };
         } catch (error) {
           console.warn("[Python completions] Could not parse runtime index:", error);
@@ -1263,13 +1277,22 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
             } else if (memberMatch) {
               const expression = memberMatch[1];
               const root = expression.split(".")[0];
-              const moduleName = liveAliases[root] || pythonCompletionIndex.aliases[root] || root;
-              const fullModuleName = moduleName + (expression.includes(".") ? "." + expression.split(".").slice(1).join(".") : "");
-              let exports = pythonCompletionIndex.exports[fullModuleName] ||
-                pythonCompletionIndex.exports[moduleName];
+              const aliasTarget = liveAliases[root] || pythonCompletionIndex.aliases[root];
+              const moduleName = aliasTarget || root;
+              const suffix = expression.split(".").slice(1).join(".");
+              const fullModuleName = suffix ? moduleName + "." + suffix : moduleName;
+              let exports = pythonCompletionIndex.exports[fullModuleName];
               if (!exports && pyodide) exports = await getPythonModuleMembers(fullModuleName);
-              if (!exports && fullModuleName !== moduleName && pyodide) exports = await getPythonModuleMembers(moduleName);
-              candidates = (exports || objectMembers).map(label => ({
+              // For "from package import object as alias", inspect the imported
+              // object's module first, then fall back to the parent package.
+              if (!exports && aliasTarget && aliasTarget.includes(".")) {
+                exports = await getPythonModuleMembers(moduleName);
+              }
+              if (!exports && fullModuleName !== moduleName) {
+                exports = pythonCompletionIndex.exports[moduleName];
+                if (!exports && pyodide) exports = await getPythonModuleMembers(moduleName);
+              }
+              candidates = (exports || (aliasTarget ? [] : objectMembers)).map(label => ({
                 label, kind: CompletionItemKind.Method, detail: fullModuleName,
               }));
             } else {
