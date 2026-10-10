@@ -7,7 +7,7 @@ public names re-exported by manimlib.__init__ as permissive typed declarations.
 import ast
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "manimlib"
 OUTPUT = ROOT / "examples" / "vendor" / "manimlib" / "__init__.pyi"
 
