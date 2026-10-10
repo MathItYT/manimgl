@@ -366,6 +366,8 @@
       <input id="record-mic" type="checkbox">
       Microphone
     </label>
+    <button id="lint-code" title="Check Python code for errors and warnings">Lint</button>
+    <button id="format-code" title="Format Python code with Black">Format</button>
     <button id="format">Convert to Web</button>
     <button id="projects-toggle">Projects</button>
     <button id="assets-toggle">Assets</button>
@@ -733,6 +735,10 @@ class Demo(Scene):
     let projectSaveTimeout = null;
     let projectSaveSequence = 0;
     let pyodide = null;
+    let codeToolsPromise = null;
+    let lintTimeout = null;
+    let lintRequestId = 0;
+    const LINT_MARKER_OWNER = "manimgl-python-lint";
     let running = false;
     const dependenciesPanel = document.getElementById("dependencies-panel");
     const dependenciesList = document.getElementById("dependencies-list");
@@ -850,6 +856,123 @@ class Demo(Scene):
     const assetsDropZone = assetsPanel;
 
     function setStatus(value) { status.textContent = String(value); }
+
+    async function ensurePythonCodeTools() {
+      if (!pyodide) throw new Error("Pyodide is not ready yet.");
+      if (!codeToolsPromise) {
+        codeToolsPromise = (async () => {
+          setStatus("Loading Python linting and formatting tools…");
+          await pyodide.runPythonAsync(
+            "import micropip\\nawait micropip.install(['black', 'pyflakes'])"
+          );
+          await pyodide.runPythonAsync(
+            "import ast, black, io, json, pyflakes.api\\nfrom pyflakes.reporter import Reporter"
+          );
+        })().catch(error => {
+          codeToolsPromise = null;
+          throw error;
+        });
+      }
+      return codeToolsPromise;
+    }
+
+    async function lintPythonCode() {
+      if (!editor || !pyodide) return;
+      const requestId = ++lintRequestId;
+      const source = editor.getValue();
+      setStatus("Linting Python code…");
+      try {
+        await ensurePythonCodeTools();
+        if (requestId !== lintRequestId) return;
+        const result = await pyodide.runPythonAsync(
+          "import ast, io, json, pyflakes.api\\n" +
+          "from pyflakes.reporter import Reporter\\n" +
+          "_source = " + JSON.stringify(source) + "\\n" +
+          "_diagnostics = []\\n" +
+          "try:\\n    ast.parse(_source)\\n" +
+          "except SyntaxError as _error:\\n" +
+          "    _diagnostics.append({'line': _error.lineno or 1, 'column': _error.offset or 1, 'message': _error.msg, 'severity': 'error'})\\n" +
+          "else:\\n" +
+          "    _lint_out = io.StringIO()\\n    _lint_err = io.StringIO()\\n" +
+          "    _reporter = Reporter(_lint_out, _lint_err)\\n" +
+          "    pyflakes.api.check(_source, '<editor>', _reporter)\\n" +
+          "    for _line in _lint_out.getvalue().splitlines():\\n" +
+          "        _parts = _line.split(':', 3)\\n" +
+          "        if len(_parts) == 4 and _parts[0] == '<editor>':\\n" +
+          "            try:\\n                _diagnostics.append({'line': int(_parts[1]), 'column': int(_parts[2]), 'message': _parts[3].strip(), 'severity': 'warning'})\\n" +
+          "            except ValueError:\\n                pass\\n" +
+          "json.dumps(_diagnostics)"
+        );
+        if (requestId !== lintRequestId) return;
+        const diagnostics = JSON.parse(String(result));
+        const markers = diagnostics.map(item => ({
+          severity: item.severity === "error"
+            ? monaco.MarkerSeverity.Error
+            : monaco.MarkerSeverity.Warning,
+          message: item.message,
+          startLineNumber: item.line,
+          startColumn: item.column,
+          endLineNumber: item.line,
+          endColumn: item.column + 1,
+          source: "Python lint",
+        }));
+        monaco.editor.setModelMarkers(editor.getModel(), LINT_MARKER_OWNER, markers);
+        setStatus(markers.length
+          ? "Lint: " + markers.length + " issue" + (markers.length === 1 ? "" : "s") + "."
+          : "Lint: no issues found.");
+      } catch (error) {
+        if (requestId !== lintRequestId) return;
+        setStatus("Python linting unavailable: " + String(error?.message || error));
+        console.warn("[python lint]", error);
+      }
+    }
+
+    function schedulePythonLint(delay = 700) {
+      if (lintTimeout !== null) clearTimeout(lintTimeout);
+      lintTimeout = setTimeout(() => {
+        lintTimeout = null;
+        if (pyodide && editor) lintPythonCode();
+      }, delay);
+    }
+
+    async function formatPythonCode() {
+      if (!editor || !pyodide) {
+        setStatus("Pyodide is not ready yet.");
+        return;
+      }
+      const source = editor.getValue();
+      const model = editor.getModel();
+      const version = model.getVersionId();
+      setStatus("Formatting Python code with Black…");
+      const button = document.getElementById("format-code");
+      button.disabled = true;
+      try {
+        await ensurePythonCodeTools();
+        const result = await pyodide.runPythonAsync(
+          "import black, json\\n" +
+          "_source = " + JSON.stringify(source) + "\\n" +
+          "try:\\n    _formatted = black.format_file_contents(_source, fast=False, mode=black.FileMode())\\n" +
+          "except black.NothingChanged:\\n    _formatted = _source\\n" +
+          "json.dumps(_formatted)"
+        );
+        const formatted = JSON.parse(String(result));
+        if (editor.getModel() === model && model.getVersionId() === version && formatted !== source) {
+          editor.setValue(formatted);
+          monaco.editor.setModelMarkers(model, LINT_MARKER_OWNER, []);
+          setStatus("Python code formatted with Black.");
+        } else if (editor.getModel() === model && model.getVersionId() === version) {
+          setStatus("Code is already formatted.");
+        } else {
+          setStatus("Formatting skipped because the code changed.");
+        }
+        schedulePythonLint(0);
+      } catch (error) {
+        setStatus("Could not format Python code: " + String(error?.message || error));
+        console.warn("[python formatter]", error);
+      } finally {
+        button.disabled = false;
+      }
+    }
 
     function renderProjects(projects) {
       const sorted = [...projects].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -1734,6 +1857,8 @@ _editor_scene_token = ${token}`;
     recordStopButton.addEventListener("click", stopRecording);
     stopButton.addEventListener("click", stopScene);
     document.getElementById("format").addEventListener("click", transformOnly);
+    document.getElementById("lint-code").addEventListener("click", () => lintPythonCode());
+    document.getElementById("format-code").addEventListener("click", () => formatPythonCode());
 
     async function initialize() {
       try {
@@ -1758,6 +1883,7 @@ _editor_scene_token = ${token}`;
 
         editor.onDidChangeModelContent(() => {
           scheduleProjectSave();
+          schedulePythonLint();
         });
         window.addEventListener("pagehide", () => {
           saveSource(editor.getValue());
@@ -2082,6 +2208,7 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         refreshAssets();
         renderPythonDependencies();
         setStatus("Ready. Code, assets, and Python dependencies are saved in this browser.");
+        schedulePythonLint(0);
         await transformOnly();
       } catch (error) {
         showError(error);
