@@ -900,9 +900,10 @@ class Demo(Scene):
           "        except Exception:\n            pass\n" +
           "    _checker = pyflakes.checker.Checker(_tree, '<editor>', builtins=_star_names)\n" +
           "    for _message in _checker.messages:\n" +
-          "        if isinstance(_message, pyflakes.messages.ImportStarUsed):\n" +
+          "        _text = _message.message % _message.message_args\n" +
+          "        if isinstance(_message, pyflakes.messages.ImportStarUsed) or 'import *' in _text.lower() and ('unable to detect undefined names' in _text.lower() or 'wildcard' in _text.lower() or 'star import' in _text.lower()):\n" +
           "            continue\n" +
-          "        _diagnostics.append({'line': _message.lineno, 'column': getattr(_message, 'col', 0) + 1, 'message': _message.message % _message.message_args, 'severity': 'warning'})\n" +
+          "        _diagnostics.append({'line': _message.lineno, 'column': getattr(_message, 'col', 0) + 1, 'message': _text, 'severity': 'warning'})\n" +
           "json.dumps(_diagnostics)"
         );
         if (requestId !== lintRequestId) return;
