@@ -1111,6 +1111,7 @@ class Scene(object):
         if sys.platform != "emscripten":
             raise RuntimeError("browser_interaction_loop() is only available in Pyodide")
         from manimlib.utils.browser_scheduler import next_animation_frame
+        from js import window
 
         previous_time = await next_animation_frame()
         # MotionBlur eases out over several rendered frames after input stops.
@@ -1130,7 +1131,6 @@ class Scene(object):
             # Keep the live canvas advancing while browser recording is active.
             # Otherwise a static scene draws only in response to input events,
             # so the recorder gets no frames throughout an idle interactive period.
-            from js import window
             recording_active = bool(
                 getattr(window, "__manimCaptureWebGPUFrame", None)
             )
