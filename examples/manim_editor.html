@@ -1195,7 +1195,9 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
             } else if (fromContext) {
               const moduleName = fromContext[1];
               let exports = pythonCompletionIndex.exports[moduleName];
-              if (!exports && pyodide) {
+              // An empty cached list can mean the module was indexed before it
+              // was importable. Retry introspection instead of treating [] as a hit.
+              if ((!Array.isArray(exports) || exports.length === 0) && pyodide) {
                 exports = await getPythonModuleMembers(moduleName);
               }
               candidates = (exports || []).map(label => ({
@@ -2109,20 +2111,18 @@ _editor_scene_token = ${token}`;
         });
         registerLightweightPythonCompletions();
 
-        // Monaco does not reliably invoke completion providers for a trailing
-        // space. Explicitly open suggestions after "from module import ",
-        // when the export list is needed but the user has typed no symbol yet.
-        editor.onDidChangeModelContent(() => {
+        // Explicitly request suggestions when the user types the space after
+        // "from package import". onDidType runs after Monaco updates the cursor.
+        editor.onDidType((typedText) => {
+          if (!typedText.includes(" ")) return;
           const position = editor.getPosition();
-          if (!position) return;
-          const linePrefix = editor.getModel()
-            .getLineContent(position.lineNumber)
+          const model = editor.getModel();
+          if (!position || !model) return;
+          const linePrefix = model.getLineContent(position.lineNumber)
             .slice(0, position.column - 1);
-          if (!/^\s*from\s+[\w.]+\s+import\s+$/.test(linePrefix)) return;
-          queueMicrotask(() => {
-            if (!editor || editor.getPosition()?.lineNumber !== position.lineNumber) return;
+          if (/^\s*from\s+[\w.]+\s+import\s+$/.test(linePrefix)) {
             editor.trigger("python-from-import-completions", "editor.action.triggerSuggest", {});
-          });
+          }
         });
 
         await initializeProjects();
