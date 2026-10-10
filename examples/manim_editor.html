@@ -2297,6 +2297,20 @@ _editor_scene_token = ${token}`;
           scrollBeyondLastLine: false,
           wordWrap: "off",
           bracketPairColorization: { enabled: true },
+          // Show lightweight completion suggestions while typing and let Tab
+          // accept the highlighted completion instead of only inserting spaces.
+          tabCompletion: "on",
+          suggestOnTriggerCharacters: true,
+          quickSuggestions: {
+            other: "on",
+            comments: "off",
+            strings: "on",
+          },
+          acceptSuggestionOnEnter: "on",
+          suggest: {
+            preview: true,
+            showWords: true,
+          },
         });
         registerLightweightPythonCompletions();
 
