@@ -1961,7 +1961,7 @@ _editor_scene_token = ${token}`;
         }
       } catch (error) {
         showError(error);
-        setStatus("Could not start recording: " + String(error?.message || error));
+        setStatus("Recording failed: " + String(error?.message || error));
       }
     }
 
