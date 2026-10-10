@@ -504,6 +504,7 @@
     let recordingVideoWriter = null;
     let recordingFrameWritePromise = Promise.resolve();
     let recordingFrameWritePending = false;
+    let recordingCaptureCallbackCalls = 0;
     let recordingFramesWritten = 0;
     let recordingStartedAt = 0;
     let recordingLastFrameTimestamp = -1;
@@ -1719,11 +1720,13 @@ _editor_scene_token = ${token}`;
         recordingVideoWriter = videoWriter;
         recordingFrameWritePromise = Promise.resolve();
         recordingFrameWritePending = false;
+        recordingCaptureCallbackCalls = 0;
         recordingFramesWritten = 0;
         recordingStartedAt = performance.now();
         recordingLastFrameTimestamp = -1;
         recordingStopping = false;
         window.__manimCaptureWebGPUFrame = () => {
+          recordingCaptureCallbackCalls += 1;
           const writer = recordingVideoWriter;
           const targetCanvas = window.__manimCanvasElement;
           if (recordingStopping || mediaRecorder?.state !== "recording"
@@ -1788,7 +1791,8 @@ _editor_scene_token = ${token}`;
         mediaRecorder.addEventListener("stop", () => {
           const type = mediaRecorder?.mimeType || "video/webm";
           const blob = new Blob(recordingChunks, { type });
-          console.info("[recording] WebGPU frames submitted to video track:", recordingFramesWritten);
+          console.info("[recording] WebGPU capture callbacks:", recordingCaptureCallbackCalls,
+            "| frames submitted to video track:", recordingFramesWritten);
           if (blob.size > 0) {
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -1801,7 +1805,8 @@ _editor_scene_token = ${token}`;
             setStatus("Recording complete: the video with audio has been downloaded.");
           } else {
             setStatus(recordingFramesWritten === 0
-              ? "Recording finished: no WebGPU frames reached the video track."
+              ? "Recording finished: no WebGPU frames reached the video track ("
+                + recordingCaptureCallbackCalls + " capture callbacks)."
               : "Recording finished, but MediaRecorder produced no data despite "
                 + recordingFramesWritten + " submitted WebGPU frames.");
           }
