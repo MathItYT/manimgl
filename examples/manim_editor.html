@@ -612,11 +612,126 @@ class Demo(Scene):
 `;
     const CODE_STORAGE_KEY = "manimgl-editor:last-code:v1";
     const ASSET_DB_NAME = "manimgl-editor-assets";
-    const ASSET_DB_VERSION = 2;
+    const ASSET_DB_VERSION = 3;
     const PYTHON_DEPENDENCIES_KEY = "manimgl-editor:python-dependencies:v1";
     const ASSET_STORE_NAME = "assets";
     const PROJECT_STORE_NAME = "projects";
     const ACTIVE_PROJECT_KEY = "manimgl-editor:active-project:v1";
+
+    const PYODIDE_CACHE_STORE = "pyodide-resources";
+    const nativeFetch = window.fetch.bind(window);
+    let pyodideResourceCacheDbPromise = null;
+
+    function openPyodideResourceCache() {
+      if (pyodideResourceCacheDbPromise) return pyodideResourceCacheDbPromise;
+      pyodideResourceCacheDbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open(ASSET_DB_NAME, ASSET_DB_VERSION);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(ASSET_STORE_NAME)) {
+            db.createObjectStore(ASSET_STORE_NAME, { keyPath: "name" });
+          }
+          if (!db.objectStoreNames.contains(PROJECT_STORE_NAME)) {
+            db.createObjectStore(PROJECT_STORE_NAME, { keyPath: "id" });
+          }
+          if (!db.objectStoreNames.contains(PYODIDE_CACHE_STORE)) {
+            db.createObjectStore(PYODIDE_CACHE_STORE, { keyPath: "url" });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error("Could not open Pyodide cache."));
+      }).catch(error => {
+        pyodideResourceCacheDbPromise = null;
+        throw error;
+      });
+      return pyodideResourceCacheDbPromise;
+    }
+
+    function shouldCachePyodideResource(url, options) {
+      if (options?.method && options.method.toUpperCase() !== "GET") return false;
+      if (options?.cache === "no-store" || options?.cache === "reload") return false;
+      try {
+        const parsed = new URL(url, document.baseURI);
+        if (parsed.origin === location.origin) {
+          return parsed.pathname.includes("/browser_wasm/dist/wheels/");
+        }
+        return parsed.hostname === "cdn.jsdelivr.net"
+          || parsed.hostname === "files.pythonhosted.org"
+          || parsed.hostname === "pypi.org";
+      } catch {
+        return false;
+      }
+    }
+
+    async function getCachedPyodideResource(url) {
+      const db = await openPyodideResourceCache();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(PYODIDE_CACHE_STORE, "readonly");
+        const request = tx.objectStore(PYODIDE_CACHE_STORE).get(url);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error("Could not read cached Pyodide resource."));
+        tx.oncomplete = () => db.close();
+        tx.onerror = () => {
+          db.close();
+          reject(tx.error || new Error("Could not read cached Pyodide resource."));
+        };
+      });
+    }
+
+    async function saveCachedPyodideResource(url, response) {
+      if (!response || !response.ok || response.type === "opaque") return;
+      const body = await response.clone().arrayBuffer();
+      const entry = {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Array.from(response.headers.entries()),
+        body,
+        updatedAt: Date.now(),
+      };
+      const db = await openPyodideResourceCache();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(PYODIDE_CACHE_STORE, "readwrite");
+        tx.objectStore(PYODIDE_CACHE_STORE).put(entry);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error("Could not cache Pyodide resource."));
+        tx.onabort = () => reject(tx.error || new Error("Could not cache Pyodide resource."));
+      }).finally(() => db.close());
+    }
+
+    async function cachedPyodideFetch(input, options) {
+      const requestUrl = typeof input === "string" || input instanceof URL
+        ? input.toString()
+        : input.url;
+      if (!shouldCachePyodideResource(requestUrl, options)) {
+        return nativeFetch(input, options);
+      }
+
+      try {
+        const cached = await getCachedPyodideResource(new URL(requestUrl, document.baseURI).href);
+        if (cached) {
+          return new Response(cached.body.slice(0), {
+            status: cached.status,
+            statusText: cached.statusText,
+            headers: cached.headers,
+          });
+        }
+      } catch (error) {
+        console.warn("[Pyodide cache] Cache read failed; fetching normally:", error);
+      }
+
+      const response = await nativeFetch(input, options);
+      if (response.ok) {
+        saveCachedPyodideResource(new URL(requestUrl, document.baseURI).href, response)
+          .catch(error => console.warn("[Pyodide cache] Could not persist resource:", error));
+      }
+      return response;
+    }
+
+    // Pyodide, its standard-library packages, and the pinned wheels are large
+    // immutable/versioned resources. Cache their successful GET responses in
+    // IndexedDB so the next visit can reuse the downloaded bytes.
+    window.fetch = cachedPyodideFetch;
 
     function getSavedSource() {
       try {
