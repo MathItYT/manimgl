@@ -100,10 +100,17 @@ class BrowserAudio:
             # Small timing differences are normal between requestAnimationFrame
             # and the media clock; only seek when the drift is clearly audible.
             if not bool(audio.paused):
+                # Never jump currentTime during active speech: a hard seek can
+                # cut a phoneme (for example, turning "estos" into "es... estos").
+                # Correct small clock drift gradually with a subtle rate change.
                 drift = float(audio.currentTime) - offset
-                if abs(drift) > 0.12:
-                    audio.currentTime = max(0.0, offset)
+                if abs(drift) > 0.04:
+                    rate = 1.0 - max(-0.03, min(0.03, drift * 0.12))
+                    audio.playbackRate = rate
+                else:
+                    audio.playbackRate = 1.0
                 continue
+            audio.playbackRate = 1.0
             self._play(audio, offset)
 
     def play(self, sound_file: str, offset: float = 0.0) -> None:
