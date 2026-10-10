@@ -972,13 +972,20 @@ class Scene(object):
                 self.window.poll_events()
                 if self.should_end_playing and register:
                     self.should_end_playing = False
+                    last_frame_time = await self._browser_frame()
                     while self.current_checkpoint is not None:
-                        await self.update_frame_async(
-                            dt=1 / self.camera.fps,
-                            force_draw=True,
-                        )
+                        frame_time = await self._browser_frame()
+                        dt = max(0.0, float(frame_time - last_frame_time))
+                        last_frame_time = frame_time
+                        if dt <= 0.0:
+                            continue
+                        if not browser_audio.can_advance_scene(
+                            self.time, self.time + dt, self._interactive_sound_events
+                        ):
+                            continue
+                        await self.update_frame_async(dt=dt, force_draw=True)
+                        browser_audio.sync(self.time, self._interactive_sound_events)
                         self.emit_frame()
-                        await self._browser_frame()
                     self.post_play()
                     return
 
@@ -1006,10 +1013,20 @@ class Scene(object):
         """Browser equivalent of hold_loop(), without blocking the event loop."""
         if sys.platform != "emscripten":
             return self.hold_loop()
+        last_frame_time = await self._browser_frame()
         while self.hold_on_wait:
             self.window.poll_events()
-            await self.update_frame_async(dt=1 / self.camera.fps)
-            await self._browser_frame()
+            frame_time = await self._browser_frame()
+            dt = max(0.0, float(frame_time - last_frame_time))
+            last_frame_time = frame_time
+            if dt <= 0.0:
+                continue
+            if not browser_audio.can_advance_scene(
+                self.time, self.time + dt, self._interactive_sound_events
+            ):
+                continue
+            await self.update_frame_async(dt=dt, force_draw=True)
+            browser_audio.sync(self.time, self._interactive_sound_events)
         self.hold_on_wait = True
 
     def wait(
