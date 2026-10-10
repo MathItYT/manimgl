@@ -3565,12 +3565,6 @@ class LiquidGlass(PostProcessEffect):
         return self.copy()
 
 
-def set_liquid_glass(self: Mobject, **kwargs: Any) -> Mobject:
-    """mob.set_liquid_glass(power=3, blur_radius=2, ...) -> mob"""
-    self.add_vfx(LiquidGlass(**kwargs))
-    return self
-
-
 DROP_SHADOW_PASS1_WGSL = """
 @group(0) @binding(0) var in_tex: texture_2d<f32>;
 @group(0) @binding(1) var in_smp: sampler;
