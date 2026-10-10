@@ -90,6 +90,11 @@ class BrowserAudio:
             duration = float(audio.duration)
             if duration == duration and offset >= duration:
                 continue
+            # HTMLAudioElement may become paused at its natural end a frame
+            # before the scene timeline reaches the matching offset. Do not
+            # restart it from that tiny remaining offset, or the tail repeats.
+            if bool(audio.ended):
+                continue
             # Do not restart an already-playing element on every animation frame.
             if not bool(audio.paused):
                 continue
