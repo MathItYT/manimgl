@@ -863,7 +863,7 @@ class Demo(Scene):
         codeToolsPromise = (async () => {
           setStatus("Loading Python linting and formatting tools…");
           await pyodide.runPythonAsync(
-            "import micropip\nawait micropip.install(['black', 'pyflakes'])"
+            "import micropip\nawait micropip.install(['black', 'pyflakes', 'jedi'])"
           );
           await pyodide.runPythonAsync(
             "import ast, black, json, pyflakes.checker, pyflakes.messages"
@@ -874,6 +874,128 @@ class Demo(Scene):
         });
       }
       return codeToolsPromise;
+    }
+
+    async function queryJedi(source, line, column, mode) {
+      await ensurePythonCodeTools();
+      const result = await pyodide.runPythonAsync(
+        "import json, jedi\\n" +
+        "_source = " + JSON.stringify(source) + "\\n" +
+        "_line = " + Number(line) + "\\n" +
+        "_column = " + Number(column) + "\\n" +
+        "_mode = " + JSON.stringify(mode) + "\\n" +
+        "_script = jedi.Script(code=_source, path='main.py')\\n" +
+        "_items = []\\n" +
+        "if _mode == 'completion':\\n" +
+        "    for _item in _script.complete(_line, _column):\\n" +
+        "        _items.append({'label': _item.name, 'insertText': _item.name, 'kind': _item.type, 'detail': _item.description, 'documentation': _item.docstring(raw=False)})\\n" +
+        "elif _mode == 'signature':\\n" +
+        "    for _signature in _script.get_signatures(_line, _column):\\n" +
+        "        _params = [{'label': _param.name, 'documentation': _param.description} for _param in _signature.params]\\n" +
+        "        _items.append({'label': _signature.to_string(), 'documentation': _signature.docstring(raw=False), 'parameters': _params, 'activeParameter': max(0, _signature.index or 0)})\\n" +
+        "elif _mode == 'hover':\\n" +
+        "    for _item in _script.infer(_line, _column):\\n" +
+        "        _doc = _item.docstring(raw=False)\\n" +
+        "        _items.append({'label': _item.description, 'documentation': _doc})\\n" +
+        "        if len(_items) >= 3: break\\n" +
+        "json.dumps(_items)"
+      );
+      return JSON.parse(String(result));
+    }
+
+    function registerPythonLanguageFeatures() {
+      if (window.__manimJediProvidersRegistered) return;
+      window.__manimJediProvidersRegistered = true;
+      monaco.languages.registerCompletionItemProvider("python", {
+        triggerCharacters: [".", "_"],
+        provideCompletionItems: async (model, position) => {
+          try {
+            const items = await queryJedi(
+              model.getValue(), position.lineNumber, position.column - 1, "completion"
+            );
+            const kindMap = {
+              function: monaco.languages.CompletionItemKind.Function,
+              class: monaco.languages.CompletionItemKind.Class,
+              module: monaco.languages.CompletionItemKind.Module,
+              instance: monaco.languages.CompletionItemKind.Variable,
+              statement: monaco.languages.CompletionItemKind.Keyword,
+              keyword: monaco.languages.CompletionItemKind.Keyword,
+              param: monaco.languages.CompletionItemKind.Variable,
+              property: monaco.languages.CompletionItemKind.Property,
+            };
+            return {
+              suggestions: items.map(item => ({
+                label: item.label,
+                insertText: item.insertText,
+                kind: kindMap[item.kind] || monaco.languages.CompletionItemKind.Text,
+                detail: item.detail || "",
+                documentation: item.documentation || "",
+                range: new monaco.Range(
+                  position.lineNumber,
+                  position.column - (model.getWordUntilPosition(position).word.length),
+                  position.lineNumber,
+                  position.column
+                ),
+                sortText: item.label,
+              })),
+            };
+          } catch (error) {
+            console.warn("[Jedi completion]", error);
+            return { suggestions: [] };
+          }
+        },
+      });
+      monaco.languages.registerSignatureHelpProvider("python", {
+        signatureHelpTriggerCharacters: ["(", ","],
+        signatureHelpRetriggerCharacters: [","],
+        provideSignatureHelp: async (model, position) => {
+          try {
+            const items = await queryJedi(
+              model.getValue(), position.lineNumber, position.column - 1, "signature"
+            );
+            return {
+              value: {
+                signatures: items.map(item => ({
+                  label: item.label,
+                  documentation: item.documentation || "",
+                  parameters: (item.parameters || []).map(parameter => ({
+                    label: parameter.label,
+                    documentation: parameter.documentation || "",
+                  })),
+                })),
+                activeSignature: 0,
+                activeParameter: items[0]?.activeParameter || 0,
+              },
+              dispose: () => {},
+            };
+          } catch (error) {
+            console.warn("[Jedi signature help]", error);
+            return { value: { signatures: [], activeSignature: 0, activeParameter: 0 }, dispose: () => {} };
+          }
+        },
+      });
+      monaco.languages.registerHoverProvider("python", {
+        provideHover: async (model, position) => {
+          try {
+            const items = await queryJedi(
+              model.getValue(), position.lineNumber, position.column - 1, "hover"
+            );
+            if (!items.length) return null;
+            return {
+              range: model.getWordAtPosition(position)
+                ? new monaco.Range(position.lineNumber, model.getWordAtPosition(position).startColumn, position.lineNumber, model.getWordAtPosition(position).endColumn)
+                : undefined,
+              contents: items.flatMap(item => [
+                { value: "`" + item.label + "`" },
+                ...(item.documentation ? [{ value: item.documentation }] : []),
+              ]),
+            };
+          } catch (error) {
+            console.warn("[Jedi hover]", error);
+            return null;
+          }
+        },
+      });
     }
 
     async function lintPythonCode() {
@@ -1881,6 +2003,7 @@ _editor_scene_token = ${token}`;
           wordWrap: "off",
           bracketPairColorization: { enabled: true },
         });
+        registerPythonLanguageFeatures();
 
         await initializeProjects();
 
