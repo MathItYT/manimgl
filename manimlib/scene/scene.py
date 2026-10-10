@@ -1100,8 +1100,8 @@ class Scene(object):
         if self.window is not None:
             event_time = self.get_time() + time_offset
             if sys.platform == "emscripten":
-                # Audio is only registered during the pre-render pass. Actual playback
-                # starts after seek(0) when the asynchronous browser loop begins.
+                # Register browser audio during scene construction. Playback starts
+                # as the scene clock advances through each event's scheduled time.
                 self._interactive_sound_events.append((event_time, sound_file, 0.0))
                 browser_audio.register(sound_file)
             else:
