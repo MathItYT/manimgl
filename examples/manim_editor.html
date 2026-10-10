@@ -29,9 +29,9 @@
     #loading-box { padding:18px 24px; border:1px solid #30394a; border-radius:9px; background:#151b27; font:13px monospace; }
     .label { color:#667287; font:11px monospace; margin:0 12px 5px; }
     #projects-panel {
-      position:absolute;
-      z-index:30;
-      top:8px;
+      position:fixed;
+      z-index:100;
+      top:56px;
       left:8px;
       bottom:8px;
       width:min(310px, calc(100% - 16px));
@@ -93,9 +93,9 @@
       font:12px/1.5 ui-monospace,monospace;
     }
     #assets-panel {
-      position:absolute;
-      z-index:30;
-      top:8px;
+      position:fixed;
+      z-index:100;
+      top:56px;
       left:8px;
       bottom:8px;
       width:270px;
@@ -183,9 +183,9 @@
     }
     #asset-input { display:none; }
     #dependencies-panel {
-      position:absolute;
-      z-index:30;
-      top:8px;
+      position:fixed;
+      z-index:100;
+      top:56px;
       left:8px;
       bottom:8px;
       width:min(390px, calc(100% - 16px));
@@ -212,9 +212,9 @@
     .dependency-state { color:var(--muted); }
     .dependency-item button { padding:4px 7px; font-size:10px; }
     #fonts-panel {
-      position:absolute;
-      z-index:30;
-      top:8px;
+      position:fixed;
+      z-index:100;
+      top:56px;
       right:8px;
       bottom:8px;
       width:min(390px, calc(100% - 16px));
@@ -339,10 +339,20 @@
       }
 
       #assets-panel {
-        top:6px;
+        top:56px;
         left:6px;
         bottom:6px;
         width:calc(100% - 12px);
+      }
+
+      #projects-panel,
+      #dependencies-panel,
+      #fonts-panel {
+        top:56px;
+        left:6px;
+        right:6px;
+        bottom:6px;
+        width:auto;
       }
     }
   </style>
@@ -365,57 +375,6 @@
 
     <section id="editor-wrap">
       <div id="editor"></div>
-      <div id="projects-panel" aria-label="Python Projects">
-        <div id="projects-header">
-          <div id="projects-title">Python Projects</div>
-          <button id="projects-close" title="Close">×</button>
-        </div>
-        <div id="projects-actions">
-          <button id="project-new" class="primary">＋ New</button>
-          <button id="project-rename">Rename</button>
-          <button id="project-delete">Delete</button>
-        </div>
-        <div id="projects-list"></div>
-      </div>
-      <div id="dependencies-panel" aria-label="Python Dependencies">
-        <div id="dependencies-header">
-          <div id="dependencies-title">Python Dependencies</div>
-          <button id="dependencies-close" title="Close">×</button>
-        </div>
-        <div id="dependencies-description">Install PyPI packages with micropip. Package names are saved in this browser and automatically reinstalled when the editor opens.</div>
-        <form id="dependencies-form">
-          <input id="dependency-name" type="text" autocomplete="off" spellcheck="false" placeholder="Package name (e.g. networkx)" aria-label="Python package name" required>
-          <button id="dependency-install" class="primary" type="submit">Install</button>
-        </form>
-        <label id="dependency-no-deps-option" title="Install only the requested package; its dependencies will not be installed automatically.">
-          <input id="dependency-no-deps" type="checkbox">
-          Install without dependencies
-        </label>
-        <div id="dependencies-status" role="status">Installed dependencies will appear here.</div>
-        <div id="dependencies-list"></div>
-      </div>
-      <div id="fonts-panel" aria-label="Font Catalog">
-        <div id="fonts-header">
-          <div id="fonts-title">Fonts</div>
-          <button id="fonts-close" title="Close">×</button>
-        </div>
-        <div id="fonts-summary">Loading font catalog…</div>
-        <input id="fonts-search" type="search" placeholder="Search fonts…" aria-label="Search fonts">
-        <div id="fonts-list"></div>
-        <div id="fonts-actions">
-          <button id="fonts-load-selected" class="primary">Load Selected</button>
-          <button id="fonts-load-all">Load Entire Catalog</button>
-        </div>
-      </div>
-      <div id="assets-panel">
-        <div id="assets-header">
-          <div id="assets-title">Assets</div>
-          <button id="asset-upload">＋ Import</button>
-          <button id="asset-refresh" title="Refresh">↻</button>
-          <button id="asset-close" title="Close">×</button>
-        </div>
-        <div id="assets-list"></div>
-      </div>
       <input id="asset-input" type="file" multiple
         accept="image/*,video/*,audio/*,.svg,.json,.txt,.csv,.ttf,.otf,.woff,.woff2">
     </section>
@@ -426,6 +385,57 @@
       <pre id="errors"></pre>
     </section>
   </div>
+    <div id="projects-panel" aria-label="Python Projects">
+      <div id="projects-header">
+        <div id="projects-title">Python Projects</div>
+        <button id="projects-close" title="Close">×</button>
+      </div>
+      <div id="projects-actions">
+        <button id="project-new" class="primary">＋ New</button>
+        <button id="project-rename">Rename</button>
+        <button id="project-delete">Delete</button>
+      </div>
+      <div id="projects-list"></div>
+    </div>
+    <div id="dependencies-panel" aria-label="Python Dependencies">
+      <div id="dependencies-header">
+        <div id="dependencies-title">Python Dependencies</div>
+        <button id="dependencies-close" title="Close">×</button>
+      </div>
+      <div id="dependencies-description">Install PyPI packages with micropip. Package names are saved in this browser and automatically reinstalled when the editor opens.</div>
+      <form id="dependencies-form">
+        <input id="dependency-name" type="text" autocomplete="off" spellcheck="false" placeholder="Package name (e.g. networkx)" aria-label="Python package name" required>
+        <button id="dependency-install" class="primary" type="submit">Install</button>
+      </form>
+      <label id="dependency-no-deps-option" title="Install only the requested package; its dependencies will not be installed automatically.">
+        <input id="dependency-no-deps" type="checkbox">
+        Install without dependencies
+      </label>
+      <div id="dependencies-status" role="status">Installed dependencies will appear here.</div>
+      <div id="dependencies-list"></div>
+    </div>
+    <div id="fonts-panel" aria-label="Font Catalog">
+      <div id="fonts-header">
+        <div id="fonts-title">Fonts</div>
+        <button id="fonts-close" title="Close">×</button>
+      </div>
+      <div id="fonts-summary">Loading font catalog…</div>
+      <input id="fonts-search" type="search" placeholder="Search fonts…" aria-label="Search fonts">
+      <div id="fonts-list"></div>
+      <div id="fonts-actions">
+        <button id="fonts-load-selected" class="primary">Load Selected</button>
+        <button id="fonts-load-all">Load Entire Catalog</button>
+      </div>
+    </div>
+    <div id="assets-panel">
+      <div id="assets-header">
+        <div id="assets-title">Assets</div>
+        <button id="asset-upload">＋ Import</button>
+        <button id="asset-refresh" title="Refresh">↻</button>
+        <button id="asset-close" title="Close">×</button>
+      </div>
+      <div id="assets-list"></div>
+    </div>
   <div id="loading"><div id="loading-box">Loading…</div></div>
 
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js"></script>
