@@ -1723,7 +1723,6 @@ _editor_scene_token = ${token}`;
         recordingStartedAt = performance.now();
         recordingLastFrameTimestamp = -1;
         recordingStopping = false;
-        window.__manimCaptureTrack = videoGenerator;
         window.__manimCaptureWebGPUFrame = () => {
           const writer = recordingVideoWriter;
           const targetCanvas = window.__manimCanvasElement;
@@ -1801,7 +1800,10 @@ _editor_scene_token = ${token}`;
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
             setStatus("Recording complete: the video with audio has been downloaded.");
           } else {
-            setStatus("Recording finished, but no video data was generated.");
+            setStatus(recordingFramesWritten === 0
+              ? "Recording finished: no WebGPU frames reached the video track."
+              : "Recording finished, but MediaRecorder produced no data despite "
+                + recordingFramesWritten + " submitted WebGPU frames.");
           }
           const videoWriterToClose = recordingVideoWriter;
           recordingVideoWriter = null;
@@ -1818,7 +1820,6 @@ _editor_scene_token = ${token}`;
             window.__manimDisconnectRecordingAudio(recordingAudioDestination);
           }
           if (window.__manimCaptureWebGPUFrame) window.__manimCaptureWebGPUFrame = null;
-          window.__manimCaptureTrack = null;
           recordingFrameWritePending = false;
           recordingStopping = false;
           recordingStream = null;
@@ -1833,10 +1834,8 @@ _editor_scene_token = ${token}`;
           recordStopButton.disabled = true;
           runRecordButton.disabled = !pyodide;
         });
-        // Start recording before the scene runner begins. Waiting for Window.show()
-        // to start MediaRecorder can deadlock the capture path on Pyodide: no recorder
-        // means requestFrame() is ignored, leaving the UI stuck waiting for its first frame.
-        // Frames are still requested manually by Window.show(), so idle frames are not emitted.
+        // Start MediaRecorder before scene rendering. Window.show() pushes actual
+        // WebGPU VideoFrames into the generated video track as frames are presented.
         mediaRecorder.start(1000);
         window.__manimStartRecorderOnFirstFrame = null;
         recordButton.disabled = true;
@@ -1857,7 +1856,6 @@ _editor_scene_token = ${token}`;
         }
         window.__manimStartRecorderOnFirstFrame = null;
         window.__manimCaptureWebGPUFrame = null;
-        window.__manimCaptureTrack = null;
         recordingFrameWritePending = false;
         recordingStopping = false;
         if (recordingMicSource && destination) {
