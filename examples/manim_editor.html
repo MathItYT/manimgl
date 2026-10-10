@@ -1028,6 +1028,9 @@ class Demo(Scene):
           await pyodide.runPythonAsync(
             "import ast, black, json, pyflakes.checker, pyflakes.messages"
           );
+          if (pyrightReady) {
+            await refreshPythonLanguageServerRuntimeSources();
+          }
         })().catch(error => {
           codeToolsPromise = null;
           throw error;
