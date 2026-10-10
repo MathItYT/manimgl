@@ -70,22 +70,29 @@ class BrowserAudio:
         return self._players[sound_file]
 
     @staticmethod
+    def _mark_play_rejected(audio, error) -> None:
+        """Remember when browser policy prevents an audio element from playing."""
+        setattr(audio, "manimPlayRejected", True)
+
+    @staticmethod
     def _play_at(audio, offset: float) -> None:
         """Start a newly activated scene sound at its one-time start offset."""
         audio.currentTime = max(0.0, float(offset))
         audio.playbackRate = 1.0
+        setattr(audio, "manimPlayRejected", False)
         promise = audio.play()
         if promise is not None:
-            promise.catch(lambda error: None)
+            promise.catch(lambda error: BrowserAudio._mark_play_rejected(audio, error))
 
     @staticmethod
     def _resume(audio) -> None:
         """Resume an audio element without changing its current media position."""
         if bool(audio.ended):
             return
+        setattr(audio, "manimPlayRejected", False)
         promise = audio.play()
         if promise is not None:
-            promise.catch(lambda error: None)
+            promise.catch(lambda error: BrowserAudio._mark_play_rejected(audio, error))
 
     @staticmethod
     def _sync_paused(audio) -> bool:
@@ -101,6 +108,7 @@ class BrowserAudio:
             audio.playbackRate = 1.0
             audio.currentTime = 0.0
             self._set_sync_paused(audio, False)
+            setattr(audio, "manimPlayRejected", False)
             setattr(audio, "manimEventKey", "")
 
     def _start_active(self, scene_time: float, events) -> None:
@@ -161,6 +169,12 @@ class BrowserAudio:
 
             audio = self._players.get(sound_file)
             if audio is None or bool(audio.ended):
+                continue
+
+            # A rejected play() promise (commonly browser autoplay policy) means
+            # this media clock cannot advance. Do not let an unavailable sound
+            # deadlock scene animations or keyboard-triggered interactions.
+            if bool(getattr(audio, "manimPlayRejected", False)):
                 continue
 
             # A single HTMLAudioElement is reused per file. Only compare it with
