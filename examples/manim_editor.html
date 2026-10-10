@@ -1137,6 +1137,57 @@ for _root in _roots:
                 _seen.add(_relative)
                 _files.append([_path, _relative])
 
+# Keep the Pyright mirror intentionally small. Copying every .py file from all
+# installed wheels duplicates a large part of site-packages in the worker's
+# Emscripten filesystem and can exhaust its ArrayBuffer/WASM memory.
+_PRIORITY_PACKAGES = [
+    "numpy", "scipy", "PIL", "sympy", "matplotlib", "wgpu",
+    "pygments", "yaml", "tqdm", "fontTools", "mpmath",
+    "contourpy", "kiwisolver", "dateutil", "cycler", "pyparsing",
+    "six", "packaging", "typing_extensions", "platformdirs",
+    "black", "pyflakes",
+]
+_PRIORITY = {name: index for index, name in enumerate(_PRIORITY_PACKAGES)}
+_MAX_FILES = 1000
+_MAX_TOTAL_BYTES = 6 * 1024 * 1024
+_MAX_PACKAGE_BYTES = 768 * 1024
+_MAX_STUB_BYTES = 64 * 1024
+_MAX_SOURCE_BYTES = 24 * 1024
+_candidates = []
+for _path, _relative in _files:
+    _base = os.path.basename(_path)
+    _is_stub = _base.endswith(".pyi")
+    _is_typed = _base == "py.typed"
+    _is_source = _base.endswith(".py")
+    if not (_is_stub or _is_typed or _is_source):
+        continue
+    try:
+        _size = os.path.getsize(_path)
+    except OSError:
+        continue
+    if _is_stub and _size > _MAX_STUB_BYTES:
+        continue
+    if _is_source and (_size > _MAX_SOURCE_BYTES or _relative.count("/") > 2):
+        continue
+    _top = _relative.split("/", 1)[0]
+    _package = _top[:-3] if _top.endswith(".py") else _top
+    _package_rank = _PRIORITY.get(_package, len(_PRIORITY))
+    _kind_rank = 0 if _is_stub else (1 if _is_typed else (2 if _base == "__init__.py" else 3))
+    _depth = _relative.count("/")
+    _candidates.append((_package_rank, _kind_rank, _depth, _relative, _path, _size, _package))
+_candidates.sort(key=lambda item: item[:4])
+_files = []
+_package_bytes = {}
+_total_bytes = 0
+for _, _, _, _relative, _path, _size, _package in _candidates:
+    if len(_files) >= _MAX_FILES or _total_bytes + _size > _MAX_TOTAL_BYTES:
+        continue
+    if _package_bytes.get(_package, 0) + _size > _MAX_PACKAGE_BYTES:
+        continue
+    _files.append([_path, _relative])
+    _package_bytes[_package] = _package_bytes.get(_package, 0) + _size
+    _total_bytes += _size
+
 json.dumps(_files)
 `);
       const fileIndex = JSON.parse(String(indexResult));
