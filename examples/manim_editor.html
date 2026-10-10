@@ -30,7 +30,7 @@
     .label { color:#667287; font:11px monospace; margin:0 12px 5px; }
     #projects-panel {
       position:absolute;
-      z-index:10;
+      z-index:30;
       top:8px;
       left:8px;
       bottom:8px;
@@ -60,7 +60,7 @@
       border-bottom:1px solid var(--line);
     }
     #projects-actions button { flex:1; min-width:75px; }
-    #projects-list { flex:1; min-height:0; overflow:auto; padding:7px; }
+    #projects-list { flex:1; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:7px; }
     .project-item {
       display:flex;
       align-items:center;
@@ -94,7 +94,7 @@
     }
     #assets-panel {
       position:absolute;
-      z-index:8;
+      z-index:30;
       top:8px;
       left:8px;
       bottom:8px;
@@ -119,7 +119,11 @@
     #assets-list {
       flex:1;
       min-height:0;
-      overflow:auto;
+      overflow-x:hidden;
+      overflow-y:auto;
+      overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;
+      touch-action:pan-y;
       padding:7px;
     }
     .asset-empty {
@@ -180,7 +184,7 @@
     #asset-input { display:none; }
     #dependencies-panel {
       position:absolute;
-      z-index:11;
+      z-index:30;
       top:8px;
       left:8px;
       bottom:8px;
@@ -202,14 +206,14 @@
     #dependency-no-deps-option { display:flex; align-items:center; gap:6px; padding:0 10px 10px; color:var(--muted); font-size:11px; cursor:pointer; }
     #dependency-no-deps { margin:0; accent-color:var(--accent); }
     #dependencies-status { padding:0 10px 8px; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
-    #dependencies-list { flex:1; min-height:0; overflow:auto; padding:7px; }
+    #dependencies-list { flex:1; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:7px; }
     .dependency-item { display:flex; align-items:center; gap:8px; padding:8px; border-bottom:1px solid var(--line); font:11px ui-monospace,monospace; }
     .dependency-name { flex:1; min-width:0; overflow-wrap:anywhere; }
     .dependency-state { color:var(--muted); }
     .dependency-item button { padding:4px 7px; font-size:10px; }
     #fonts-panel {
       position:absolute;
-      z-index:9;
+      z-index:30;
       top:8px;
       right:8px;
       bottom:8px;
@@ -233,7 +237,7 @@
     #fonts-title { flex:1; font-size:13px; font-weight:700; }
     #fonts-summary { padding:8px 10px 0; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
     #fonts-search { margin:8px; padding:8px; border:1px solid var(--line); border-radius:5px; background:#0b0e14; color:var(--text); }
-    #fonts-list { flex:1; min-height:0; overflow:auto; padding:4px 8px; }
+    #fonts-list { flex:1; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:4px 8px; }
     .catalog-font { display:flex; align-items:center; gap:8px; padding:7px 5px; border-radius:5px; font:11px ui-monospace,monospace; }
     .catalog-font:hover { background:#1b2230; }
     .catalog-font input { accent-color:var(--accent); }
@@ -1019,14 +1023,6 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
         throw new Error("Enter a valid PyPI package name.");
       }
       if (installingDependencyNames.has(name)) return;
-      if (persist) {
-        const saved = getSavedPythonDependencies();
-        if (!saved.includes(name)) {
-          saved.push(name);
-          localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(saved));
-        }
-        setPythonDependencyNoDeps(name, Boolean(noDeps));
-      }
       installingDependencyNames.add(name);
       renderPythonDependencies();
       dependenciesStatus.textContent = "Instalando " + name + (noDeps ? " sin dependencias…" : " con dependencias…");
@@ -1034,6 +1030,12 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
       try {
         await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ", deps=" + (noDeps ? "False" : "True") + ")");
         installedDependencyNames.add(name);
+        if (persist) {
+          const saved = getSavedPythonDependencies();
+          if (!saved.includes(name)) saved.push(name);
+          localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(saved));
+          setPythonDependencyNoDeps(name, Boolean(noDeps));
+        }
         await refreshPythonCompletionIndex();
         dependenciesStatus.textContent = name + " was installed successfully.";
       } catch (error) {
