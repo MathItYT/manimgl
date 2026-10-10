@@ -903,12 +903,15 @@ class Scene(object):
             if dt <= 0:
                 continue
 
-            # Do not gate interactive Scene.play() animations on the media clock.
-            # Keyboard-triggered animations (for example resetting the camera frame)
-            # must remain responsive even if a scene sound is paused, delayed, or
-            # rejected by the browser. The dedicated browser_playback_loop handles
-            # audio/timeline synchronization; an interactive animation must not wait
-            # indefinitely for an unrelated sound event.
+            # Keep interactive animation time aligned with active scene audio.
+            # can_advance_scene() ignores rejected play() promises, so blocked audio
+            # cannot deadlock keyboard-triggered animations. If media is behind,
+            # hold this frame until its clock catches up; if media is ahead, pause it.
+            if not browser_audio.can_advance_scene(
+                self.time, self.time + dt, self._interactive_sound_events
+            ):
+                continue
+
             elapsed += dt
             self.increment_time(dt)
             for animation in animations:
