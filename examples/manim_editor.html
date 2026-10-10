@@ -1164,13 +1164,18 @@ class Demo(Scene):
             const seen = new Set();
             const suggestions = [];
             for (const item of candidates) {
-              const label = typeof item.label === "string" ? item.label : item.label.label;
-              if (!label || seen.has(label) || !label.toLowerCase().startsWith(prefix)) continue;
+              const label = typeof item.label === "string" ? item.label : item.label?.label;
+              if (typeof label !== "string" || !label || seen.has(label) || !label.toLowerCase().startsWith(prefix)) continue;
               seen.add(label);
               suggestions.push({
                 ...item,
+                label,
+                // Monaco 0.55's suggest filtering can call replaceAll on filterText.
+                // Always provide normalized strings instead of relying on its fallback.
+                filterText: typeof item.filterText === "string" ? item.filterText : label,
+                insertText: typeof item.insertText === "string" ? item.insertText : label,
                 range,
-                sortText: label.toLowerCase().startsWith(prefix) ? "0" + label : "1" + label,
+                sortText: "0" + label,
               });
             }
             return { suggestions };
