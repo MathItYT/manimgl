@@ -79,6 +79,7 @@ class BrowserAudio:
     def _reset(self) -> None:
         for audio in self._players.values():
             audio.pause()
+            audio.playbackRate = 1.0
             audio.currentTime = 0.0
 
     def _start_active(self, scene_time: float, events) -> None:
@@ -95,8 +96,13 @@ class BrowserAudio:
             # restart it from that tiny remaining offset, or the tail repeats.
             if bool(audio.ended):
                 continue
-            # Do not restart an already-playing element on every animation frame.
+            # Keep the browser's audio clock aligned with the scene clock.
+            # Small timing differences are normal between requestAnimationFrame
+            # and the media clock; only seek when the drift is clearly audible.
             if not bool(audio.paused):
+                drift = float(audio.currentTime) - offset
+                if abs(drift) > 0.12:
+                    audio.currentTime = max(0.0, offset)
                 continue
             self._play(audio, offset)
 
@@ -115,12 +121,12 @@ class BrowserAudio:
         """Advance audio with the timeline without restarting active sounds."""
         scene_time = float(scene_time)
 
-        # A discontinuity means the editor jumped/scrubbed rather than advancing
-        # normally. In that case a hard seek is required.
+        # A backwards jump means the timeline was explicitly reset or scrubbed.
+        # A long forward gap can simply be a throttled animation frame; resetting
+        # audio there would interrupt it and create a new synchronization error.
         if (
             self._last_scene_time is None
             or scene_time < self._last_scene_time
-            or scene_time - self._last_scene_time > 0.25
         ):
             self.seek(scene_time, events)
             return
