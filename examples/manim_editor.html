@@ -647,17 +647,20 @@ class Demo(Scene):
       return pyodideResourceCacheDbPromise;
     }
 
-    function shouldCachePyodideResource(url, options) {
-      if (options?.method && options.method.toUpperCase() !== "GET") return false;
-      if (options?.cache === "no-store" || options?.cache === "reload") return false;
+    function shouldCachePyodideResource(url, input, options) {
+      const method = options?.method || input?.method || "GET";
+      const cacheMode = options?.cache || input?.cache || "default";
+      if (method.toUpperCase() !== "GET") return false;
+      if (cacheMode === "no-store" || cacheMode === "reload") return false;
       try {
         const parsed = new URL(url, document.baseURI);
         if (parsed.origin === location.origin) {
           return parsed.pathname.includes("/browser_wasm/dist/wheels/");
         }
+        // Cache immutable runtime files and wheel payloads, not PyPI's mutable
+        // package metadata/API responses.
         return parsed.hostname === "cdn.jsdelivr.net"
-          || parsed.hostname === "files.pythonhosted.org"
-          || parsed.hostname === "pypi.org";
+          || parsed.hostname === "files.pythonhosted.org";
       } catch {
         return false;
       }
@@ -703,7 +706,7 @@ class Demo(Scene):
       const requestUrl = typeof input === "string" || input instanceof URL
         ? input.toString()
         : input.url;
-      if (!shouldCachePyodideResource(requestUrl, options)) {
+      if (!shouldCachePyodideResource(requestUrl, input, options)) {
         return nativeFetch(input, options);
       }
 
