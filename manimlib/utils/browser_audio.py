@@ -148,7 +148,9 @@ class BrowserAudio:
         """
         scene_time = float(scene_time)
         proposed_time = float(proposed_time)
-        self._start_active(proposed_time, events)
+        # Only start events that have actually reached the committed scene time.
+        # A proposed frame may be rejected if an earlier audio event is behind.
+        self._start_active(scene_time, events)
         scene_is_waiting = False
         tolerance = self.SYNC_TOLERANCE
 
