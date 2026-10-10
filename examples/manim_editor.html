@@ -889,17 +889,23 @@ class Demo(Scene):
           "from pyflakes.reporter import Reporter\n" +
           "_source = " + JSON.stringify(source) + "\n" +
           "_diagnostics = []\n" +
-          "try:\n    ast.parse(_source)\n" +
+          "try:\n    _tree = ast.parse(_source)\n" +
           "except SyntaxError as _error:\n" +
           "    _diagnostics.append({'line': _error.lineno or 1, 'column': _error.offset or 1, 'message': _error.msg, 'severity': 'error'})\n" +
           "else:\n" +
+          "    _has_star_import = any(isinstance(_node, ast.ImportFrom) and any(_alias.name == '*' for _alias in _node.names) for _node in ast.walk(_tree))\n" +
           "    _lint_out = io.StringIO()\n    _lint_err = io.StringIO()\n" +
           "    _reporter = Reporter(_lint_out, _lint_err)\n" +
           "    pyflakes.api.check(_source, '<editor>', _reporter)\n" +
           "    for _line in _lint_out.getvalue().splitlines():\n" +
           "        _parts = _line.split(':', 3)\n" +
           "        if len(_parts) == 4 and _parts[0] == '<editor>':\n" +
-          "            try:\n                _diagnostics.append({'line': int(_parts[1]), 'column': int(_parts[2]), 'message': _parts[3].strip(), 'severity': 'warning'})\n" +
+          "            _message = _parts[3].strip()\n" +
+          "            if _has_star_import and (\n" +
+          "                'may be undefined, or defined from star imports:' in _message or\n" +
+          "                \"'*' used; unable to detect undefined names\" in _message\n" +
+          "            ):\n                continue\n" +
+          "            try:\n                _diagnostics.append({'line': int(_parts[1]), 'column': int(_parts[2]), 'message': _message, 'severity': 'warning'})\n" +
           "            except ValueError:\n                pass\n" +
           "json.dumps(_diagnostics)"
         );
