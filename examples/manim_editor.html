@@ -1742,6 +1742,7 @@ _editor_scene_token = ${token}`;
         });
         output.addVideoTrack(videoSource, { frameRate: requestedFps });
 
+        recordingError = null;
         const audioTrack = destination.stream.getAudioTracks()[0];
         let audioCodec = null;
         if (audioTrack) {
@@ -1776,7 +1777,6 @@ _editor_scene_token = ${token}`;
         recordingStartedAt = performance.now();
         recordingLastTimestamp = -1;
         recordingFrameRate = requestedFps;
-        recordingError = null;
         recordingStopping = false;
         recordingActive = true;
 
@@ -1941,6 +1941,9 @@ _editor_scene_token = ${token}`;
         recordButton.textContent = "● Record";
         recordStopButton.disabled = true;
         runRecordButton.disabled = !pyodide;
+      }
+      if (finalizationError && output) {
+        try { await output.cancel(); } catch (_) {}
       }
       if (finalizationError) throw finalizationError;
     }
