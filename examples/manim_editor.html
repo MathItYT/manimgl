@@ -612,13 +612,14 @@ class Demo(Scene):
 `;
     const CODE_STORAGE_KEY = "manimgl-editor:last-code:v1";
     const ASSET_DB_NAME = "manimgl-editor-assets";
-    const ASSET_DB_VERSION = 3;
+    const ASSET_DB_VERSION = 4;
     const PYTHON_DEPENDENCIES_KEY = "manimgl-editor:python-dependencies:v1";
     const ASSET_STORE_NAME = "assets";
     const PROJECT_STORE_NAME = "projects";
     const ACTIVE_PROJECT_KEY = "manimgl-editor:active-project:v1";
 
     const PYODIDE_CACHE_STORE = "pyodide-resources";
+    const PYODIDE_ENV_STORE = "pyodide-environments";
     const nativeFetch = window.fetch.bind(window);
     let pyodideResourceCacheDbPromise = null;
 
@@ -637,8 +638,15 @@ class Demo(Scene):
           if (!db.objectStoreNames.contains(PYODIDE_CACHE_STORE)) {
             db.createObjectStore(PYODIDE_CACHE_STORE, { keyPath: "url" });
           }
+          if (!db.objectStoreNames.contains(PYODIDE_ENV_STORE)) {
+            db.createObjectStore(PYODIDE_ENV_STORE, { keyPath: "id" });
+          }
         };
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => {
+          const db = request.result;
+          db.onversionchange = () => { db.close(); pyodideResourceCacheDbPromise = null; };
+          resolve(db);
+        };
         request.onerror = () => reject(request.error || new Error("Could not open Pyodide cache."));
       }).catch(error => {
         pyodideResourceCacheDbPromise = null;
@@ -673,11 +681,8 @@ class Demo(Scene):
         const request = tx.objectStore(PYODIDE_CACHE_STORE).get(url);
         request.onsuccess = () => resolve(request.result || null);
         request.onerror = () => reject(request.error || new Error("Could not read cached Pyodide resource."));
-        tx.oncomplete = () => db.close();
-        tx.onerror = () => {
-          db.close();
-          reject(tx.error || new Error("Could not read cached Pyodide resource."));
-        };
+        tx.oncomplete = () => {};
+        tx.onerror = () => reject(tx.error || new Error("Could not read cached Pyodide resource."));
       });
     }
 
@@ -699,7 +704,7 @@ class Demo(Scene):
         tx.oncomplete = resolve;
         tx.onerror = () => reject(tx.error || new Error("Could not cache Pyodide resource."));
         tx.onabort = () => reject(tx.error || new Error("Could not cache Pyodide resource."));
-      }).finally(() => db.close());
+      });
     }
 
     async function cachedPyodideFetch(input, options) {
@@ -769,6 +774,8 @@ class Demo(Scene):
           if (!db.objectStoreNames.contains(PROJECT_STORE_NAME)) {
             db.createObjectStore(PROJECT_STORE_NAME, { keyPath: "id" });
           }
+          if (!db.objectStoreNames.contains(PYODIDE_CACHE_STORE)) db.createObjectStore(PYODIDE_CACHE_STORE, { keyPath: "url" });
+          if (!db.objectStoreNames.contains(PYODIDE_ENV_STORE)) db.createObjectStore(PYODIDE_ENV_STORE, { keyPath: "id" });
         };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error || new Error("Could not open IndexedDB."));
