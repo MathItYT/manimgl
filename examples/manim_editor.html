@@ -863,7 +863,7 @@ class Demo(Scene):
         codeToolsPromise = (async () => {
           setStatus("Loading Python linting and formatting tools…");
           await pyodide.runPythonAsync(
-            "import micropip\nawait micropip.install(['black', 'pyflakes', 'jedi'])"
+            "import micropip\nawait micropip.install(['black', 'pyflakes'])"
           );
           await pyodide.runPythonAsync(
             "import ast, black, json, pyflakes.checker, pyflakes.messages"
@@ -912,7 +912,8 @@ class Demo(Scene):
           },
           diagnosticsInterval: 500,
           typeStubs: {
-            "manimlib/__init__.pyi": `
+            "manimlib": {
+              "__init__.pyi": `
 from typing import Any, Callable, Iterable, Optional, Sequence
 class Mobject:
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
@@ -958,6 +959,8 @@ class Transform(Animation):
 def linear(t: float) -> float: ...
 def smooth(t: float) -> float: ...
 `,
+            },
+          },
         });
         await pyrightProvider.init(monaco);
         await pyrightProvider.setupDiagnostics(editor);
