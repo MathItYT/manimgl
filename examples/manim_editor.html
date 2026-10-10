@@ -1177,7 +1177,10 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
             const source = model.getValue();
             const memberMatch = linePrefix.match(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\.\s*([A-Za-z_]\w*)?$/);
             const importContext = linePrefix.match(/^\s*import\s+([\w.]*)$/);
-            const fromContext = linePrefix.match(/^\s*from\s+([\w.]*)\s+import(?:\s+([\w.]*))?$/);
+            // Handle the entire "from" statement as it is being typed, not
+            // only after the word "import" has been completed.
+            const fromModuleContext = linePrefix.match(/^\s*from\s+([\w.]*)$/);
+            const fromContext = linePrefix.match(/^\s*from\s+([\w.]+)\s+import(?:\s+([\w.]*))?$/);
             const CompletionItemKind = monaco.languages.CompletionItemKind;
             let candidates = [];
             const liveAliases = {};
@@ -1188,10 +1191,13 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
               liveAliases[match[3] || match[2]] = match[1] + "." + match[2];
             }
 
-            if (importContext) {
-              candidates = pythonCompletionIndex.modules.map(label => ({
-                label, kind: CompletionItemKind.Module, detail: "Installed Python module",
-              }));
+            if (importContext || fromModuleContext) {
+              const modulePrefix = (importContext ? importContext[1] : fromModuleContext[1]) || "";
+              candidates = pythonCompletionIndex.modules
+                .filter(label => typeof label === "string" && label !== "*" && label.startsWith(modulePrefix))
+                .map(label => ({
+                  label, kind: CompletionItemKind.Module, detail: "Installed Python module",
+                }));
             } else if (fromContext) {
               const moduleName = fromContext[1];
               let exports = pythonCompletionIndex.exports[moduleName];
