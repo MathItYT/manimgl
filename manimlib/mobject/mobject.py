@@ -2092,6 +2092,180 @@ class Mobject(object):
     def remove_key_release_listner(self, callback):
         self.remove_event_listner(EventType.KeyReleaseEvent, callback)
 
+
+    # Visual effects (implementations live in utils.vfx_presets; imports are lazy
+    # to avoid a circular dependency between Mobject and the effect classes).
+    hidden = False
+
+    def set_hidden(self, hidden: bool = True, recurse: bool = True) -> Self:
+        for mob in self.get_family(recurse=recurse):
+            mob.hidden = bool(hidden)
+        return self
+
+    def is_hidden(self) -> bool:
+        return getattr(self, "hidden", False)
+
+    def add_vfx(self, effect: Any, recurse: bool = False) -> Self:
+        from manimlib.utils.vfx_presets import CustomVFX
+        if isinstance(effect, str):
+            effect = CustomVFX(fragment_code=effect)
+        if not hasattr(self, "_vfx_effects"):
+            self._vfx_effects = []
+        eff = effect.copy()
+        eff._source_effect = effect
+        effect._target_effect = eff
+        eff.attach(self)
+        if not getattr(eff, "allow_multiple", False):
+            existing = [e for e in self._vfx_effects if e.name == eff.name]
+            if existing:
+                self._vfx_effects.remove(existing[0])
+        self._vfx_effects.append(eff)
+        is_group = getattr(eff, "is_group_effect", False) or eff.name in (
+            "Glow", "Mask", "LiquidGlass", "DropShadow", "GaussianBlur", "Vignette"
+        )
+        for mob in self.get_family():
+            if is_group:
+                mob._vfx_group = self
+            else:
+                mob._vfx_local = self
+                if not hasattr(mob, "_vfx_group"):
+                    mob._vfx_group = self
+        return self
+
+    def remove_vfx(self, effect_type_or_name: Any, recurse: bool = False) -> Self:
+        if hasattr(self, "_vfx_effects"):
+            if isinstance(effect_type_or_name, str):
+                self._vfx_effects = [e for e in self._vfx_effects if e.name != effect_type_or_name]
+            elif isinstance(effect_type_or_name, type):
+                self._vfx_effects = [e for e in self._vfx_effects if not isinstance(e, effect_type_or_name)]
+            else:
+                target_name = getattr(effect_type_or_name, "name", None)
+                self._vfx_effects = [
+                    e for e in self._vfx_effects
+                    if e is not effect_type_or_name
+                    and getattr(e, "_source_effect", None) is not effect_type_or_name
+                    and (target_name is None or e.name != target_name)
+                ]
+            if not any(
+                getattr(e, "is_group_effect", False)
+                or e.name in ("Glow", "Mask", "LiquidGlass", "DropShadow")
+                for e in self._vfx_effects
+            ):
+                for mob in self.get_family():
+                    if getattr(mob, "_vfx_group", None) is self:
+                        delattr(mob, "_vfx_group")
+                    if getattr(mob, "_vfx_local", None) is self:
+                        delattr(mob, "_vfx_local")
+        return self
+
+    def clear_vfx(self, recurse: bool = False) -> Self:
+        for mob in self.get_family():
+            if hasattr(mob, "_vfx_effects"):
+                mob._vfx_effects.clear()
+            if hasattr(mob, "_vfx_group"):
+                delattr(mob, "_vfx_group")
+            if hasattr(mob, "_vfx_local"):
+                delattr(mob, "_vfx_local")
+        return self
+
+    def has_vfx(self) -> bool:
+        return bool(getattr(self, "_vfx_effects", None))
+
+    def get_vfx_list(self) -> list[Any]:
+        return getattr(self, "_vfx_effects", [])
+
+    def set_mask(
+        self,
+        mask: Mobject | Sequence[Mobject],
+        invert: bool = False,
+        use_luminance: bool = False,
+        mode: str = "intersect",
+    ) -> Self:
+        self.remove_mask()
+        self.add_mask(mask, invert=invert, use_luminance=use_luminance, mode=mode)
+        return self
+
+    def add_mask(
+        self,
+        mask: Mobject | Sequence[Mobject],
+        invert: bool = False,
+        use_luminance: bool = False,
+        mode: str = "intersect",
+    ) -> Self:
+        from manimlib.utils.vfx_presets import Mask
+        if isinstance(mask, (list, tuple)):
+            mask = Group(*mask)
+        mask.set_hidden(True)
+        self.add_vfx(Mask(mask, invert=invert, use_luminance=use_luminance, mode=mode))
+        return self
+
+    def remove_mask(self, mask: Mobject | None = None) -> Self:
+        if hasattr(self, "_vfx_effects"):
+            masks_to_remove = [
+                eff for eff in self._vfx_effects
+                if eff.name == "Mask" and (mask is None or getattr(eff, "mask", None) is mask)
+            ]
+            for eff in masks_to_remove:
+                if hasattr(eff, "mask"):
+                    eff.mask.set_hidden(False)
+                self._vfx_effects.remove(eff)
+            has_other_group_effects = any(
+                getattr(e, "name", "") in ("Glow", "Mask", "LiquidGlass")
+                for e in self._vfx_effects
+            )
+            if not has_other_group_effects:
+                for mob in self.get_family():
+                    if getattr(mob, "_vfx_group", None) is self:
+                        delattr(mob, "_vfx_group")
+        return self
+
+    def set_gaussian_blur(self, radius: float = 12.0, downscale: float = 1.0) -> Self:
+        from manimlib.utils.vfx_presets import GaussianBlur
+        self.add_vfx(GaussianBlur(radius=radius, downscale=downscale))
+        return self
+
+    def set_grain(self, intensity: float = 0.08, speed: float = 24.0, colored: bool = False) -> Self:
+        from manimlib.utils.vfx_presets import Grain
+        self.add_vfx(Grain(intensity=intensity, speed=speed, colored=colored))
+        return self
+
+    def set_vignette(
+        self,
+        radius: float = 0.5,
+        softness: float = 0.45,
+        intensity: float = 0.7,
+        center: Sequence[float] = (0.5, 0.5),
+        color: Sequence[float] | str | None = None,
+        keep_circular: bool = True,
+    ) -> Self:
+        from manimlib.utils.vfx_presets import Vignette
+        self.add_vfx(Vignette(
+            radius=radius, softness=softness, intensity=intensity, center=center,
+            color=color, keep_circular=keep_circular,
+        ))
+        return self
+
+    def set_drop_shadow(
+        self,
+        offset: Sequence[float] = (6.0, -6.0),
+        radius: float = 12.0,
+        opacity: float = 0.75,
+        color: Sequence[float] | str | None = None,
+        shadow_only: bool = False,
+    ) -> Self:
+        from manimlib.utils.vfx_presets import DropShadow
+        self.add_vfx(DropShadow(
+            offset=offset, radius=radius, opacity=opacity, color=color,
+            shadow_only=shadow_only,
+        ))
+        return self
+
+    def set_liquid_glass(self, **kwargs: Any) -> Self:
+        from manimlib.utils.vfx_presets import LiquidGlass
+        self.add_vfx(LiquidGlass(**kwargs))
+        return self
+
+
     # Errors
 
     def throw_error_if_no_points(self):
