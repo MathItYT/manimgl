@@ -60,7 +60,7 @@
       border-bottom:1px solid var(--line);
     }
     #projects-actions button { flex:1; min-width:75px; }
-    #projects-list { flex:1 1 0; height:0; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:7px; }
+    #projects-list { flex:1 1 auto; height:auto; min-height:0; max-height:none; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:7px; }
     .project-item {
       display:flex;
       align-items:center;
@@ -117,10 +117,10 @@
     }
     #assets-title { flex:1; font-size:12px; font-weight:700; }
     #assets-list {
-      flex:1 1 0;
-      height:0;
+      flex:1 1 auto;
+      height:auto;
       min-height:0;
-      max-height:100%;
+      max-height:none;
       overflow-x:hidden;
       overflow-y:auto;
       overscroll-behavior:contain;
@@ -208,7 +208,7 @@
     #dependency-no-deps-option { display:flex; align-items:center; gap:6px; padding:0 10px 10px; color:var(--muted); font-size:11px; cursor:pointer; }
     #dependency-no-deps { margin:0; accent-color:var(--accent); }
     #dependencies-status { padding:0 10px 8px; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
-    #dependencies-list { flex:1 1 0; height:0; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:7px; }
+    #dependencies-list { flex:1 1 auto; height:auto; min-height:0; max-height:none; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:7px; }
     .dependency-item { display:flex; align-items:center; gap:8px; padding:8px; border-bottom:1px solid var(--line); font:11px ui-monospace,monospace; }
     .dependency-name { flex:1; min-width:0; overflow-wrap:anywhere; }
     .dependency-state { color:var(--muted); }
@@ -239,7 +239,7 @@
     #fonts-title { flex:1; font-size:13px; font-weight:700; }
     #fonts-summary { padding:8px 10px 0; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
     #fonts-search { margin:8px; padding:8px; border:1px solid var(--line); border-radius:5px; background:#0b0e14; color:var(--text); }
-    #fonts-list { flex:1 1 0; height:0; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:4px 8px; }
+    #fonts-list { flex:1 1 auto; height:auto; min-height:0; max-height:none; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; padding:4px 8px; }
     .catalog-font { display:flex; align-items:center; gap:8px; padding:7px 5px; border-radius:5px; font:11px ui-monospace,monospace; }
     .catalog-font:hover { background:#1b2230; }
     .catalog-font input { accent-color:var(--accent); }
@@ -1078,34 +1078,8 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
     const assetFontMetadata = new Map();
     const assetsDropZone = assetsPanel;
 
-    // Route wheel input directly to the menu list under the pointer. This avoids
-    // Monaco/canvas overlays swallowing wheel events even when a menu is visible.
-    document.addEventListener("wheel", event => {
-      const candidates = [
-        ["projects-panel", "projects-list"],
-        ["assets-panel", "assets-list"],
-        ["dependencies-panel", "dependencies-list"],
-        ["fonts-panel", "fonts-list"],
-      ];
-      for (const [panelId, listId] of candidates) {
-        const panel = document.getElementById(panelId);
-        const list = document.getElementById(listId);
-        if (!panel || !list || !panel.classList.contains("open")) continue;
-        const rect = list.getBoundingClientRect();
-        if (event.clientX < rect.left || event.clientX >= rect.right ||
-            event.clientY < rect.top || event.clientY >= rect.bottom) continue;
-        const maxScroll = list.scrollHeight - list.clientHeight;
-        if (maxScroll <= 0 || event.deltaY === 0) return;
-        const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 :
-          event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? list.clientHeight : 1;
-        const next = Math.max(0, Math.min(maxScroll, list.scrollTop + event.deltaY * scale));
-        if (next !== list.scrollTop) {
-          list.scrollTop = next;
-          event.preventDefault();
-        }
-        return;
-      }
-    }, { capture: true, passive: false });
+    // Let the browser's native overflow scrolling handle menu lists. A global
+    // wheel listener can intercept input before the correct list receives it.
 
     function setStatus(value) { status.textContent = String(value); }
 
