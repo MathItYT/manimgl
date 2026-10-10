@@ -180,6 +180,33 @@
       font-size:10px;
     }
     #asset-input { display:none; }
+    #dependencies-panel {
+      position:absolute;
+      z-index:11;
+      top:8px;
+      left:8px;
+      bottom:8px;
+      width:min(390px, calc(100% - 16px));
+      display:none;
+      flex-direction:column;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:rgba(17,22,32,.99);
+      box-shadow:0 12px 32px rgba(0,0,0,.4);
+      overflow:hidden;
+    }
+    #dependencies-panel.open { display:flex; }
+    #dependencies-header { display:flex; align-items:center; gap:8px; padding:9px; border-bottom:1px solid var(--line); }
+    #dependencies-title { flex:1; font-size:13px; font-weight:700; }
+    #dependencies-description { padding:10px; color:var(--muted); font-size:11px; line-height:1.5; }
+    #dependencies-form { display:flex; gap:6px; padding:8px; }
+    #dependency-name { flex:1; min-width:0; padding:8px; border:1px solid var(--line); border-radius:5px; background:#0b0e14; color:var(--text); }
+    #dependencies-status { padding:0 10px 8px; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
+    #dependencies-list { flex:1; min-height:0; overflow:auto; padding:7px; }
+    .dependency-item { display:flex; align-items:center; gap:8px; padding:8px; border-bottom:1px solid var(--line); font:11px ui-monospace,monospace; }
+    .dependency-name { flex:1; min-width:0; overflow-wrap:anywhere; }
+    .dependency-state { color:var(--muted); }
+    .dependency-item button { padding:4px 7px; font-size:10px; }
     #fonts-panel {
       position:absolute;
       z-index:9;
@@ -343,6 +370,7 @@
     <button id="projects-toggle">Proyectos</button>
     <button id="assets-toggle">Assets</button>
     <button id="fonts-toggle">Fuentes</button>
+    <button id="dependencies-toggle">Dependencias</button>
     <div id="status">Inicializando Pyodide…</div>
   </div>
   <div id="main">
@@ -360,6 +388,19 @@
           <button id="project-delete">Eliminar</button>
         </div>
         <div id="projects-list"></div>
+      </div>
+      <div id="dependencies-panel" aria-label="Dependencias Python">
+        <div id="dependencies-header">
+          <div id="dependencies-title">Dependencias Python</div>
+          <button id="dependencies-close" title="Cerrar">×</button>
+        </div>
+        <div id="dependencies-description">Instala paquetes de PyPI con micropip. Los nombres se guardan en este navegador y se reinstalan automáticamente al abrir el editor.</div>
+        <form id="dependencies-form">
+          <input id="dependency-name" type="text" autocomplete="off" spellcheck="false" placeholder="Nombre del paquete (p. ej. networkx)" aria-label="Nombre del paquete Python" required>
+          <button id="dependency-install" class="primary" type="submit">Instalar</button>
+        </form>
+        <div id="dependencies-status" role="status">Las dependencias instaladas aparecerán aquí.</div>
+        <div id="dependencies-list"></div>
       </div>
       <div id="fonts-panel" aria-label="Catálogo de fuentes">
         <div id="fonts-header">
@@ -569,6 +610,7 @@ class Demo(Scene):
     const CODE_STORAGE_KEY = "manimgl-editor:last-code:v1";
     const ASSET_DB_NAME = "manimgl-editor-assets";
     const ASSET_DB_VERSION = 2;
+    const PYTHON_DEPENDENCIES_KEY = "manimgl-editor:python-dependencies:v1";
     const ASSET_STORE_NAME = "assets";
     const PROJECT_STORE_NAME = "projects";
     const ACTIVE_PROJECT_KEY = "manimgl-editor:active-project:v1";
@@ -692,6 +734,96 @@ class Demo(Scene):
     let projectSaveSequence = 0;
     let pyodide = null;
     let running = false;
+    const dependenciesPanel = document.getElementById("dependencies-panel");
+    const dependenciesList = document.getElementById("dependencies-list");
+    const dependenciesStatus = document.getElementById("dependencies-status");
+    const dependencyNameInput = document.getElementById("dependency-name");
+    const dependencyInstallButton = document.getElementById("dependency-install");
+    const installedDependencyNames = new Set();
+    const installingDependencyNames = new Set();
+
+    function getSavedPythonDependencies() {
+      try {
+        const value = JSON.parse(localStorage.getItem(PYTHON_DEPENDENCIES_KEY) || "[]");
+        return Array.isArray(value)
+          ? [...new Set(value.filter(item => typeof item === "string" && item.trim()).map(item => item.trim()))]
+          : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function savePythonDependencies() {
+      localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(getSavedPythonDependencies()));
+    }
+
+    function renderPythonDependencies() {
+      if (!dependenciesList) return;
+      const names = getSavedPythonDependencies();
+      dependenciesList.replaceChildren();
+      if (!names.length) {
+        const empty = document.createElement("div");
+        empty.className = "asset-empty";
+        empty.textContent = "Todavía no has agregado dependencias.";
+        dependenciesList.appendChild(empty);
+      }
+      for (const name of names) {
+        const row = document.createElement("div");
+        row.className = "dependency-item";
+        const label = document.createElement("span");
+        label.className = "dependency-name";
+        label.textContent = name;
+        const state = document.createElement("span");
+        state.className = "dependency-state";
+        state.textContent = installingDependencyNames.has(name)
+          ? "Instalando…"
+          : installedDependencyNames.has(name) ? "Instalada" : pyodide ? "Pendiente" : "Guardada";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "Quitar";
+        remove.title = "Quitar de la lista persistente; no desinstala el paquete de esta sesión";
+        remove.addEventListener("click", () => {
+          const remaining = getSavedPythonDependencies().filter(item => item !== name);
+          localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(remaining));
+          renderPythonDependencies();
+          dependenciesStatus.textContent = name + " se quitará de las instalaciones automáticas futuras.";
+        });
+        row.append(label, state, remove);
+        dependenciesList.appendChild(row);
+      }
+    }
+
+    async function installPythonDependency(rawName, persist = true) {
+      if (!pyodide) throw new Error("Pyodide todavía no está listo.");
+      const name = String(rawName || "").trim();
+      if (!name || name.length > 200 || /[\r\n\0]/.test(name)) {
+        throw new Error("Escribe un nombre de paquete válido de PyPI.");
+      }
+      if (installingDependencyNames.has(name)) return;
+      if (persist) {
+        const saved = getSavedPythonDependencies();
+        if (!saved.includes(name)) {
+          saved.push(name);
+          localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(saved));
+        }
+      }
+      installingDependencyNames.add(name);
+      renderPythonDependencies();
+      dependenciesStatus.textContent = "Instalando " + name + " con micropip…";
+      dependencyInstallButton.disabled = true;
+      try {
+        await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ")");
+        installedDependencyNames.add(name);
+        dependenciesStatus.textContent = name + " se instaló correctamente.";
+      } catch (error) {
+        dependenciesStatus.textContent = "No se pudo instalar " + name + ": " + String(error?.message || error);
+        throw error;
+      } finally {
+        installingDependencyNames.delete(name);
+        dependencyInstallButton.disabled = false;
+        renderPythonDependencies();
+      }
+    }
     let runToken = 0;
 
     const status = document.getElementById("status");
@@ -1567,6 +1699,29 @@ _editor_scene_token = ${token}`;
       }
     });
 
+    document.getElementById("dependencies-toggle").addEventListener("click", () => {
+      dependenciesPanel.classList.toggle("open");
+      document.getElementById("assets-panel").classList.remove("open");
+      document.getElementById("projects-panel").classList.remove("open");
+      document.getElementById("fonts-panel").classList.remove("open");
+      if (dependenciesPanel.classList.contains("open")) dependencyNameInput.focus();
+      renderPythonDependencies();
+    });
+    document.getElementById("dependencies-close").addEventListener("click", () =>
+      dependenciesPanel.classList.remove("open")
+    );
+    document.getElementById("dependencies-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const name = dependencyNameInput.value.trim();
+      if (!name) return;
+      try {
+        await installPythonDependency(name);
+        dependencyNameInput.value = "";
+      } catch (error) {
+        showError(error);
+      }
+    });
+
     runButton.addEventListener("click", () => runScene());
     canvasWindowButton.addEventListener("click", openCanvasWindow);
     runRecordButton.addEventListener("click", runAndRecord);
@@ -1884,6 +2039,17 @@ await micropip.install(${JSON.stringify(new URL(manifest.wgpu, wheelBase).href)}
 await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).href)})
 `);
 
+        // Restore the user's package list after the editor's pinned runtime wheels.
+        const savedDependencies = getSavedPythonDependencies();
+        for (const dependency of savedDependencies) {
+          try {
+            await installPythonDependency(dependency, false);
+          } catch (error) {
+            console.warn("[micropip persistence] No se pudo restaurar " + dependency, error);
+          }
+        }
+        renderPythonDependencies();
+
         setLoading(true, "Restaurando assets guardados…");
         ensureAssetDir();
         try {
@@ -1914,7 +2080,8 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         recordButton.disabled = false;
         canvasWindowButton.disabled = false;
         refreshAssets();
-        setStatus("Listo. Código y assets se guardan automáticamente en este navegador.");
+        renderPythonDependencies();
+        setStatus("Listo. Código, assets y dependencias Python se guardan en este navegador.");
         await transformOnly();
       } catch (error) {
         showError(error);
