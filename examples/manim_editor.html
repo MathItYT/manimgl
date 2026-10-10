@@ -1312,6 +1312,15 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
               for (const label of localNames) {
                 candidates.push({ label, kind: CompletionItemKind.Variable, detail: "Current file" });
               }
+              // Imported names and aliases (e.g. "import numpy as np") are
+              // valid completion candidates even before the user types a dot.
+              for (const [alias, target] of Object.entries(liveAliases)) {
+                candidates.push({
+                  label: alias,
+                  kind: CompletionItemKind.Variable,
+                  detail: "Imported from " + target,
+                });
+              }
             }
 
             const prefix = String(word.word || "").toLowerCase();
