@@ -1269,10 +1269,9 @@ json.dumps(_files)
           throw new Error("Could not load the real ManimGL source package: " + sourceResponse.status);
         }
         const manimlibSource = await sourceResponse.arrayBuffer();
-        // Index the installed packages from the actual Pyodide environment,
-        // not only ManimGL's source zip. This includes NumPy, SciPy, Pillow,
-        // Matplotlib, SymPy and user-installed packages with .py/.pyi sources.
-        const runtimeSources = await collectPyrightRuntimeSources(true);
+        // Start Pyright with ManimGL only. Copying third-party sources into
+        // the worker before init can allocate more memory than the browser has.
+        // The bounded runtime index is mounted after the LSP is already ready.
         pyrightProvider = new MonacoPyrightProvider(pyrightWorkerUrl, {
           features: {
             hover: true,
@@ -1285,18 +1284,25 @@ json.dumps(_files)
           diagnosticsInterval: 500,
           typeStubs: {
             manimlib: manimlibSource,
-            __pyright_runtime_sources__: runtimeSources.tree,
           },
         });
         await pyrightProvider.init(monaco);
         await pyrightProvider.setupDiagnostics(editor);
         pyrightReady = true;
-        console.info("[Pyright LSP] Initialized with ManimGL and installed Python sources.", {
-          runtimeFiles: runtimeSources.changes.length,
+        console.info("[Pyright LSP] Initialized with ManimGL. Starting bounded dependency indexing in the background.");
+        setStatus("Python language server ready; indexing installed dependencies…");
+        // Do not make editor startup wait for third-party source indexing. The
+        // editor remains usable with ManimGL completions while this runs.
+        void refreshPythonLanguageServerRuntimeSources().then(indexedFiles => {
+          if (pyrightReady) {
+            console.info("[Pyright LSP] Runtime source indexing finished.", {
+              indexedFiles,
+            });
+            setStatus("Python language server ready (ManimGL and available dependency sources indexed).");
+          }
+        }).catch(error => {
+          console.warn("[Pyright LSP] Third-party source indexing failed; keeping ManimGL language features enabled.", error);
         });
-        setStatus("Python language server ready (ManimGL and installed dependencies indexed).");
-        // Packages may have been added while the LSP worker was starting.
-        await refreshPythonLanguageServerRuntimeSources();
       })().catch(error => {
         pyrightReady = false;
         pyrightInitPromise = null;
