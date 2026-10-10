@@ -879,25 +879,25 @@ class Demo(Scene):
     async function queryJedi(source, line, column, mode) {
       await ensurePythonCodeTools();
       const result = await pyodide.runPythonAsync(
-        "import json, jedi\\n" +
-        "_source = " + JSON.stringify(source) + "\\n" +
-        "_line = " + Number(line) + "\\n" +
-        "_column = " + Number(column) + "\\n" +
-        "_mode = " + JSON.stringify(mode) + "\\n" +
-        "_script = jedi.Script(code=_source, path='main.py')\\n" +
-        "_items = []\\n" +
-        "if _mode == 'completion':\\n" +
-        "    for _item in _script.complete(_line, _column):\\n" +
-        "        _items.append({'label': _item.name, 'insertText': _item.name, 'kind': _item.type, 'detail': _item.description, 'documentation': _item.docstring(raw=False)})\\n" +
-        "elif _mode == 'signature':\\n" +
-        "    for _signature in _script.get_signatures(_line, _column):\\n" +
-        "        _params = [{'label': _param.name, 'documentation': _param.description} for _param in _signature.params]\\n" +
-        "        _items.append({'label': _signature.to_string(), 'documentation': _signature.docstring(raw=False), 'parameters': _params, 'activeParameter': max(0, _signature.index or 0)})\\n" +
-        "elif _mode == 'hover':\\n" +
-        "    for _item in _script.infer(_line, _column):\\n" +
-        "        _doc = _item.docstring(raw=False)\\n" +
-        "        _items.append({'label': _item.description, 'documentation': _doc})\\n" +
-        "        if len(_items) >= 3: break\\n" +
+        "import json, jedi\n" +
+        "_source = " + JSON.stringify(source) + "\n" +
+        "_line = " + Number(line) + "\n" +
+        "_column = " + Number(column) + "\n" +
+        "_mode = " + JSON.stringify(mode) + "\n" +
+        "_script = jedi.Script(code=_source, path='main.py')\n" +
+        "_items = []\n" +
+        "if _mode == 'completion':\n" +
+        "    for _item in _script.complete(_line, _column):\n" +
+        "        _items.append({'label': _item.name, 'insertText': _item.name, 'kind': _item.type, 'detail': _item.description, 'documentation': _item.docstring(raw=False)})\n" +
+        "elif _mode == 'signature':\n" +
+        "    for _signature in _script.get_signatures(_line, _column):\n" +
+        "        _params = [{'label': _param.name, 'documentation': _param.description} for _param in _signature.params]\n" +
+        "        _items.append({'label': _signature.to_string(), 'documentation': _signature.docstring(raw=False), 'parameters': _params, 'activeParameter': max(0, _signature.index or 0)})\n" +
+        "elif _mode == 'hover':\n" +
+        "    for _item in _script.infer(_line, _column):\n" +
+        "        _doc = _item.docstring(raw=False)\n" +
+        "        _items.append({'label': _item.description, 'documentation': _doc})\n" +
+        "        if len(_items) >= 3: break\n" +
         "json.dumps(_items)"
       );
       return JSON.parse(String(result));
