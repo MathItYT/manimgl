@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ManimGL — Monaco Web Editor</title>
   <script src="./coi-serviceworker.js"></script>
+  <script src="./vendor/pyright-provider.js"></script>
   <style>
     :root { color-scheme: dark; --bg:#0b0e14; --panel:#111620; --line:#252c38; --text:#e5e7eb; --muted:#8e9aae; --accent:#477dff; }
     * { box-sizing:border-box; }
@@ -884,23 +885,12 @@ class Demo(Scene):
       if (pyrightInitPromise) return pyrightInitPromise;
       pyrightInitPromise = (async () => {
         setStatus("Loading Python language server (Pyright)…");
-        const moduleUrl = "https://cdn.jsdelivr.net/npm/monaco-pyright-lsp@0.1.7/+esm";
-        const workerUrl = "https://cdn.jsdelivr.net/npm/monaco-pyright-lsp@0.1.7/dist/worker.js";
-        const [module, workerResponse] = await Promise.all([
-          import(moduleUrl),
-          fetch(workerUrl, { cache: "force-cache" }),
-        ]);
-        if (!workerResponse.ok) {
-          throw new Error("Could not download the Pyright language-server worker: " + workerResponse.status);
-        }
-        const workerSource = await workerResponse.blob();
-        pyrightWorkerUrl = URL.createObjectURL(
-          new Blob([workerSource], { type: "text/javascript" })
-        );
-        const MonacoPyrightProvider = module.MonacoPyrightProvider;
+        const MonacoPyrightProvider = window.MonacoPyrightProvider;
         if (typeof MonacoPyrightProvider !== "function") {
-          throw new Error("The Pyright language-server package did not export MonacoPyrightProvider.");
+          throw new Error("The locally bundled Pyright provider is missing. Rebuild the Pyright browser bundle and reload the editor.");
         }
+        const workerUrl = new URL("./vendor/pyright-worker.js", document.baseURI);
+        pyrightWorkerUrl = workerUrl.href;
         pyrightProvider = new MonacoPyrightProvider(pyrightWorkerUrl, {
           features: {
             hover: true,
