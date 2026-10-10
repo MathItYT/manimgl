@@ -1177,7 +1177,7 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
             const source = model.getValue();
             const memberMatch = linePrefix.match(/([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\.\s*([A-Za-z_]\w*)?$/);
             const importContext = linePrefix.match(/^\s*import\s+([\w.]*)$/);
-            const fromContext = linePrefix.match(/^\s*from\s+([\w.]*)\s+import\s+([\w.]*)$/);
+            const fromContext = linePrefix.match(/^\\s*from\\s+([\\w.]*)\\s+import(?:\\s+([\\w.]*))?$/);
             const CompletionItemKind = monaco.languages.CompletionItemKind;
             let candidates = [];
             const liveAliases = {};
@@ -2108,6 +2108,22 @@ _editor_scene_token = ${token}`;
           },
         });
         registerLightweightPythonCompletions();
+
+        // Monaco does not reliably invoke completion providers for a trailing
+        // space. Explicitly open suggestions after "from module import ",
+        // when the export list is needed but the user has typed no symbol yet.
+        editor.onDidChangeModelContent(() => {
+          const position = editor.getPosition();
+          if (!position) return;
+          const linePrefix = editor.getModel()
+            .getLineContent(position.lineNumber)
+            .slice(0, position.column - 1);
+          if (!/^\\s*from\\s+[\\w.]+\\s+import\\s+$/.test(linePrefix)) return;
+          queueMicrotask(() => {
+            if (!editor || editor.getPosition()?.lineNumber !== position.lineNumber) return;
+            editor.trigger("python-from-import-completions", "editor.action.triggerSuggest", {});
+          });
+        });
 
         await initializeProjects();
 
