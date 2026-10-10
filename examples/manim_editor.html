@@ -932,7 +932,7 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
           const parsed = JSON.parse(raw);
           const aliases = {};
           const source = editor?.getValue() || "";
-          for (const match of source.matchAll(/^\\s*import\\s+([\\w.]+)(?:\\s+as\\s+([A-Za-z_]\\w*))?/gm)) {
+          for (const match of source.matchAll(/^\s*import\s+([\w.]+)(?:\s+as\s+([A-Za-z_]\w*))?/gm)) {
             aliases[match[2] || match[1].split(".")[0]] = match[1];
           }
           pythonCompletionIndex = {
