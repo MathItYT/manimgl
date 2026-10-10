@@ -654,10 +654,8 @@ class Scene(object):
         return self.get_time_progression(duration, **kw)
 
     def pre_play(self):
-        # Browser code must use _hold_loop_async() from async entry points.
-        if self.presenter_mode and self.num_plays == 0 and sys.platform != "emscripten":
-            self.hold_loop()
-
+        # Presenter pauses belong to play()/wait(), not this shared setup method.
+        # Keeping a hold loop here makes wait() enter it twice on the first play.
         self.update_skipping_status()
 
         if not self.skip_animations:
@@ -840,6 +838,10 @@ class Scene(object):
         animations = list(map(prepare_animation, proto_animations))
         for anim in animations:
             anim.update_rate_info(run_time, rate_func, lag_ratio)
+        # Preserve the initial presenter pause for play(), without making wait()
+        # enter the same hold loop twice through pre_play().
+        if self.presenter_mode and self.num_plays == 0:
+            self.hold_loop()
         self.pre_play()
         self.begin_animations(animations)
         if register:
