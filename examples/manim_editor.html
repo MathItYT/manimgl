@@ -1214,6 +1214,11 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
             }
 
             const prefix = word.word.toLowerCase();
+            // Keep aliases in sync as the user edits import statements.
+            const liveAliases = { ...pythonCompletionIndex.aliases };
+            for (const match of model.getValue().matchAll(/^\\s*import\\s+([\\w.]+)(?:\\s+as\\s+([A-Za-z_]\\w*))?/gm)) {
+              liveAliases[match[2] || match[1].split(".")[0]] = match[1];
+            }
             const importContext = linePrefix.match(/^\\s*import\\s+([\\w.]*)$/);
             const fromContext = linePrefix.match(/^\\s*from\\s+([\\w.]*)\\s+import\\s+([\\w.]*)$/);
             if (importContext) {
@@ -1227,7 +1232,7 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
               }));
             } else if (memberAccess) {
               const memberMatch = linePrefix.match(/([A-Za-z_]\\w*)\\s*\\.\\s*[A-Za-z_\\w]*$/);
-              const moduleName = memberMatch && pythonCompletionIndex.aliases[memberMatch[1]];
+              const moduleName = memberMatch && liveAliases[memberMatch[1]];
               if (moduleName && pythonCompletionIndex.exports[moduleName]) {
                 candidates = pythonCompletionIndex.exports[moduleName].map(label => ({
                   label, kind: CompletionItemKind.Method, detail: moduleName,
