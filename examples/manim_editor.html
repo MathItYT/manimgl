@@ -1163,7 +1163,9 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
 
       window.__manimLightweightCompletionProvider =
         monaco.languages.registerCompletionItemProvider("python", {
-          triggerCharacters: [".", "_"],
+          // A space is essential here: Python import completions become relevant
+          // immediately after `from ... import `, where no identifier has been typed yet.
+          triggerCharacters: [".", "_", " "],
           async provideCompletionItems(model, position) {
             const word = model.getWordUntilPosition(position);
             const range = new monaco.Range(
