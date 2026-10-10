@@ -39,16 +39,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: personal
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Package real ManimGL source for Pyright
-        run: python tools/package_manim_source.py
-      - name: Build browser Pyright bundle
-        run: |
-          npm install --prefix examples/pyright-build --no-audit --no-fund
-          npm run build --prefix examples/pyright-build
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
