@@ -894,6 +894,58 @@ class Demo(Scene):
     const dependencyInstallButton = document.getElementById("dependency-install");
     const installedDependencyNames = new Set();
     const installingDependencyNames = new Set();
+    let pythonCompletionIndex = { modules: [], exports: {}, aliases: {} };
+    let pythonCompletionRefreshPromise = null;
+
+    // Cache names from the live Pyodide runtime, without a language server or
+    // importing every installed package. This covers Manim and user packages.
+    async function refreshPythonCompletionIndex() {
+      if (!pyodide) return;
+      if (pythonCompletionRefreshPromise) return pythonCompletionRefreshPromise;
+      pythonCompletionRefreshPromise = (async () => {
+        const raw = await pyodide.runPythonAsync(`
+import json, pkgutil, sys
+_modules = set()
+try:
+    _modules.update(item.name for item in pkgutil.iter_modules())
+except Exception:
+    pass
+_modules.update(name.split(".", 1)[0] for name in sys.modules if name and not name.startswith("_"))
+_exports = {}
+for _name, _module in list(sys.modules.items()):
+    if not _name or _module is None or "." in _name:
+        continue
+    try:
+        _attrs = [attr for attr in dir(_module) if not attr.startswith("_")]
+    except Exception:
+        continue
+    if _attrs:
+        _exports[_name] = _attrs[:1200]
+try:
+    import manimlib
+    _exports["manimlib"] = [attr for attr in dir(manimlib) if not attr.startswith("_")][:3000]
+except Exception:
+    pass
+json.dumps({"modules": sorted(_modules), "exports": _exports})
+`);
+        try {
+          const parsed = JSON.parse(raw);
+          const aliases = {};
+          const source = editor?.getValue() || "";
+          for (const match of source.matchAll(/^\\s*import\\s+([\\w.]+)(?:\\s+as\\s+([A-Za-z_]\\w*))?/gm)) {
+            aliases[match[2] || match[1].split(".")[0]] = match[1];
+          }
+          pythonCompletionIndex = {
+            modules: Array.isArray(parsed.modules) ? parsed.modules : [],
+            exports: parsed.exports && typeof parsed.exports === "object" ? parsed.exports : {},
+            aliases,
+          };
+        } catch (error) {
+          console.warn("[Python completions] Could not parse runtime index:", error);
+        }
+      })().finally(() => { pythonCompletionRefreshPromise = null; });
+      return pythonCompletionRefreshPromise;
+    }
 
     function getSavedPythonDependencies() {
       try {
@@ -967,6 +1019,7 @@ class Demo(Scene):
       try {
         await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ")");
         installedDependencyNames.add(name);
+        await refreshPythonCompletionIndex();
         dependenciesStatus.textContent = name + " was installed successfully.";
       } catch (error) {
         dependenciesStatus.textContent = "Could not install " + name + ": " + String(error?.message || error);
@@ -1161,6 +1214,26 @@ class Demo(Scene):
             }
 
             const prefix = word.word.toLowerCase();
+            const importContext = linePrefix.match(/^\\s*import\\s+([\\w.]*)$/);
+            const fromContext = linePrefix.match(/^\\s*from\\s+([\\w.]*)\\s+import\\s+([\\w.]*)$/);
+            if (importContext) {
+              candidates = pythonCompletionIndex.modules.map(label => ({
+                label, kind: CompletionItemKind.Module, detail: "Installed Python module",
+              }));
+            } else if (fromContext) {
+              const moduleName = fromContext[1];
+              candidates = (pythonCompletionIndex.exports[moduleName] || []).map(label => ({
+                label, kind: CompletionItemKind.Variable, detail: "Exported by " + moduleName,
+              }));
+            } else if (memberAccess) {
+              const memberMatch = linePrefix.match(/([A-Za-z_]\\w*)\\s*\\.\\s*[A-Za-z_\\w]*$/);
+              const moduleName = memberMatch && pythonCompletionIndex.aliases[memberMatch[1]];
+              if (moduleName && pythonCompletionIndex.exports[moduleName]) {
+                candidates = pythonCompletionIndex.exports[moduleName].map(label => ({
+                  label, kind: CompletionItemKind.Method, detail: moduleName,
+                }));
+              }
+            }
             const seen = new Set();
             const suggestions = [];
             for (const item of candidates) {
@@ -2616,6 +2689,7 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
           }
         }
         renderPythonDependencies();
+        await refreshPythonCompletionIndex();
 
         setLoading(true, "Restoring saved assets…");
         ensureAssetDir();
