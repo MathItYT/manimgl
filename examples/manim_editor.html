@@ -1696,9 +1696,17 @@ _editor_scene_token = ${token}`;
         }
 
         const requestedFps = Number(recordFpsSelect.value) || 60;
-        // Manual capture: do not emit black/idle frames before ManimGL presents
-        // the first real scene frame. Window.show() requests frames as rendering advances.
-        stream = canvas.captureStream(0);
+        // WebGPU canvas presentation is not reliably exposed by captureStream()
+        // directly. Copy each presented frame into a 2D canvas, which MediaRecorder
+        // can capture consistently, then request that exact frame.
+        const captureCanvas = document.createElement("canvas");
+        captureCanvas.width = canvas.width;
+        captureCanvas.height = canvas.height;
+        const captureContext = captureCanvas.getContext("2d", { alpha: false });
+        if (!captureContext) {
+          throw new Error("Could not create the 2D canvas used for video capture.");
+        }
+        stream = captureCanvas.captureStream(0);
         const videoTrack = stream.getVideoTracks()[0];
         if (!videoTrack || typeof videoTrack.requestFrame !== "function") {
           throw new Error("This browser does not support manual canvas frame capture.");
@@ -1708,7 +1716,16 @@ _editor_scene_token = ${token}`;
           const targetCanvas = window.__manimCanvasElement;
           const view = targetCanvas?.ownerDocument?.defaultView || window;
           view.requestAnimationFrame(() => {
-            if (mediaRecorder?.state === "recording") videoTrack.requestFrame();
+            if (mediaRecorder?.state !== "recording" || !targetCanvas) return;
+            try {
+              captureContext.drawImage(
+                targetCanvas, 0, 0, captureCanvas.width, captureCanvas.height
+              );
+              videoTrack.requestFrame();
+            } catch (error) {
+              showError(new Error("Could not copy the rendered WebGPU frame for recording: "
+                + String(error?.message || error)));
+            }
           });
         };
         for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
