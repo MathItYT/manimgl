@@ -1779,13 +1779,12 @@ _editor_scene_token = ${token}`;
           recordStopButton.disabled = true;
           runRecordButton.disabled = !pyodide;
         });
-        // Do not start the muxer yet: it starts on the first actual ManimGL frame,
-        // avoiding a leading audio-only/black interval in the exported clip.
-        window.__manimStartRecorderOnFirstFrame = () => {
-          if (!mediaRecorder || mediaRecorder.state !== "inactive") return;
-          mediaRecorder.start(1000);
-          window.__manimStartRecorderOnFirstFrame = null;
-        };
+        // Start recording before the scene runner begins. Waiting for Window.show()
+        // to start MediaRecorder can deadlock the capture path on Pyodide: no recorder
+        // means requestFrame() is ignored, leaving the UI stuck waiting for its first frame.
+        // Frames are still requested manually by Window.show(), so idle frames are not emitted.
+        mediaRecorder.start(1000);
+        window.__manimStartRecorderOnFirstFrame = null;
         recordButton.disabled = true;
         recordButton.classList.add("recording");
         recordButton.textContent = "● Grabando…";
@@ -1856,7 +1855,7 @@ _editor_scene_token = ${token}`;
         // Start MediaRecorder after source transformation and runner construction,
         // immediately before ManimGL begins rendering the scene.
         if (beforeRender) await beforeRender();
-        setStatus("Waiting for the first frame to start recording…");
+        setStatus("Rendering scene for recording…");
         await pyodide.runPythonAsync(runnerCode);
         setStatus("Scene finished.");
       } catch (error) {
