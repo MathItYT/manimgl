@@ -494,21 +494,35 @@
       return context;
     }
 
-    let mediaRecorder = null;
-    let recordingChunks = [];
-    let recordingStream = null;
+    let recordingActive = false;
+    let recordingOutput = null;
+    let recordingVideoSource = null;
+    let recordingAudioSource = null;
     let recordingMicStream = null;
     let recordingMicSource = null;
     let recordingAudioDestination = null;
-    let recordingVideoGenerator = null;
-    let recordingVideoWriter = null;
-    let recordingFrameWritePromise = Promise.resolve();
-    let recordingFrameWritePending = false;
+    let recordingPendingFrames = new Set();
     let recordingCaptureCallbackCalls = 0;
-    let recordingFramesWritten = 0;
+    let recordingFramesSubmitted = 0;
+    let recordingFramesEncoded = 0;
     let recordingStartedAt = 0;
-    let recordingLastFrameTimestamp = -1;
+    let recordingLastTimestamp = -1;
+    let recordingFrameRate = 60;
+    let recordingError = null;
     let recordingStopping = false;
+    let mediabunnyImportPromise = null;
+
+    async function loadMediabunny() {
+      if (!mediabunnyImportPromise) {
+        mediabunnyImportPromise = import(
+          "https://cdn.jsdelivr.net/npm/mediabunny@1.61.3/+esm"
+        ).catch(error => {
+          mediabunnyImportPromise = null;
+          throw error;
+        });
+      }
+      return mediabunnyImportPromise;
+    }
 
     // Keep the render target at true Full HD regardless of the editor preview size.
     // CSS scales it down on screen; frames are read directly from the WebGPU canvas.
@@ -1670,31 +1684,30 @@ _editor_scene = await run_scene_from_class(_scene_class, _canvas_target, size=($
 _editor_scene_token = ${token}`;
     }
 
-    function getRecordingMimeType() {
-      if (!window.MediaRecorder || typeof MediaRecorder.isTypeSupported !== "function") return "";
-      const candidates = [
-        "video/webm;codecs=vp9,opus",
-        "video/webm;codecs=vp8,opus",
-        "video/webm",
-      ];
-      return candidates.find(type => MediaRecorder.isTypeSupported(type)) || "";
-    }
-
     async function startRecording() {
-      if (mediaRecorder && mediaRecorder.state !== "inactive") return;
-      if (!canvas || !window.MediaRecorder) {
-        throw new Error("This browser does not support video recording (MediaRecorder).");
-      }
-      if (typeof window.VideoFrame !== "function"
-          || typeof window.MediaStreamTrackGenerator !== "function") {
-        throw new Error("Direct WebGPU recording requires VideoFrame and MediaStreamTrackGenerator in this browser.");
+      if (recordingActive) return;
+      if (!canvas) {
+        throw new Error("Open the canvas window before recording.");
       }
 
-      let micStream = null;
+      let context = null;
       let destination = null;
-      let stream = null;
+      let micStream = null;
+      let output = null;
+      let videoSource = null;
+      let audioSource = null;
       try {
-        const context = ensureRecordingAudioGraph();
+        const {
+          Output: MediaOutput,
+          BufferTarget,
+          CanvasSource,
+          MediaStreamAudioTrackSource,
+          WebMOutputFormat,
+          getFirstEncodableVideoCodec,
+          getFirstEncodableAudioCodec,
+        } = await loadMediabunny();
+
+        context = ensureRecordingAudioGraph();
         await context.resume();
         destination = context.createMediaStreamDestination();
         await window.__manimConnectRecordingAudio(destination);
@@ -1709,180 +1722,227 @@ _editor_scene_token = ${token}`;
         }
 
         const requestedFps = Number(recordFpsSelect.value) || 60;
-        // Chromium's canvas.captureStream() does not reliably capture WebGPU
-        // canvases. Read each completed WebGPU canvas image into a VideoFrame
-        // and push it directly into a generated video track; no 2D canvas or
-        // canvas.captureStream() is involved.
-        const videoGenerator = new window.MediaStreamTrackGenerator({ kind: "video" });
-        const videoWriter = videoGenerator.writable.getWriter();
-        stream = new MediaStream([videoGenerator]);
-        recordingVideoGenerator = videoGenerator;
-        recordingVideoWriter = videoWriter;
-        recordingFrameWritePromise = Promise.resolve();
-        recordingFrameWritePending = false;
-        recordingCaptureCallbackCalls = 0;
-        recordingFramesWritten = 0;
-        recordingStartedAt = performance.now();
-        recordingLastFrameTimestamp = -1;
-        recordingStopping = false;
-        window.__manimCaptureWebGPUFrame = () => {
-          recordingCaptureCallbackCalls += 1;
-          const writer = recordingVideoWriter;
-          const targetCanvas = window.__manimCanvasElement;
-          if (recordingStopping || mediaRecorder?.state !== "recording"
-              || !writer || !targetCanvas || recordingFrameWritePending) return;
+        const format = new WebMOutputFormat();
+        const videoCodec = await getFirstEncodableVideoCodec(
+          format.getSupportedVideoCodecs(),
+          { width: canvas.width, height: canvas.height }
+        );
+        if (!videoCodec) {
+          throw new Error("This browser has no WebCodecs video encoder compatible with WebM.");
+        }
 
-          const timestamp = Math.max(
-            recordingLastFrameTimestamp + 1,
-            Math.round((performance.now() - recordingStartedAt) * 1000)
-          );
-          let frame;
-          try {
-            // VideoFrame accepts HTMLCanvasElement directly, including the
-            // WebGPU render target. The frame snapshots the current canvas image.
-            frame = new window.VideoFrame(targetCanvas, { timestamp });
-          } catch (error) {
-            showError(new Error("Could not read a frame from the WebGPU canvas: "
-              + String(error?.message || error)));
-            return;
-          }
+        output = new MediaOutput({
+          format,
+          target: new BufferTarget(),
+        });
+        videoSource = new CanvasSource(canvas, {
+          codec: videoCodec,
+          bitrate: requestedFps >= 50 ? 28_000_000 : 16_000_000,
+          latencyMode: "quality",
+        });
+        output.addVideoTrack(videoSource, { frameRate: requestedFps });
 
-          recordingLastFrameTimestamp = timestamp;
-          recordingFrameWritePending = true;
-          recordingFrameWritePromise = writer.write(frame)
-            .then(() => { recordingFramesWritten += 1; })
-            .catch(error => {
-              showError(new Error("Could not submit the WebGPU frame for recording: "
-                + String(error?.message || error)));
-            })
-            .finally(() => {
-              frame.close();
-              recordingFrameWritePending = false;
+        const audioTrack = destination.stream.getAudioTracks()[0];
+        let audioCodec = null;
+        if (audioTrack) {
+          audioCodec = await getFirstEncodableAudioCodec(format.getSupportedAudioCodecs());
+          if (audioCodec) {
+            audioSource = new MediaStreamAudioTrackSource(audioTrack, {
+              codec: audioCodec,
+              bitrate: 192_000,
             });
-        };
-        for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
-        const mimeType = getRecordingMimeType();
-        // 1080p60 needs a much higher bitrate than MediaRecorder's browser default.
-        // Keep the same options for supported MIME types and the fallback path.
-        const recorderOptions = {
-          videoBitsPerSecond: requestedFps >= 50 ? 28_000_000 : 16_000_000,
-          audioBitsPerSecond: 192_000,
-        };
-        if (mimeType) recorderOptions.mimeType = mimeType;
-        mediaRecorder = new MediaRecorder(stream, recorderOptions);
-        recordingChunks = [];
-        recordingStream = stream;
+            output.addAudioTrack(audioSource);
+            audioSource.errorPromise.catch(error => {
+              recordingError = error;
+              if (recordingActive) {
+                showError(new Error("Audio encoding failed: "
+                  + String(error?.message || error)));
+              }
+            });
+          }
+        }
+
+        await output.start();
+
+        recordingOutput = output;
+        recordingVideoSource = videoSource;
+        recordingAudioSource = audioSource;
         recordingMicStream = micStream;
         recordingAudioDestination = destination;
+        recordingPendingFrames = new Set();
+        recordingCaptureCallbackCalls = 0;
+        recordingFramesSubmitted = 0;
+        recordingFramesEncoded = 0;
+        recordingStartedAt = performance.now();
+        recordingLastTimestamp = -1;
+        recordingFrameRate = requestedFps;
+        recordingError = null;
+        recordingStopping = false;
+        recordingActive = true;
 
-        mediaRecorder.addEventListener("dataavailable", event => {
-          if (event.data && event.data.size > 0) recordingChunks.push(event.data);
-        });
-        mediaRecorder.addEventListener("error", event => {
-          const error = event.error || new Error("Recording error.");
-          showError(error);
-          setStatus("Error recording the scene.");
-        });
-        mediaRecorder.addEventListener("start", () => {
-          setStatus(recordMicCheckbox.checked
-            ? "Recording scene and microphone…"
-            : "Recording scene and audio…");
-        });
-        mediaRecorder.addEventListener("stop", () => {
-          const type = mediaRecorder?.mimeType || "video/webm";
-          const blob = new Blob(recordingChunks, { type });
-          console.info("[recording] WebGPU capture callbacks:", recordingCaptureCallbackCalls,
-            "| frames submitted to video track:", recordingFramesWritten);
-          if (blob.size > 0) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = "manimgl-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 60_000);
-            setStatus("Recording complete: the video with audio has been downloaded.");
-          } else {
-            setStatus(recordingFramesWritten === 0
-              ? "Recording finished: no WebGPU frames reached the video track ("
-                + recordingCaptureCallbackCalls + " capture callbacks)."
-              : "Recording finished, but MediaRecorder produced no data despite "
-                + recordingFramesWritten + " submitted WebGPU frames.");
-          }
-          const videoWriterToClose = recordingVideoWriter;
-          recordingVideoWriter = null;
-          recordingVideoGenerator = null;
-          if (videoWriterToClose) videoWriterToClose.close().catch(() => {});
-          for (const track of recordingStream?.getTracks() || []) track.stop();
-          for (const track of recordingMicStream?.getTracks() || []) track.stop();
+        window.__manimCaptureWebGPUFrame = () => {
+          recordingCaptureCallbackCalls += 1;
+          const source = recordingVideoSource;
+          if (!recordingActive || recordingStopping || !source || recordingError) return;
+
+          const elapsed = Math.max(0, (performance.now() - recordingStartedAt) / 1000);
+          const timestamp = Math.max(elapsed, recordingLastTimestamp + 0.000001);
+          const duration = recordingLastTimestamp < 0
+            ? 1 / recordingFrameRate
+            : Math.max(timestamp - recordingLastTimestamp, 0.001);
+          recordingLastTimestamp = timestamp;
+
           try {
-            if (recordingMicSource && recordingAudioDestination) {
-              recordingMicSource.disconnect(recordingAudioDestination);
-            }
-          } catch (_) {}
-          if (recordingAudioDestination) {
-            window.__manimDisconnectRecordingAudio(recordingAudioDestination);
+            // CanvasSource snapshots the current WebGPU canvas into a VideoSample,
+            // encodes it with WebCodecs, and sends encoded packets to the WebM muxer.
+            // This is deliberately independent of MediaRecorder and captureStream().
+            const framePromise = source.add(timestamp, duration, {
+              keyFrame: recordingFramesSubmitted === 0,
+            });
+            recordingFramesSubmitted += 1;
+            recordingPendingFrames.add(framePromise);
+            framePromise.then(() => {
+              recordingFramesEncoded += 1;
+            }).catch(error => {
+              recordingError = error;
+              showError(new Error("WebCodecs could not encode a WebGPU frame: "
+                + String(error?.message || error)));
+            }).finally(() => {
+              recordingPendingFrames.delete(framePromise);
+            });
+          } catch (error) {
+            recordingError = error;
+            showError(new Error("Could not capture a WebGPU frame: "
+              + String(error?.message || error)));
           }
-          if (window.__manimCaptureWebGPUFrame) window.__manimCaptureWebGPUFrame = null;
-          recordingFrameWritePending = false;
-          recordingStopping = false;
-          recordingStream = null;
-          recordingMicStream = null;
-          recordingMicSource = null;
-          recordingAudioDestination = null;
-          mediaRecorder = null;
-          recordingChunks = [];
-          recordButton.disabled = false;
-          recordButton.classList.remove("recording");
-          recordButton.textContent = "● Record";
-          recordStopButton.disabled = true;
-          runRecordButton.disabled = !pyodide;
-        });
-        // Start MediaRecorder before scene rendering. Window.show() pushes actual
-        // WebGPU VideoFrames into the generated video track as frames are presented.
-        mediaRecorder.start(1000);
-        window.__manimStartRecorderOnFirstFrame = null;
+        };
+
         recordButton.disabled = true;
         recordButton.classList.add("recording");
         recordButton.textContent = "● Grabando…";
         recordStopButton.disabled = false;
         runRecordButton.disabled = true;
-        setStatus("Recording initialized; waiting for rendered frames…");
+        setStatus(audioSource
+          ? "Recording scene and audio with WebCodecs…"
+          : "Recording scene with WebCodecs…");
       } catch (error) {
-        if (stream) for (const track of stream.getTracks()) track.stop();
-        if (micStream) for (const track of micStream.getTracks()) track.stop();
-        if (destination) window.__manimDisconnectRecordingAudio(destination);
-        const writerToAbort = recordingVideoWriter;
-        recordingVideoWriter = null;
-        recordingVideoGenerator = null;
-        if (writerToAbort) {
-          try { await writerToAbort.abort(error); } catch (_) {}
-        }
-        window.__manimStartRecorderOnFirstFrame = null;
+        recordingActive = false;
         window.__manimCaptureWebGPUFrame = null;
-        recordingFrameWritePending = false;
-        recordingStopping = false;
+        if (videoSource) {
+          try { videoSource.close(); } catch (_) {}
+        }
+        if (audioSource) {
+          try { audioSource.close(); } catch (_) {}
+        }
+        if (output) {
+          try { await output.cancel(); } catch (_) {}
+        }
+        if (micStream) for (const track of micStream.getTracks()) track.stop();
+        if (destination) {
+          for (const track of destination.stream.getTracks()) track.stop();
+          try { window.__manimDisconnectRecordingAudio(destination); } catch (_) {}
+        }
         if (recordingMicSource && destination) {
           try { recordingMicSource.disconnect(destination); } catch (_) {}
         }
         recordingMicSource = null;
+        recordingMicStream = null;
+        recordingAudioDestination = null;
+        recordingOutput = null;
+        recordingVideoSource = null;
+        recordingAudioSource = null;
+        recordingStopping = false;
         throw error;
       }
     }
 
     async function stopRecording() {
-      const recorder = mediaRecorder;
-      if (!recorder || recorder.state === "inactive" || recordingStopping) return;
+      if (!recordingActive || recordingStopping) return;
       recordingStopping = true;
+      recordingActive = false;
       recordStopButton.disabled = true;
-      setStatus("Finalizing and preparing the video file…");
-      // Do not stop MediaRecorder before the last generated VideoFrame has been
-      // accepted by the writable video track.
-      await recordingFrameWritePromise;
-      if (mediaRecorder === recorder && recorder.state !== "inactive") {
-        recorder.stop();
+      setStatus("Finishing WebCodecs encoding and writing the WebM file…");
+      if (window.__manimCaptureWebGPUFrame) window.__manimCaptureWebGPUFrame = null;
+
+      const output = recordingOutput;
+      const videoSource = recordingVideoSource;
+      const audioSource = recordingAudioSource;
+      const micStream = recordingMicStream;
+      const destination = recordingAudioDestination;
+      let finalizationError = null;
+
+      try {
+        // Wait for every VideoSample captured from the live canvas to be encoded
+        // before closing the source and finalizing the WebM container.
+        while (recordingPendingFrames.size) {
+          await Promise.allSettled([...recordingPendingFrames]);
+        }
+        if (recordingError) throw recordingError;
+        if (!output || !videoSource) {
+          throw new Error("The WebCodecs recording pipeline was not initialized.");
+        }
+        if (recordingFramesEncoded === 0) {
+          throw new Error("No WebGPU frames were encoded ("
+            + recordingCaptureCallbackCalls + " capture callbacks, "
+            + recordingFramesSubmitted + " frames submitted).");
+        }
+
+        videoSource.close();
+        if (audioSource) audioSource.close();
+        await output.finalize();
+
+        const buffer = output.target.buffer;
+        if (!buffer || buffer.byteLength === 0) {
+          throw new Error("WebCodecs encoded frames, but the WebM muxer produced an empty file.");
+        }
+        const blob = new Blob([buffer], { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "manimgl-" + new Date().toISOString().replace(/[:.]/g, "-") + ".webm";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        setStatus("Recording complete: WebM with "
+          + recordingFramesEncoded + " encoded video frames.");
+      } catch (error) {
+        finalizationError = error;
+        showError(error);
+        setStatus("Could not finalize WebCodecs recording: "
+          + String(error?.message || error));
+      } finally {
+        if (audioSource) {
+          try { audioSource.close(); } catch (_) {}
+        }
+        if (videoSource) {
+          try { videoSource.close(); } catch (_) {}
+        }
+        if (micStream) for (const track of micStream.getTracks()) track.stop();
+        if (destination) {
+          for (const track of destination.stream.getTracks()) track.stop();
+          try { window.__manimDisconnectRecordingAudio(destination); } catch (_) {}
+        }
+        try {
+          if (recordingMicSource && destination) {
+            recordingMicSource.disconnect(destination);
+          }
+        } catch (_) {}
+        recordingMicStream = null;
+        recordingMicSource = null;
+        recordingAudioDestination = null;
+        recordingOutput = null;
+        recordingVideoSource = null;
+        recordingAudioSource = null;
+        recordingPendingFrames.clear();
+        recordingStopping = false;
+        recordButton.disabled = false;
+        recordButton.classList.remove("recording");
+        recordButton.textContent = "● Record";
+        recordStopButton.disabled = true;
+        runRecordButton.disabled = !pyodide;
       }
+      if (finalizationError) throw finalizationError;
     }
 
     async function runAndRecord() {
@@ -1893,7 +1953,7 @@ _editor_scene_token = ${token}`;
         await runScene(startRecording);
         // Interactive recording is optional. Keep the existing interactive
         // behavior by default; otherwise stop immediately after the scene run.
-        if (!recordInteractiveCheckbox.checked && mediaRecorder && mediaRecorder.state !== "inactive") {
+        if (!recordInteractiveCheckbox.checked && recordingActive) {
           await stopRecording();
         }
       } catch (error) {
