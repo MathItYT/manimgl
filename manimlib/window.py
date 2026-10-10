@@ -296,22 +296,21 @@ class Window(object):
         """
         self.frame_view = frame_view
         self.canvas.force_draw()
-        if sys.platform == "emscripten":
-            # In the browser editor, begin MediaRecorder only when ManimGL has
-            # an actual scene frame to show. This prevents the setup/construct
-            # interval from becoming a leading blank delay in the exported clip.
-            from js import window
-            start_recording = getattr(window, "__manimStartRecorderOnFirstFrame", None)
-            if start_recording:
-                start_recording()
-            request_capture = getattr(window, "__manimRequestCaptureFrame", None)
-            if request_capture:
-                request_capture()
+        # force_draw() schedules the canvas draw; it does not guarantee that
+        # the new frame has been presented before this method returns.
         self.undrawn_event = False
         self.poll_events()
 
     def draw(self) -> None:
         self.present(self.context.get_current_texture().create_view())
+        if sys.platform == "emscripten":
+            # Capture only after the renderer has submitted the presented frame.
+            # Requesting capture from show() races the asynchronous canvas draw
+            # and can repeatedly sample the previous/empty surface.
+            from js import window
+            request_capture = getattr(window, "__manimRequestCaptureFrame", None)
+            if request_capture:
+                request_capture()
 
     def init_present_resources(self) -> None:
         """What a finished frame is read through on its way to the surface, made once"""
