@@ -950,27 +950,45 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
     async function getPythonModuleMembers(moduleName) {
       if (!pyodide || typeof moduleName !== "string" ||
           !/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(moduleName)) return [];
-      try {
-        const raw = await pyodide.runPythonAsync(
-          "import importlib, json\n" +
-          "_name = " + JSON.stringify(moduleName) + "\n" +
-          "try:\n" +
-          "    _module = importlib.import_module(_name)\n" +
-          "    _members = [x for x in dir(_module) if not x.startswith('_')]\n" +
-          "    _result = {'name': _name, 'members': _members[:3000]}\n" +
-          "except Exception as _error:\n" +
-          "    _result = {'name': _name, 'members': [], 'error': str(_error)}\n" +
-          "json.dumps(_result)"
-        );
-        const result = JSON.parse(raw);
-        if (result.name && Array.isArray(result.members) && result.members.length) {
-          pythonCompletionIndex.exports[result.name] = result.members;
-          return result.members;
-        }
-      } catch (error) {
-        console.debug("[Python completions] Module introspection unavailable:", moduleName, error);
+      // Cache in-flight lookups so repeated Monaco requests don't import the
+      // same package concurrently while the user is typing.
+      pythonCompletionIndex.pending ||= {};
+      if (pythonCompletionIndex.pending[moduleName]) {
+        return pythonCompletionIndex.pending[moduleName];
       }
-      return [];
+      pythonCompletionIndex.pending[moduleName] = (async () => {
+        try {
+          const raw = await pyodide.runPythonAsync(
+            "import importlib, json\n" +
+            "_name = " + JSON.stringify(moduleName) + "\n" +
+            "try:\n" +
+            "    _module = importlib.import_module(_name)\n" +
+            "    _members = [x for x in dir(_module) if not x.startswith('_')]\n" +
+            "    _result = {'name': _name, 'members': _members[:5000]}\n" +
+            "except Exception as _error:\n" +
+            "    _result = {'name': _name, 'members': [], 'error': str(_error)}\n" +
+            "json.dumps(_result)"
+          );
+          const result = JSON.parse(raw);
+          if (result.name && Array.isArray(result.members)) {
+            // Cache empty results too, to avoid repeatedly trying a module
+            // that cannot be imported in this Pyodide environment.
+            pythonCompletionIndex.exports[result.name] = result.members;
+            if (result.error) {
+              console.warn("[Python completions] Cannot import module:", moduleName, result.error);
+            }
+            return result.members;
+          }
+        } catch (error) {
+          console.warn("[Python completions] Module introspection failed:", moduleName, error);
+        }
+        return [];
+      })();
+      try {
+        return await pythonCompletionIndex.pending[moduleName];
+      } finally {
+        delete pythonCompletionIndex.pending[moduleName];
+      }
     }
 
     function getSavedPythonDependencies() {
