@@ -901,14 +901,12 @@ class Scene(object):
             if dt <= 0:
                 continue
 
-            # The scene clock is held if an audio event is behind. Advance the
-            # wall-clock sample regardless, but do not accumulate held time into
-            # the animation when audio catches up.
-            if not browser_audio.can_advance_scene(
-                self.time, self.time + dt, self._interactive_sound_events
-            ):
-                continue
-
+            # Do not gate interactive Scene.play() animations on the media clock.
+            # Keyboard-triggered animations (for example resetting the camera frame)
+            # must remain responsive even if a scene sound is paused, delayed, or
+            # rejected by the browser. The dedicated browser_playback_loop handles
+            # audio/timeline synchronization; an interactive animation must not wait
+            # indefinitely for an unrelated sound event.
             elapsed += dt
             self.increment_time(dt)
             for animation in animations:
