@@ -72,7 +72,7 @@ for name, kind in explicit:
     add_export(exports, name, kind)
 
 lines = [
-    \"\"\"Generated browser-facing declarations for ManimGL public exports.\"\"\"
+    """Generated browser-facing declarations for ManimGL public exports.""",
     "from typing import Any",
     "",
     "Vect3 = Any",
