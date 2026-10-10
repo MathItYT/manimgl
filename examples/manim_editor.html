@@ -952,14 +952,14 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
           !/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(moduleName)) return [];
       try {
         const raw = await pyodide.runPythonAsync(
-          "import importlib, json\\n" +
-          "_name = " + JSON.stringify(moduleName) + "\\n" +
-          "try:\\n" +
-          "    _module = importlib.import_module(_name)\\n" +
-          "    _members = [x for x in dir(_module) if not x.startswith('_')]\\n" +
-          "    _result = {'name': _name, 'members': _members[:3000]}\\n" +
-          "except Exception as _error:\\n" +
-          "    _result = {'name': _name, 'members': [], 'error': str(_error)}\\n" +
+          "import importlib, json\n" +
+          "_name = " + JSON.stringify(moduleName) + "\n" +
+          "try:\n" +
+          "    _module = importlib.import_module(_name)\n" +
+          "    _members = [x for x in dir(_module) if not x.startswith('_')]\n" +
+          "    _result = {'name': _name, 'members': _members[:3000]}\n" +
+          "except Exception as _error:\n" +
+          "    _result = {'name': _name, 'members': [], 'error': str(_error)}\n" +
           "json.dumps(_result)"
         );
         const result = JSON.parse(raw);
