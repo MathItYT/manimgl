@@ -1179,7 +1179,7 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
             const importContext = linePrefix.match(/^\s*import\s+([\w.]*)$/);
             // Handle the entire "from" statement as it is being typed, not
             // only after the word "import" has been completed.
-            const fromModuleContext = linePrefix.match(/^\s*from\s+([\w.]*)$/);
+            const fromModuleContext = linePrefix.match(/^\s*from(?:\s+([\w.]*))?$/);
             const fromContext = linePrefix.match(/^\s*from\s+([\w.]+)\s+import(?:\s+([\w.]*))?$/);
             const CompletionItemKind = monaco.languages.CompletionItemKind;
             let candidates = [];
