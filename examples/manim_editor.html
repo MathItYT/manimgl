@@ -2072,7 +2072,20 @@ _editor_scene_token = ${token}`;
           format,
           target: outputTarget,
         });
-        videoSource = new CanvasSource(canvas, {
+        // Keep the encoder away from the live WebGPU presentation surface.
+        // Copy each completed frame into a dedicated 2D canvas before encoding it.
+        const captureCanvas = document.createElement("canvas");
+        captureCanvas.width = canvas.width;
+        captureCanvas.height = canvas.height;
+        const captureContext = captureCanvas.getContext("2d", {
+          alpha: false,
+          desynchronized: true,
+        });
+        if (!captureContext) {
+          throw new Error("Could not create the 2D recording capture canvas.");
+        }
+
+        videoSource = new CanvasSource(captureCanvas, {
           codec: videoCodec,
           bitrate: requestedFps >= 50 ? 28_000_000 : 16_000_000,
           latencyMode: "quality",
@@ -2134,9 +2147,12 @@ _editor_scene_token = ${token}`;
           recordingLastTimestamp = timestamp;
 
           try {
-            // CanvasSource snapshots the current WebGPU canvas into a VideoSample,
-            // encodes it with WebCodecs, and sends encoded packets to the WebM muxer.
-            // This is deliberately independent of MediaRecorder and captureStream().
+            // Copy from the live WebGPU surface into a separate 2D canvas first.
+            // This prevents the video encoder from retaining/reading the presentation
+            // surface directly across long recordings.
+            captureContext.drawImage(
+              canvas, 0, 0, captureCanvas.width, captureCanvas.height
+            );
             const framePromise = source.add(timestamp, duration, {
               keyFrame: recordingFramesSubmitted === 0,
             });
