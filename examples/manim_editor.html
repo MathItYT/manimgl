@@ -588,6 +588,37 @@ document.getElementById("fullscreen").addEventListener("click",async()=>{
       canvas.height = 1080;
       canvas.tabIndex = 0;
       canvasPlaceholder.replaceWith(canvas);
+
+      // The canvas lives in the popup, but ManimGL's browser input backend is
+      // initialized from the opener realm. Forward keyboard events from the
+      // popup to the opener so Window.on_key_down / Window.on_key_up receive them.
+      const forwardCanvasKeyboardEvent = event => {
+        if (window.closed) return;
+        const forwarded = new KeyboardEvent(event.type, {
+          key: event.key,
+          code: event.code,
+          location: event.location,
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          metaKey: event.metaKey,
+          repeat: event.repeat,
+          isComposing: event.isComposing,
+          bubbles: true,
+          cancelable: true,
+        });
+        window.dispatchEvent(forwarded);
+      };
+      popup.addEventListener("keydown", forwardCanvasKeyboardEvent, true);
+      popup.addEventListener("keyup", forwardCanvasKeyboardEvent, true);
+      canvas.addEventListener("pointerdown", () => canvas.focus({ preventScroll: true }));
+      canvas.addEventListener("click", () => canvas.focus({ preventScroll: true }));
+      canvas.addEventListener("blur", () => {
+        // Keep keyboard focus on the canvas after interacting with the fullscreen UI.
+        if (!popup.closed && popup.document.activeElement === popup.document.body) {
+          canvas.focus({ preventScroll: true });
+        }
+      });
       window.__manimCanvasElement = canvas;
       window.__manimCanvasWindowClosed = () => {
         if (canvasPreviewWindow === popup) {
