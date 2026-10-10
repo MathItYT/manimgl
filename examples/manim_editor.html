@@ -891,11 +891,11 @@ class Demo(Scene):
         }
         const workerUrl = new URL("./vendor/pyright-worker.js", document.baseURI);
         pyrightWorkerUrl = workerUrl.href;
-        const stubsResponse = await fetch("./vendor/manimlib/__init__.pyi", { cache: "no-cache" });
-        if (!stubsResponse.ok) {
-          throw new Error("Could not load generated ManimGL type declarations: " + stubsResponse.status);
+        const sourceResponse = await fetch("./vendor/manimlib-source.zip", { cache: "no-cache" });
+        if (!sourceResponse.ok) {
+          throw new Error("Could not load the real ManimGL source package: " + sourceResponse.status);
         }
-        const manimlibStub = await stubsResponse.text();
+        const manimlibSource = await sourceResponse.arrayBuffer();
         pyrightProvider = new MonacoPyrightProvider(pyrightWorkerUrl, {
           features: {
             hover: true,
@@ -906,7 +906,8 @@ class Demo(Scene):
             findDefinition: true,
           },
           diagnosticsInterval: 500,
-          typeStubs: { "manimlib": { "__init__.pyi": manimlibStub } },
+          // These are the repository .py files, not generated declarations.
+          typeStubs: { "manimlib": manimlibSource },
         });
         await pyrightProvider.init(monaco);
         await pyrightProvider.setupDiagnostics(editor);
