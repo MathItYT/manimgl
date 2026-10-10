@@ -199,6 +199,8 @@
     #dependencies-description { padding:10px; color:var(--muted); font-size:11px; line-height:1.5; }
     #dependencies-form { display:flex; gap:6px; padding:8px; }
     #dependency-name { flex:1; min-width:0; padding:8px; border:1px solid var(--line); border-radius:5px; background:#0b0e14; color:var(--text); }
+    #dependency-no-deps-option { display:flex; align-items:center; gap:6px; padding:0 10px 10px; color:var(--muted); font-size:11px; cursor:pointer; }
+    #dependency-no-deps { margin:0; accent-color:var(--accent); }
     #dependencies-status { padding:0 10px 8px; color:var(--muted); font:11px/1.4 ui-monospace,monospace; }
     #dependencies-list { flex:1; min-height:0; overflow:auto; padding:7px; }
     .dependency-item { display:flex; align-items:center; gap:8px; padding:8px; border-bottom:1px solid var(--line); font:11px ui-monospace,monospace; }
@@ -381,6 +383,10 @@
           <input id="dependency-name" type="text" autocomplete="off" spellcheck="false" placeholder="Package name (e.g. networkx)" aria-label="Python package name" required>
           <button id="dependency-install" class="primary" type="submit">Install</button>
         </form>
+        <label id="dependency-no-deps-option" title="Install only the requested package; its dependencies will not be installed automatically.">
+          <input id="dependency-no-deps" type="checkbox">
+          Install without dependencies
+        </label>
         <div id="dependencies-status" role="status">Installed dependencies will appear here.</div>
         <div id="dependencies-list"></div>
       </div>
@@ -566,6 +572,7 @@ class Demo(Scene):
     const ASSET_DB_NAME = "manimgl-editor-assets";
     const ASSET_DB_VERSION = 4;
     const PYTHON_DEPENDENCIES_KEY = "manimgl-editor:python-dependencies:v1";
+    const PYTHON_NO_DEPS_KEY = "manimgl-editor:python-no-deps:v1";
     const ASSET_STORE_NAME = "assets";
     const PROJECT_STORE_NAME = "projects";
     const ACTIVE_PROJECT_KEY = "manimgl-editor:active-project:v1";
@@ -823,6 +830,7 @@ class Demo(Scene):
     const dependenciesStatus = document.getElementById("dependencies-status");
     const dependencyNameInput = document.getElementById("dependency-name");
     const dependencyInstallButton = document.getElementById("dependency-install");
+    const dependencyNoDepsInput = document.getElementById("dependency-no-deps");
     const installedDependencyNames = new Set();
     const installingDependencyNames = new Set();
     let pythonCompletionIndex = { modules: [], exports: {}, aliases: {} };
@@ -951,6 +959,23 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
       localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(getSavedPythonDependencies()));
     }
 
+    function getSavedPythonNoDeps() {
+      try {
+        const value = JSON.parse(localStorage.getItem(PYTHON_NO_DEPS_KEY) || "[]");
+        return Array.isArray(value)
+          ? [...new Set(value.filter(item => typeof item === "string" && item.trim()).map(item => item.trim()))]
+          : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function setPythonDependencyNoDeps(name, noDeps) {
+      const saved = getSavedPythonNoDeps().filter(item => item !== name);
+      if (noDeps) saved.push(name);
+      localStorage.setItem(PYTHON_NO_DEPS_KEY, JSON.stringify(saved));
+    }
+
     function renderPythonDependencies() {
       if (!dependenciesList) return;
       const names = getSavedPythonDependencies();
@@ -987,7 +1012,7 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
       }
     }
 
-    async function installPythonDependency(rawName, persist = true) {
+    async function installPythonDependency(rawName, persist = true, noDeps = dependencyNoDepsInput.checked) {
       if (!pyodide) throw new Error("Pyodide is not ready yet.");
       const name = String(rawName || "").trim();
       if (!name || name.length > 200 || /[\r\n\0]/.test(name)) {
@@ -1000,13 +1025,14 @@ json.dumps({"modules": sorted(_modules), "exports": _exports})
           saved.push(name);
           localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(saved));
         }
+        setPythonDependencyNoDeps(name, Boolean(noDeps));
       }
       installingDependencyNames.add(name);
       renderPythonDependencies();
-      dependenciesStatus.textContent = "Instalando " + name + " con micropip…";
+      dependenciesStatus.textContent = "Instalando " + name + (noDeps ? " sin dependencias…" : " con dependencias…");
       dependencyInstallButton.disabled = true;
       try {
-        await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ")");
+        await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ", deps=" + (noDeps ? "False" : "True") + ")");
         installedDependencyNames.add(name);
         await refreshPythonCompletionIndex();
         dependenciesStatus.textContent = name + " was installed successfully.";
@@ -2069,8 +2095,9 @@ _editor_scene_token = ${token}`;
       const name = dependencyNameInput.value.trim();
       if (!name) return;
       try {
-        await installPythonDependency(name);
+        await installPythonDependency(name, true, dependencyNoDepsInput.checked);
         dependencyNameInput.value = "";
+        dependencyNoDepsInput.checked = false;
       } catch (error) {
         showError(error);
       }
@@ -2420,9 +2447,10 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
 
         // Restore the user's package list after the editor's pinned runtime wheels.
         const savedDependencies = getSavedPythonDependencies();
+        const savedNoDeps = new Set(getSavedPythonNoDeps());
         for (const dependency of savedDependencies) {
           try {
-            await installPythonDependency(dependency, false);
+            await installPythonDependency(dependency, false, savedNoDeps.has(dependency));
           } catch (error) {
             console.warn("[micropip persistence] Could not restore " + dependency, error);
           }
