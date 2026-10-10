@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -345,82 +345,82 @@
 </head>
 <body>
   <div id="toolbar">
-    <button id="run" class="primary" disabled>▶ Ejecutar</button>
+    <button id="run" class="primary" disabled>▶ Run</button>
     <button id="run-record" class="record" disabled>● Ejecutar y grabar</button>
-    <button id="canvas-window" disabled>↗ Abrir canvas</button>
-    <button id="stop" disabled>■ Detener</button>
-    <button id="record" class="record" disabled>● Grabar</button>
-    <button id="record-stop" disabled>■ Finalizar grabación</button>
-    <label class="toolbar-option" title="Frecuencia de captura del vídeo">
+    <button id="canvas-window" disabled>↗ Open Canvas</button>
+    <button id="stop" disabled>■ Stop</button>
+    <button id="record" class="record" disabled>● Record</button>
+    <button id="record-stop" disabled>■ Stop Recording</button>
+    <label class="toolbar-option" title="Video capture frame rate">
       FPS
-      <select id="record-fps" aria-label="FPS de grabación">
+      <select id="record-fps" aria-label="Recording FPS">
         <option value="30">30</option>
         <option value="60" selected>60</option>
       </select>
     </label>
-    <label class="toolbar-option" title="Si está activado, la grabación continúa al terminar construct() para permitir interacción; si no, se detiene al terminar la escena.">
+    <label class="toolbar-option" title="When enabled, recording continues after construct() finishes to allow interaction; otherwise, it stops when the scene ends.">
       <input id="record-interactive" type="checkbox" checked>
-      Grabar modo interactivo
+      Record interactive mode
     </label>
-    <label class="toolbar-option" title="Mezcla el micrófono con el audio de la escena">
+    <label class="toolbar-option" title="Mix the microphone with the scene audio">
       <input id="record-mic" type="checkbox">
-      Micrófono
+      Microphone
     </label>
-    <button id="format">Transformar a web</button>
-    <button id="projects-toggle">Proyectos</button>
+    <button id="format">Convert to Web</button>
+    <button id="projects-toggle">Projects</button>
     <button id="assets-toggle">Assets</button>
-    <button id="fonts-toggle">Fuentes</button>
-    <button id="dependencies-toggle">Dependencias</button>
-    <div id="status">Inicializando Pyodide…</div>
+    <button id="fonts-toggle">Fonts</button>
+    <button id="dependencies-toggle">Dependencies</button>
+    <div id="status">Initializing Pyodide…</div>
   </div>
   <div id="main">
 
     <section id="editor-wrap">
       <div id="editor"></div>
-      <div id="projects-panel" aria-label="Proyectos Python">
+      <div id="projects-panel" aria-label="Projects Python">
         <div id="projects-header">
-          <div id="projects-title">Proyectos Python</div>
-          <button id="projects-close" title="Cerrar">×</button>
+          <div id="projects-title">Projects Python</div>
+          <button id="projects-close" title="Close">×</button>
         </div>
         <div id="projects-actions">
-          <button id="project-new" class="primary">＋ Nuevo</button>
-          <button id="project-rename">Renombrar</button>
-          <button id="project-delete">Eliminar</button>
+          <button id="project-new" class="primary">＋ New</button>
+          <button id="project-rename">Rename</button>
+          <button id="project-delete">Delete</button>
         </div>
         <div id="projects-list"></div>
       </div>
-      <div id="dependencies-panel" aria-label="Dependencias Python">
+      <div id="dependencies-panel" aria-label="Dependencies Python">
         <div id="dependencies-header">
-          <div id="dependencies-title">Dependencias Python</div>
-          <button id="dependencies-close" title="Cerrar">×</button>
+          <div id="dependencies-title">Dependencies Python</div>
+          <button id="dependencies-close" title="Close">×</button>
         </div>
-        <div id="dependencies-description">Instala paquetes de PyPI con micropip. Los nombres se guardan en este navegador y se reinstalan automáticamente al abrir el editor.</div>
+        <div id="dependencies-description">Install PyPI packages with micropip. Package names are saved in this browser and automatically reinstalled when the editor opens.</div>
         <form id="dependencies-form">
-          <input id="dependency-name" type="text" autocomplete="off" spellcheck="false" placeholder="Nombre del paquete (p. ej. networkx)" aria-label="Nombre del paquete Python" required>
-          <button id="dependency-install" class="primary" type="submit">Instalar</button>
+          <input id="dependency-name" type="text" autocomplete="off" spellcheck="false" placeholder="Package name (e.g. networkx)" aria-label="Python package name" required>
+          <button id="dependency-install" class="primary" type="submit">Install</button>
         </form>
-        <div id="dependencies-status" role="status">Las dependencias instaladas aparecerán aquí.</div>
+        <div id="dependencies-status" role="status">Installed dependencies will appear here.</div>
         <div id="dependencies-list"></div>
       </div>
-      <div id="fonts-panel" aria-label="Catálogo de fuentes">
+      <div id="fonts-panel" aria-label="Font Catalog">
         <div id="fonts-header">
-          <div id="fonts-title">Fuentes</div>
-          <button id="fonts-close" title="Cerrar">×</button>
+          <div id="fonts-title">Fonts</div>
+          <button id="fonts-close" title="Close">×</button>
         </div>
-        <div id="fonts-summary">Cargando el catálogo…</div>
-        <input id="fonts-search" type="search" placeholder="Buscar fuente…" aria-label="Buscar fuente">
+        <div id="fonts-summary">Loading font catalog…</div>
+        <input id="fonts-search" type="search" placeholder="Search fonts…" aria-label="Search fonts">
         <div id="fonts-list"></div>
         <div id="fonts-actions">
-          <button id="fonts-load-selected" class="primary">Cargar seleccionadas</button>
-          <button id="fonts-load-all">Cargar todo el catálogo</button>
+          <button id="fonts-load-selected" class="primary">Load Selected</button>
+          <button id="fonts-load-all">Load Entire Catalog</button>
         </div>
       </div>
       <div id="assets-panel">
         <div id="assets-header">
           <div id="assets-title">Assets</div>
-          <button id="asset-upload">＋ Importar</button>
-          <button id="asset-refresh" title="Actualizar">↻</button>
-          <button id="asset-close" title="Cerrar">×</button>
+          <button id="asset-upload">＋ Import</button>
+          <button id="asset-refresh" title="Refresh">↻</button>
+          <button id="asset-close" title="Close">×</button>
         </div>
         <div id="assets-list"></div>
       </div>
@@ -428,13 +428,13 @@
         accept="image/*,video/*,audio/*,.svg,.json,.txt,.csv,.ttf,.otf,.woff,.woff2">
     </section>
     <section id="preview-wrap">
-      <div id="preview"><div id="canvas-detached-notice" style="max-width:440px;text-align:center;color:#8e9aae;font:13px/1.6 ui-monospace,monospace">El canvas se renderiza en una ventana independiente.<br>Usa «Abrir canvas» para abrirlo y activar pantalla completa.</div></div>
-      <div class="label">Código web generado</div>
+      <div id="preview"><div id="canvas-detached-notice" style="max-width:440px;text-align:center;color:#8e9aae;font:13px/1.6 ui-monospace,monospace">The canvas renders in a separate window.<br>Use “Open Canvas” to open it and enable full-screen mode.</div></div>
+      <div class="label">Generated Web Code</div>
       <pre id="web-code"></pre>
       <pre id="errors"></pre>
     </section>
   </div>
-  <div id="loading"><div id="loading-box">Cargando…</div></div>
+  <div id="loading"><div id="loading-box">Loading…</div></div>
 
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js"></script>
   <script type="module">
@@ -462,7 +462,7 @@
       if (!window.__manimAudioContext) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (!AudioContextClass) {
-          throw new Error("Este navegador no admite Web Audio para grabar el audio de la escena.");
+          throw new Error("This browser does not support Web Audio for recording scene audio.");
         }
         window.__manimAudioContext = new AudioContextClass();
       }
@@ -516,13 +516,13 @@
 
       const popup = window.open("", "manimgl-canvas-preview", "popup=yes,width=1280,height=720");
       if (!popup) {
-        setStatus("El navegador bloqueó la ventana del canvas. Permite las ventanas emergentes para este sitio.");
+        setStatus("The browser blocked the canvas window. Allow pop-ups for this site.");
         return;
       }
       canvasPreviewWindow = popup;
       popup.document.open();
       popup.document.write(`<!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -541,15 +541,15 @@ button{border:0;border-radius:6px;padding:8px 13px;background:#2b3342;color:#fff
 </style>
 </head>
 <body>
-<div id="bar"><button id="fullscreen">⛶ Pantalla completa</button><span id="hint">Canvas Full HD · Activa pantalla completa antes de ejecutar</span></div>
+<div id="bar"><button id="fullscreen">⛶ Full Screen</button><span id="hint">Full HD Canvas · Enable full screen before running</span></div>
 <div id="stage"><canvas id="manim-canvas" width="1920" height="1080" tabindex="0"></canvas></div>
 <script>
 document.getElementById("fullscreen").addEventListener("click",async()=>{
   try{
     if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
     else await document.exitFullscreen();
-    document.getElementById("fullscreen").textContent=document.fullscreenElement?"⛶ Salir de pantalla completa":"⛶ Pantalla completa";
-  }catch(e){document.getElementById("hint").textContent="No se pudo activar pantalla completa: "+e.message}
+    document.getElementById("fullscreen").textContent=document.fullscreenElement?"⛶ Exit Full Screen":"⛶ Full Screen";
+  }catch(e){document.getElementById("hint").textContent="Could not enable full screen: "+e.message}
 });
 <\/script>
 </body></html>`);
@@ -579,7 +579,7 @@ document.getElementById("fullscreen").addEventListener("click",async()=>{
           window.__manimCanvasElement = null;
         }
       });
-      setStatus("Canvas Full HD desacoplado. El renderizado se ejecutará directamente en la ventana nueva.");
+      setStatus("Detached Full HD canvas. Rendering will run directly in the new window.");
     }
 
 
@@ -590,7 +590,7 @@ document.getElementById("fullscreen").addEventListener("click",async()=>{
 
 class Demo(Scene):
     def construct(self):
-        title = Text("Hola desde ManimGL")
+        title = Text("Hello from ManimGL")
         subtitle = Tex(r"f(x) = x^2 + 1")
 
         title.to_edge(UP)
@@ -620,7 +620,7 @@ class Demo(Scene):
         const saved = localStorage.getItem(CODE_STORAGE_KEY);
         return saved !== null ? saved : DEFAULT_SOURCE;
       } catch (error) {
-        console.warn("[editor persistence] No se pudo leer el código guardado:", error);
+        console.warn("[editor persistence] Could not read saved code:", error);
         return DEFAULT_SOURCE;
       }
     }
@@ -629,14 +629,14 @@ class Demo(Scene):
       try {
         localStorage.setItem(CODE_STORAGE_KEY, source);
       } catch (error) {
-        console.warn("[editor persistence] No se pudo guardar el código:", error);
+        console.warn("[editor persistence] Could not save code:", error);
       }
     }
 
     function openAssetDatabase() {
       return new Promise((resolve, reject) => {
         if (!("indexedDB" in window)) {
-          reject(new Error("IndexedDB no está disponible en este navegador."));
+          reject(new Error("IndexedDB is not available in this browser."));
           return;
         }
         const request = indexedDB.open(ASSET_DB_NAME, ASSET_DB_VERSION);
@@ -650,7 +650,7 @@ class Demo(Scene):
           }
         };
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error || new Error("No se pudo abrir IndexedDB."));
+        request.onerror = () => reject(request.error || new Error("Could not open IndexedDB."));
       });
     }
 
@@ -667,11 +667,11 @@ class Demo(Scene):
           return;
         }
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error || new Error("Error en IndexedDB."));
+        request.onerror = () => reject(request.error || new Error("IndexedDB error."));
         tx.oncomplete = () => db.close();
         tx.onerror = () => {
           db.close();
-          reject(tx.error || new Error("Error guardando assets."));
+          reject(tx.error || new Error("Error saving assets."));
         };
       }));
     }
@@ -704,11 +704,11 @@ class Demo(Scene):
           return;
         }
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error || new Error("Error en IndexedDB de proyectos."));
+        request.onerror = () => reject(request.error || new Error("Project IndexedDB error."));
         tx.oncomplete = () => db.close();
         tx.onerror = () => {
           db.close();
-          reject(tx.error || new Error("No se pudieron guardar los proyectos."));
+          reject(tx.error || new Error("Could not save projects."));
         };
       }));
     }
@@ -764,7 +764,7 @@ class Demo(Scene):
       if (!names.length) {
         const empty = document.createElement("div");
         empty.className = "asset-empty";
-        empty.textContent = "Todavía no has agregado dependencias.";
+        empty.textContent = "You have not added any dependencies yet.";
         dependenciesList.appendChild(empty);
       }
       for (const name of names) {
@@ -781,12 +781,12 @@ class Demo(Scene):
         const remove = document.createElement("button");
         remove.type = "button";
         remove.textContent = "Quitar";
-        remove.title = "Quitar de la lista persistente; no desinstala el paquete de esta sesión";
+        remove.title = "Remove from the saved list; this does not uninstall the package from the current session";
         remove.addEventListener("click", () => {
           const remaining = getSavedPythonDependencies().filter(item => item !== name);
           localStorage.setItem(PYTHON_DEPENDENCIES_KEY, JSON.stringify(remaining));
           renderPythonDependencies();
-          dependenciesStatus.textContent = name + " se quitará de las instalaciones automáticas futuras.";
+          dependenciesStatus.textContent = name + " will be removed from future automatic installations.";
         });
         row.append(label, state, remove);
         dependenciesList.appendChild(row);
@@ -794,10 +794,10 @@ class Demo(Scene):
     }
 
     async function installPythonDependency(rawName, persist = true) {
-      if (!pyodide) throw new Error("Pyodide todavía no está listo.");
+      if (!pyodide) throw new Error("Pyodide is not ready yet.");
       const name = String(rawName || "").trim();
       if (!name || name.length > 200 || /[\r\n\0]/.test(name)) {
-        throw new Error("Escribe un nombre de paquete válido de PyPI.");
+        throw new Error("Enter a valid PyPI package name.");
       }
       if (installingDependencyNames.has(name)) return;
       if (persist) {
@@ -814,9 +814,9 @@ class Demo(Scene):
       try {
         await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ")");
         installedDependencyNames.add(name);
-        dependenciesStatus.textContent = name + " se instaló correctamente.";
+        dependenciesStatus.textContent = name + " was installed successfully.";
       } catch (error) {
-        dependenciesStatus.textContent = "No se pudo instalar " + name + ": " + String(error?.message || error);
+        dependenciesStatus.textContent = "Could not install " + name + ": " + String(error?.message || error);
         throw error;
       } finally {
         installingDependencyNames.delete(name);
@@ -883,7 +883,7 @@ class Demo(Scene):
       if (!sorted.length) {
         const empty = document.createElement("div");
         empty.className = "project-empty";
-        empty.textContent = "Todavía no hay proyectos. Crea uno para empezar.";
+        empty.textContent = "There are no projects yet. Create one to get started.";
         projectsList.appendChild(empty);
       }
     }
@@ -892,8 +892,8 @@ class Demo(Scene):
       try {
         renderProjects(await getProjects());
       } catch (error) {
-        console.warn("[projects persistence] No se pudieron listar los proyectos:", error);
-        setStatus("No se pudieron leer los proyectos guardados.");
+        console.warn("[projects persistence] Could not list projects:", error);
+        setStatus("Could not read saved projects.");
       }
     }
 
@@ -904,12 +904,12 @@ class Demo(Scene):
       const sequence = ++projectSaveSequence;
       return saveProject(snapshot).then(() => {
         if (sequence === projectSaveSequence) {
-          setStatus("Proyecto «" + snapshot.name + "» guardado automáticamente.");
+          setStatus("Project “" + snapshot.name + "” saved automatically.");
           refreshProjects();
         }
       }).catch(error => {
-        console.warn("[projects persistence] No se pudo guardar el proyecto:", error);
-        setStatus("No se pudo guardar el proyecto; revisa el almacenamiento del navegador.");
+        console.warn("[projects persistence] Could not save project:", error);
+        setStatus("Could not save the project; check your browser storage.");
       });
     }
 
@@ -937,7 +937,7 @@ class Demo(Scene):
 
     async function createProject() {
       if (activeProject) await persistActiveProject();
-      const name = prompt("Nombre del nuevo proyecto:", "Proyecto nuevo");
+      const name = prompt("New project name:", "New project");
       if (name === null) return;
       const cleanName = name.trim() || "Proyecto sin nombre";
       const project = {
@@ -959,7 +959,7 @@ class Demo(Scene):
 
     async function renameProject() {
       if (!activeProject) return;
-      const name = prompt("Nuevo nombre del proyecto:", activeProject.name);
+      const name = prompt("New project name:", activeProject.name);
       if (name === null) return;
       activeProject.name = name.trim() || activeProject.name;
       await persistActiveProject();
@@ -971,10 +971,10 @@ class Demo(Scene):
       if (!activeProject) return;
       const projects = await getProjects();
       if (projects.length <= 1) {
-        setStatus("Debe quedar al menos un proyecto. Crea otro antes de eliminar este.");
+        setStatus("At least one project must remain. Create another project before deleting this one.");
         return;
       }
-      if (!confirm("¿Eliminar el proyecto «" + activeProject.name + "»? Esta acción no se puede deshacer.")) return;
+      if (!confirm("¿Delete el proyecto «" + activeProject.name + "”? This action cannot be undone.")) return;
       const removedId = activeProject.id;
       await deleteProject(removedId);
       const remaining = (await getProjects()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -1145,7 +1145,7 @@ class Demo(Scene):
       if (!names.length) {
         const empty = document.createElement("div");
         empty.className = "asset-empty";
-        empty.textContent = "No hay assets. Importa imágenes, videos, audio u otros archivos.";
+        empty.textContent = "No assets yet. Import images, videos, audio, or other files.";
         assetsList.appendChild(empty);
         return;
       }
@@ -1177,7 +1177,7 @@ class Demo(Scene):
               metadata.weight + " · " +
               formatBytes(stat.size);
           } else {
-            typeNode.textContent = "Fuente · " + formatBytes(stat.size);
+            typeNode.textContent = "Font · " + formatBytes(stat.size);
           }
         } else {
           typeNode.textContent = formatBytes(stat.size);
@@ -1194,14 +1194,14 @@ class Demo(Scene):
         });
         const deleteButton = document.createElement("button");
         deleteButton.textContent = "×";
-        deleteButton.title = "Eliminar asset";
+        deleteButton.title = "Delete asset";
         deleteButton.addEventListener("click", event => {
           event.stopPropagation();
           pyodide.FS.unlink(path);
           removeAssetObjectUrl(path);
           assetFontMetadata.delete(path);
           deletePersistedAsset(name).catch(error =>
-            console.warn("[asset persistence] No se pudo eliminar el asset guardado:", name, error)
+            console.warn("[asset persistence] Could not delete saved asset:", name, error)
           );
           refreshAssets();
         });
@@ -1240,8 +1240,8 @@ class Demo(Scene):
         try {
           await persistAsset(storedName, bytes);
         } catch (error) {
-          console.warn("[asset persistence] No se pudo guardar el asset:", storedName, error);
-          setStatus("Asset importado, pero no se pudo guardar de forma persistente: " + storedName);
+          console.warn("[asset persistence] Could not save asset:", storedName, error);
+          setStatus("Asset imported, but could not be saved persistently: " + storedName);
         }
 
         const extension = file.name.toLowerCase().split(".").pop();
@@ -1257,8 +1257,8 @@ class Demo(Scene):
       refreshAssets();
       if (imported) {
         setStatus(imported === 1
-          ? "Asset importado."
-          : imported + " assets importados.");
+          ? "Asset imported."
+          : imported + " assets imported.");
       }
     }
 
@@ -1353,14 +1353,14 @@ _candidates = [
 ]
 
 if not _candidates:
-    raise RuntimeError("El código no define una clase que herede de Scene.")
+    raise RuntimeError("The code does not define a class that inherits from Scene.")
 
 _scene_class = _candidates[-1]
 
 from js import window
 _canvas_target = window.__manimCanvasElement
 if _canvas_target is None:
-    raise RuntimeError("Abre primero la ventana del canvas con «Abrir canvas».")
+    raise RuntimeError("Open the canvas window with “Open Canvas” first.")
 _editor_scene = await run_scene_from_class(_scene_class, _canvas_target, size=(${canvasWidth}, ${canvasHeight}))
 _editor_scene_token = ${token}`;
     }
@@ -1378,7 +1378,7 @@ _editor_scene_token = ${token}`;
     async function startRecording() {
       if (mediaRecorder && mediaRecorder.state !== "inactive") return;
       if (!canvas || !canvas.captureStream || !window.MediaRecorder) {
-        throw new Error("Este navegador no admite la grabación de vídeo (MediaRecorder/captureStream).");
+        throw new Error("This browser does not support video recording (MediaRecorder/captureStream).");
       }
 
       let micStream = null;
@@ -1392,7 +1392,7 @@ _editor_scene_token = ${token}`;
 
         if (recordMicCheckbox.checked) {
           if (!navigator.mediaDevices?.getUserMedia) {
-            throw new Error("Este navegador no permite acceder al micrófono. Usa HTTPS o localhost.");
+            throw new Error("This browser cannot access the microphone. Use HTTPS or localhost.");
           }
           micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           recordingMicSource = context.createMediaStreamSource(micStream);
@@ -1405,7 +1405,7 @@ _editor_scene_token = ${token}`;
         stream = canvas.captureStream(0);
         const videoTrack = stream.getVideoTracks()[0];
         if (!videoTrack || typeof videoTrack.requestFrame !== "function") {
-          throw new Error("Este navegador no admite captura manual de fotogramas del canvas.");
+          throw new Error("This browser does not support manual canvas frame capture.");
         }
         window.__manimCaptureTrack = videoTrack;
         window.__manimRequestCaptureFrame = () => {
@@ -1434,14 +1434,14 @@ _editor_scene_token = ${token}`;
           if (event.data && event.data.size > 0) recordingChunks.push(event.data);
         });
         mediaRecorder.addEventListener("error", event => {
-          const error = event.error || new Error("Error durante la grabación.");
+          const error = event.error || new Error("Recording error.");
           showError(error);
-          setStatus("Error al grabar la escena.");
+          setStatus("Error recording the scene.");
         });
         mediaRecorder.addEventListener("start", () => {
           setStatus(recordMicCheckbox.checked
-            ? "Grabando escena y micrófono…"
-            : "Grabando escena y audio…");
+            ? "Recording scene and microphone…"
+            : "Recording scene and audio…");
         });
         mediaRecorder.addEventListener("stop", () => {
           const type = mediaRecorder?.mimeType || "video/webm";
@@ -1455,9 +1455,9 @@ _editor_scene_token = ${token}`;
             link.click();
             link.remove();
             setTimeout(() => URL.revokeObjectURL(url), 60_000);
-            setStatus("Grabación lista: se descargó el vídeo con audio.");
+            setStatus("Recording complete: the video with audio has been downloaded.");
           } else {
-            setStatus("La grabación terminó, pero no se generaron datos de vídeo.");
+            setStatus("Recording finished, but no video data was generated.");
           }
           for (const track of recordingStream?.getTracks() || []) track.stop();
           for (const track of recordingMicStream?.getTracks() || []) track.stop();
@@ -1479,7 +1479,7 @@ _editor_scene_token = ${token}`;
           recordingChunks = [];
           recordButton.disabled = false;
           recordButton.classList.remove("recording");
-          recordButton.textContent = "● Grabar";
+          recordButton.textContent = "● Record";
           recordStopButton.disabled = true;
           runRecordButton.disabled = !pyodide;
         });
@@ -1495,7 +1495,7 @@ _editor_scene_token = ${token}`;
         recordButton.textContent = "● Grabando…";
         recordStopButton.disabled = false;
         runRecordButton.disabled = true;
-        setStatus("Preparando grabación; comenzará con el primer fotograma…");
+        setStatus("Preparing recording; it will start with the first frame…");
       } catch (error) {
         if (stream) for (const track of stream.getTracks()) track.stop();
         if (micStream) for (const track of micStream.getTracks()) track.stop();
@@ -1515,7 +1515,7 @@ _editor_scene_token = ${token}`;
       if (mediaRecorder && mediaRecorder.state !== "inactive") {
         recordStopButton.disabled = true;
         mediaRecorder.stop();
-        setStatus("Finalizando y preparando el archivo de vídeo…");
+        setStatus("Finalizing and preparing the video file…");
       }
     }
 
@@ -1532,14 +1532,14 @@ _editor_scene_token = ${token}`;
         }
       } catch (error) {
         showError(error);
-        setStatus("No se pudo iniciar la grabación: " + String(error?.message || error));
+        setStatus("Could not start recording: " + String(error?.message || error));
       }
     }
 
     async function runScene(beforeRender = null) {
       if (!pyodide || running) return;
       if (!canvas || !canvasPreviewWindow || canvasPreviewWindow.closed) {
-        setStatus("Abre primero la ventana del canvas con «Abrir canvas».");
+        setStatus("Open the canvas window with “Open Canvas” first.");
         return;
       }
       running = true;
@@ -1550,7 +1550,7 @@ _editor_scene_token = ${token}`;
 
       try {
         resizeManimCanvas();
-        setStatus("Transformando código nativo → web…");
+        setStatus("Converting native code → web…");
         const source = editor.getValue();
         const transformed = await transformSource(source);
         webCode.textContent = transformed;
@@ -1560,12 +1560,12 @@ _editor_scene_token = ${token}`;
         // Start MediaRecorder after source transformation and runner construction,
         // immediately before ManimGL begins rendering the scene.
         if (beforeRender) await beforeRender();
-        setStatus("Esperando el primer fotograma para iniciar la grabación…");
+        setStatus("Waiting for the first frame to start recording…");
         await pyodide.runPythonAsync(runnerCode);
-        setStatus("Escena terminada.");
+        setStatus("Scene finished.");
       } catch (error) {
         showError(error);
-        setStatus("Error al ejecutar la escena.");
+        setStatus("Error running the scene.");
       } finally {
         running = false;
         runButton.disabled = false;
@@ -1579,10 +1579,10 @@ _editor_scene_token = ${token}`;
       try {
         const transformed = await transformSource(editor.getValue());
         webCode.textContent = transformed;
-        setStatus("Código transformado.");
+        setStatus("Code converted.");
       } catch (error) {
         showError(error);
-        setStatus("No se pudo transformar el código.");
+        setStatus("Could not convert the code.");
       }
     }
 
@@ -1608,19 +1608,19 @@ _editor_scene_token = ${token}`;
     document.getElementById("project-new").addEventListener("click", () => {
       createProject().catch(error => {
         console.error("[projects]", error);
-        setStatus("No se pudo crear el proyecto.");
+        setStatus("Could not create the project.");
       });
     });
     document.getElementById("project-rename").addEventListener("click", () => {
       renameProject().catch(error => {
         console.error("[projects]", error);
-        setStatus("No se pudo renombrar el proyecto.");
+        setStatus("Could not rename the project.");
       });
     });
     document.getElementById("project-delete").addEventListener("click", () => {
       removeActiveProject().catch(error => {
         console.error("[projects]", error);
-        setStatus("No se pudo eliminar el proyecto.");
+        setStatus("Could not delete the project.");
       });
     });
 
@@ -1640,7 +1640,7 @@ _editor_scene_token = ${token}`;
         await importAssets(assetInput.files);
       } catch (error) {
         showError(error);
-        setStatus("No se pudieron importar los assets.");
+        setStatus("Could not import assets.");
       } finally {
         assetInput.value = "";
       }
@@ -1676,7 +1676,7 @@ _editor_scene_token = ${token}`;
         await importAssets(event.dataTransfer.files);
       } catch (error) {
         showError(error);
-        setStatus("No se pudieron importar los assets.");
+        setStatus("Could not import assets.");
       }
     });
 
@@ -1695,7 +1695,7 @@ _editor_scene_token = ${token}`;
         if (imported) event.preventDefault();
       } catch (error) {
         showError(error);
-        setStatus("No se pudo importar el contenido del portapapeles.");
+        setStatus("Could not import clipboard contents.");
       }
     });
 
@@ -1728,7 +1728,7 @@ _editor_scene_token = ${token}`;
     recordButton.addEventListener("click", () => {
       startRecording().catch(error => {
         showError(error);
-        setStatus("No se pudo iniciar la grabación: " + String(error?.message || error));
+        setStatus("Could not start recording: " + String(error?.message || error));
       });
     });
     recordStopButton.addEventListener("click", stopRecording);
@@ -1737,7 +1737,7 @@ _editor_scene_token = ${token}`;
 
     async function initialize() {
       try {
-        setLoading(true, "Cargando Monaco…");
+        setLoading(true, "Loading Monaco…");
         await loadMonaco();
         editor = monaco.editor.create(document.getElementById("editor"), {
           value: getSavedSource(),
@@ -1777,22 +1777,22 @@ _editor_scene_token = ${token}`;
         });
         window.addEventListener("beforeunload", () => saveSource(editor.getValue()));
 
-        setLoading(true, "Cargando backends WASM…");
+        setLoading(true, "Loading backends WASM…");
         await initializeBrowserWasm();
 
         const pango = await import("./browser_wasm/dist/pango_text_loader.js");
         await pango.initializePangoText();
 
-        setStatus("Cargando las fuentes básicas…");
+        setStatus("Loading las fuentes básicas…");
 
         async function registerCatalogFont(fileName, url) {
           const response = await fetch(url, { cache: "force-cache" });
           if (!response.ok) {
-            throw new Error("HTTP " + response.status + " al cargar " + fileName);
+            throw new Error("HTTP " + response.status + " while loading " + fileName);
           }
 
           const bytes = await response.arrayBuffer();
-          if (bytes.byteLength < 4) throw new Error("Archivo de fuente vacío o incompleto");
+          if (bytes.byteLength < 4) throw new Error("Font file is empty or incomplete");
           const signature = new Uint8Array(bytes, 0, 4);
           const signatureText = Array.from(signature, byte =>
             byte.toString(16).padStart(2, "0")
@@ -1804,7 +1804,7 @@ _editor_scene_token = ${token}`;
                 signatureText.startsWith("74727565") ||
                 signatureText.startsWith("74797031") ||
                 signatureText.startsWith("74746366"))) {
-            throw new Error("El archivo .ttf no tiene una firma TrueType válida (firma: " + signatureText + ")");
+            throw new Error("The .ttf file does not have a valid TrueType signature (signature: " + signatureText + ")");
           }
 
           const result = { name: fileName, pango: null, typst: false, errors: [] };
@@ -1816,7 +1816,7 @@ _editor_scene_token = ${token}`;
           try {
             const compiler = window.manimTypstCompiler;
             if (!compiler || typeof compiler.addFonts !== "function") {
-              throw new Error("El compilador Typst del navegador no expone addFonts()");
+              throw new Error("The browser Typst compiler does not expose addFonts()");
             }
             await compiler.addFonts(...[new Uint8Array(bytes.slice(0))]);
             result.typst = true;
@@ -1824,7 +1824,7 @@ _editor_scene_token = ${token}`;
             result.errors.push("Typst: " + String(error?.message || error));
           }
           if (!result.pango && !result.typst) {
-            throw new Error(result.errors.join(" | ") || "Ningún motor aceptó la fuente");
+            throw new Error(result.errors.join(" | ") || "Neither engine accepted the font");
           }
           return result;
         }
@@ -1832,17 +1832,17 @@ _editor_scene_token = ${token}`;
         const fontManifestUrl = new URL("./fonts/fonts.json", document.baseURI);
         const fontManifestResponse = await fetch(fontManifestUrl, { cache: "force-cache" });
         if (!fontManifestResponse.ok) {
-          throw new Error("No se pudo cargar fonts/fonts.json: HTTP " + fontManifestResponse.status);
+          throw new Error("Could not load fonts/fonts.json: HTTP " + fontManifestResponse.status);
         }
         const fontManifest = await fontManifestResponse.json();
         if (!Array.isArray(fontManifest)) {
-          throw new Error("fonts/fonts.json debe contener un array de fuentes.");
+          throw new Error("fonts/fonts.json must contain an array of fonts.");
         }
         const availableFonts = fontManifest.filter(font =>
           font && typeof font.name === "string" && typeof font.url === "string"
         );
         if (!availableFonts.length) {
-          throw new Error("fonts/fonts.json no contiene fuentes disponibles.");
+          throw new Error("fonts/fonts.json contains no available fonts.");
         }
 
         const basicFontNames = new Set([
@@ -1871,7 +1871,7 @@ _editor_scene_token = ${token}`;
         function updateFontsSummary(message) {
           fontsSummary.textContent = message || (
             loadedFontNames.size + " de " + availableFonts.length +
-            " fuentes cargadas · Pango " + fontStats.pango + " · Typst " + fontStats.typst
+            " fonts loaded · Pango " + fontStats.pango + " · Typst " + fontStats.typst
           );
         }
 
@@ -1898,9 +1898,9 @@ _editor_scene_token = ${token}`;
             name.textContent = font.name;
             const state = document.createElement("small");
             state.textContent = loadedFontNames.has(fileName)
-              ? "Cargada"
+              ? "Loaded"
               : loadingFontNames.has(fileName)
-                ? "Cargando…"
+                ? "Loading…"
                 : failedFontNames.has(fileName) ? "Error" : "";
             row.append(checkbox, name, state);
             fragment.appendChild(row);
@@ -1909,7 +1909,7 @@ _editor_scene_token = ${token}`;
           if (!filtered.length) {
             const empty = document.createElement("div");
             empty.className = "asset-empty";
-            empty.textContent = "No hay fuentes que coincidan con la búsqueda.";
+            empty.textContent = "No fonts match your search.";
             fontsList.appendChild(empty);
           }
           updateFontsSummary();
@@ -1921,7 +1921,7 @@ _editor_scene_token = ${token}`;
           loadingFontNames.add(fileName);
           failedFontNames.delete(fileName);
           renderFontCatalog();
-          updateFontsSummary("Cargando " + fileName + "…");
+          updateFontsSummary("Loading " + fileName + "…");
           try {
             const url = new URL(font.url, fontManifestUrl).href;
             const result = await registerCatalogFont(fileName, url);
@@ -1952,7 +1952,7 @@ _editor_scene_token = ${token}`;
             return !loadedFontNames.has(fileName) && !loadingFontNames.has(fileName);
           });
           if (!pending.length) {
-            updateFontsSummary("Las fuentes seleccionadas ya están cargadas.");
+            updateFontsSummary("The selected fonts are already loaded.");
             return;
           }
           fontsLoadSelected.disabled = true;
@@ -1962,7 +1962,7 @@ _editor_scene_token = ${token}`;
             for (const font of pending) {
               await loadCatalogFont(font);
               done++;
-              updateFontsSummary("Cargando fuentes adicionales: " + done + "/" + pending.length);
+              updateFontsSummary("Loading fuentes adicionales: " + done + "/" + pending.length);
             }
           } finally {
             fontsLoadSelected.disabled = false;
@@ -1996,31 +1996,31 @@ _editor_scene_token = ${token}`;
         renderFontCatalog();
 
         // Cargar solo un conjunto pequeño de fuentes habituales. El resto del catálogo
-        // permanece disponible en "Fuentes" y se descarga únicamente cuando se solicita.
+        // permanece disponible en "Fonts" y se descarga únicamente cuando se solicita.
         const basicFonts = availableFonts.filter(font =>
           basicFontNames.has(font.fileName || font.name) ||
           basicFontNames.has(font.name)
         );
         for (const font of basicFonts) await loadCatalogFont(font);
         if (!loadedFontNames.size) {
-          throw new Error("No se pudo registrar ninguna de las fuentes básicas.");
+          throw new Error("Could not register any of the basic fonts.");
         }
         updateFontsSummary();
-        console.info("Catálogo de fuentes:", {
-          disponibles: availableFonts.length,
-          cargadasInicialmente: loadedFontNames.size,
-          cargadasEnPango: fontStats.pango,
-          cargadasEnTypst: fontStats.typst,
-          fallidas: Array.from(failedFontNames.entries()),
+        console.info("Font Catalog:", {
+          available: availableFonts.length,
+          loadedInitially: loadedFontNames.size,
+          loadedInPango: fontStats.pango,
+          loadedInTypst: fontStats.typst,
+          failed: Array.from(failedFontNames.entries()),
         });
-        setStatus("Fuentes básicas listas (" + loadedFontNames.size + "/" + availableFonts.length +
-          "). Las demás se cargan desde «Fuentes».");
+        setStatus("Fonts básicas listas (" + loadedFontNames.size + "/" + availableFonts.length +
+          "). Las demás se cargan desde «Fonts».");
         
-        setLoading(true, "Cargando Pyodide…");
+        setLoading(true, "Loading Pyodide…");
         const { loadPyodide } = await import(PYODIDE_URL);
         pyodide = await loadPyodide();
 
-        setStatus("Instalando dependencias Python…");
+        setStatus("Installing Python dependencies…");
         await pyodide.loadPackage([
           "micropip", "numpy", "scipy", "pillow", "sympy",
           "matplotlib", "pygments", "pyyaml", "tqdm", "fonttools",
@@ -2028,7 +2028,7 @@ _editor_scene_token = ${token}`;
 
         const manifestUrl = new URL(WHEEL_MANIFEST, document.baseURI);
         const manifest = await fetch(manifestUrl, { cache: "no-store" }).then(r => {
-          if (!r.ok) throw new Error("No se pudo cargar wheels.json: " + r.status);
+          if (!r.ok) throw new Error("Could not load wheels.json: " + r.status);
           return r.json();
         });
         const wheelBase = new URL(".", manifestUrl).href;
@@ -2045,12 +2045,12 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
           try {
             await installPythonDependency(dependency, false);
           } catch (error) {
-            console.warn("[micropip persistence] No se pudo restaurar " + dependency, error);
+            console.warn("[micropip persistence] Could not restore " + dependency, error);
           }
         }
         renderPythonDependencies();
 
-        setLoading(true, "Restaurando assets guardados…");
+        setLoading(true, "Restoring saved assets…");
         ensureAssetDir();
         try {
           const savedAssets = await loadPersistedAssets();
@@ -2066,13 +2066,13 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
                 await registerFontAsset(path);
                 assetFontMetadata.set(path, metadata);
               } catch (error) {
-                console.warn("[asset persistence] No se pudo restaurar la fuente:", savedAsset.name, error);
+                console.warn("[asset persistence] Could not restore la fuente:", savedAsset.name, error);
               }
             }
           }
         } catch (error) {
-          console.warn("[asset persistence] No se pudieron restaurar los assets:", error);
-          setStatus("No se pudieron restaurar los assets guardados; puedes importarlos de nuevo.");
+          console.warn("[asset persistence] Could not restore assets:", error);
+          setStatus("Could not restore saved assets; you can import them again.");
         }
         setLoading(false);
         runButton.disabled = false;
@@ -2081,12 +2081,12 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
         canvasWindowButton.disabled = false;
         refreshAssets();
         renderPythonDependencies();
-        setStatus("Listo. Código, assets y dependencias Python se guardan en este navegador.");
+        setStatus("Ready. Code, assets, and Python dependencies are saved in this browser.");
         await transformOnly();
       } catch (error) {
         showError(error);
         setLoading(false);
-        setStatus("Error de inicialización.");
+        setStatus("Initialization error.");
       }
     }
 
