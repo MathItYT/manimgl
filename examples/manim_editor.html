@@ -900,7 +900,7 @@ class Demo(Scene):
           "        except Exception:\n            pass\n" +
           "    _checker = pyflakes.checker.Checker(_tree, '<editor>', builtins=_star_names)\n" +
           "    for _message in _checker.messages:\n" +
-          "        if isinstance(_message, pyflakes.messages.ImportStarUsed) and _message.message_args[0] == 'manimlib':\n" +
+          "        if isinstance(_message, pyflakes.messages.ImportStarUsed):\n" +
           "            continue\n" +
           "        _diagnostics.append({'line': _message.lineno, 'column': getattr(_message, 'col', 0) + 1, 'message': _message.message % _message.message_args, 'severity': 'warning'})\n" +
           "json.dumps(_diagnostics)"
