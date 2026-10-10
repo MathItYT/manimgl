@@ -1790,7 +1790,7 @@ _editor_scene_token = ${token}`;
         recordButton.textContent = "● Grabando…";
         recordStopButton.disabled = false;
         runRecordButton.disabled = true;
-        setStatus("Preparing recording; it will start with the first frame…");
+        setStatus("Recording initialized; waiting for rendered frames…");
       } catch (error) {
         if (stream) for (const track of stream.getTracks()) track.stop();
         if (micStream) for (const track of micStream.getTracks()) track.stop();
