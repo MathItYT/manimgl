@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ManimGL — Monaco Web Editor</title>
   <script src="./coi-serviceworker.js"></script>
-  <script src="./vendor/pyright-provider.js"></script>
   <style>
     :root { color-scheme: dark; --bg:#0b0e14; --panel:#111620; --line:#252c38; --text:#e5e7eb; --muted:#8e9aae; --accent:#477dff; }
     * { box-sizing:border-box; }
@@ -969,18 +968,6 @@ class Demo(Scene):
         await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ")");
         installedDependencyNames.add(name);
         dependenciesStatus.textContent = name + " was installed successfully.";
-        if (pyrightReady) {
-          dependenciesStatus.textContent = name + " installed; indexing its Python API for autocomplete…";
-          try {
-            const indexedFiles = await refreshPythonLanguageServerRuntimeSources();
-            dependenciesStatus.textContent = name + " installed; Pyright indexed "
-              + indexedFiles + " updated Python source files.";
-          } catch (lspError) {
-            console.error("[Pyright LSP] Could not index newly installed dependency:", lspError);
-            dependenciesStatus.textContent = name + " installed, but Pyright could not refresh: "
-              + String(lspError?.message || lspError);
-          }
-        }
       } catch (error) {
         dependenciesStatus.textContent = "Could not install " + name + ": " + String(error?.message || error);
         throw error;
@@ -1028,9 +1015,6 @@ class Demo(Scene):
           await pyodide.runPythonAsync(
             "import ast, black, json, pyflakes.checker, pyflakes.messages"
           );
-          if (pyrightReady) {
-            await refreshPythonLanguageServerRuntimeSources();
-          }
         })().catch(error => {
           codeToolsPromise = null;
           throw error;
@@ -1039,278 +1023,159 @@ class Demo(Scene):
       return codeToolsPromise;
     }
 
-    let pyrightProvider = null;
-    let pyrightWorkerUrl = null;
-    let pyrightInitPromise = null;
-    let pyrightReady = false;
-    let pyrightRuntimeRefreshPromise = Promise.resolve();
-    const pyrightRuntimeSourceFingerprints = new Map();
+    // Lightweight, local-only Python completion. No language-server worker,
+    // copied site-packages, WASM filesystem mirror, or additional dependency.
+    function registerLightweightPythonCompletions() {
+      if (!monaco?.languages || window.__manimLightweightCompletionProvider) return;
 
-    function hashPythonSource(source) {
-      // Small deterministic fingerprint avoids retaining another copy of every
-      // installed library source just to notice newly added/changed files.
-      let hash = 2166136261;
-      for (let i = 0; i < source.length; i++) {
-        hash ^= source.charCodeAt(i);
-        hash = Math.imul(hash, 16777619);
-      }
-      return source.length + ":" + (hash >>> 0);
-    }
+      const CompletionItemKind = monaco.languages.CompletionItemKind;
+      const apiNames = [
+        "Scene", "InteractiveScene", "Mobject", "VMobject", "VGroup", "Group",
+        "VectorizedPoint", "Point", "Dot", "DashedDot", "SmallDot",
+        "Text", "Tex", "TexText", "MarkupText", "DecimalNumber", "Integer",
+        "ImageMobject", "SVGMobject", "PMobject",
+        "Circle", "Ellipse", "Annulus", "Sector", "Arc", "ArcBetweenPoints",
+        "Line", "DashedLine", "Arrow", "DoubleArrow", "Vector", "CurvedArrow",
+        "Polygon", "RegularPolygon", "Triangle", "Square", "Rectangle",
+        "RoundedRectangle", "RoundedSquare", "Brace", "BraceBetweenPoints",
+        "SurroundingRectangle", "BackgroundRectangle", "Cross", "Elbow",
+        "NumberLine", "NumberPlane", "Axes", "ThreeDAxes", "ComplexPlane",
+        "ParametricFunction", "FunctionGraph", "Graph", "BarChart", "Table",
+        "ValueTracker", "ComplexValueTracker", "VectorField", "StreamLines",
+        "ScreenRectangle", "FullScreenRectangle", "FadeIn", "FadeOut",
+        "ShowCreation", "ShowPartial", "Write", "Unwrite", "Create", "Uncreate",
+        "DrawBorderThenFill", "Transform", "ReplacementTransform", "TransformFromCopy",
+        "MoveToTarget", "ApplyMethod", "ApplyFunction", "AnimationGroup",
+        "LaggedStart", "LaggedStartMap", "Succession", "Wait", "GrowFromCenter",
+        "GrowFromEdge", "GrowArrow", "SpinInFromNothing", "Indicate", "Flash",
+        "CircleIndicate", "FocusOn", "Wiggle", "WiggleOutThenIn", "Rotate",
+        "Rotating", "Shift", "ScaleInPlace", "ShrinkToCenter", "ShowPassingFlash",
+        "ShowPassingFlashAround", "FadeTransform", "FadeTransformPieces",
+        "TransformMatchingShapes", "TransformMatchingTex", "ApplyWave", "Broadcast",
+        "Circumscribe", "ShowCreationThenDestruction", "always", "f_always",
+        "always_redraw", "always_rotate", "always_shift", "turn_animation_into_updater",
+        "linear", "smooth", "rush_into", "rush_from", "there_and_back",
+        "there_and_back_with_pause", "running_start", "wiggle", "double_smooth",
+        "rate_functions", "config", "ORIGIN", "UP", "DOWN", "LEFT", "RIGHT", "IN",
+        "OUT", "UL", "UR", "DL", "DR", "X_AXIS", "Y_AXIS", "Z_AXIS", "PI", "TAU",
+        "DEGREES", "RADIANS", "FRAME_WIDTH", "FRAME_HEIGHT", "WHITE", "BLACK",
+        "GREY", "GRAY", "DARK_GREY", "LIGHT_GREY", "RED", "GREEN", "BLUE", "YELLOW",
+        "ORANGE", "PURPLE", "PINK", "TEAL", "GOLD", "MAROON", "BLUE_A", "BLUE_B",
+        "BLUE_C", "BLUE_D", "BLUE_E", "GREEN_A", "GREEN_B", "GREEN_C", "GREEN_D",
+        "GREEN_E", "RED_A", "RED_B", "RED_C", "RED_D", "RED_E",
+      ];
+      const pythonKeywords = [
+        "and", "as", "assert", "async", "await", "break", "class", "continue",
+        "def", "del", "elif", "else", "except", "False", "finally", "for",
+        "from", "global", "if", "import", "in", "is", "lambda", "None",
+        "nonlocal", "not", "or", "pass", "raise", "return", "True", "try",
+        "while", "with", "yield",
+      ];
+      const builtins = [
+        "abs", "all", "any", "ascii", "bin", "bool", "breakpoint", "bytearray",
+        "bytes", "callable", "chr", "classmethod", "complex", "dict", "dir",
+        "divmod", "enumerate", "eval", "filter", "float", "format", "frozenset",
+        "getattr", "hasattr", "hash", "help", "hex", "id", "input", "int",
+        "isinstance", "issubclass", "iter", "len", "list", "map", "max",
+        "memoryview", "min", "next", "object", "oct", "open", "ord", "pow",
+        "print", "property", "range", "repr", "reversed", "round", "set",
+        "setattr", "slice", "sorted", "staticmethod", "str", "sum", "super",
+        "tuple", "type", "vars", "zip", "__import__",
+      ];
+      const snippets = [
+        ["class Demo(Scene):\n    def construct(self):\n        \${1:pass}", "Scene class"],
+        ["def construct(self):\n    \${1:pass}", "Construct method"],
+        ["self.play(\${1:ShowCreation(mobject)})", "Play animation"],
+        ["self.wait(\${1:1})", "Wait"],
+        ["self.add(\${1:mobject})", "Add mobject"],
+        ["self.remove(\${1:mobject})", "Remove mobject"],
+        ["Text(\${1:\"Hello\"})", "Text object"],
+        ["Tex(r\"\${1:x^2}\")", "LaTeX object"],
+        ["MathTex(r\"\${1:\\\\frac{a}{b}}\")", "Math LaTeX object"],
+        ["always_redraw(lambda: \${1:Circle()})", "Always-redrawn mobject"],
+        ["ValueTracker(\${1:0})", "Value tracker"],
+        ["\${1:mobject}.animate.\${2:shift}(RIGHT)", "Animate mobject"],
+      ];
 
-    function insertPythonSource(tree, relativePath, source) {
-      const parts = relativePath.split("/");
-      let node = tree;
-      for (const part of parts.slice(0, -1)) {
-        if (!node[part] || typeof node[part] !== "object"
-            || node[part] instanceof ArrayBuffer) {
-          node[part] = {};
-        }
-        node = node[part];
-      }
-      node[parts[parts.length - 1]] = source;
-    }
+      const globalItems = [
+        ...pythonKeywords.map(label => ({ label, kind: CompletionItemKind.Keyword })),
+        ...builtins.map(label => ({ label, kind: CompletionItemKind.Function })),
+        ...apiNames.map(label => ({ label, kind: CompletionItemKind.Class })),
+        ...snippets.map(([insertText, detail]) => ({
+          label: insertText.split("\n")[0].replace(/\$\{\d+:([^}]+)\}/g, "$1"),
+          insertText,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          kind: CompletionItemKind.Snippet,
+          detail,
+        })),
+      ];
+      const objectMembers = [
+        "add", "add_background_rectangle", "add_updater", "align_to", "arrange",
+        "arrange_in_grid", "become", "center", "clear_updaters", "copy", "fade",
+        "fade_in", "fade_out", "flip", "get_center", "get_color", "get_corner",
+        "get_critical_point", "get_height", "get_left", "get_right", "get_top",
+        "get_bottom", "get_width", "get_x", "get_y", "get_z", "get_start",
+        "get_end", "get_start_and_end", "get_family", "get_points", "get_vertices",
+        "get_boundary_point", "get_edge_center", "get_tex_string", "get_value",
+        "insert_n_mobjects", "match_height", "match_width", "match_x", "match_y",
+        "move_to", "next_to", "put_start_and_end_on", "remove", "remove_updater",
+        "replace", "rotate", "scale", "set_color", "set_opacity", "set_fill",
+        "set_stroke", "set_width", "set_height", "set_x", "set_y", "set_z", "shift",
+        "stretch", "stretch_to_fit_height", "stretch_to_fit_width", "surround",
+        "to_corner", "to_edge", "update", "wag", "save_state", "restore", "animate",
+      ];
 
-    async function collectPyrightRuntimeSources(forceAll = false) {
-      if (!pyodide) throw new Error("Pyodide is not ready yet.");
-      const indexResult = await pyodide.runPythonAsync(String.raw`
-import json
-import os
-import sys
+      window.__manimLightweightCompletionProvider =
+        monaco.languages.registerCompletionItemProvider("python", {
+          triggerCharacters: [".", "_"],
+          provideCompletionItems(model, position) {
+            const word = model.getWordUntilPosition(position);
+            const range = new monaco.Range(
+              position.lineNumber, word.startColumn,
+              position.lineNumber, word.endColumn
+            );
+            const linePrefix = model.getLineContent(position.lineNumber)
+              .slice(0, position.column - 1);
+            const memberAccess = /(?:[A-Za-z_]\w*|\))\s*\.\s*([A-Za-z_]\w*)?$/.test(linePrefix);
+            let candidates = memberAccess
+              ? objectMembers.map(label => ({ label, kind: CompletionItemKind.Method }))
+              : globalItems;
 
-_EXCLUDED_DIRS = {
-    "__pycache__", "test", "tests", "testing", "_tests", "testdata",
-    "benchmarks", "benchmark", "examples", "example", "docs", "doc",
-    "dist", "build", ".git",
-}
-_EXCLUDED_SUFFIXES = (".dist-info", ".egg-info", ".data", ".libs")
-_SOURCE_SUFFIXES = (".py", ".pyi")
-_roots = []
-for _entry in sys.path:
-    if not _entry or not os.path.isdir(_entry):
-        continue
-    _normal = os.path.normpath(_entry).replace("\\", "/")
-    if "site-packages" in _normal or "dist-packages" in _normal:
-        if _normal not in _roots:
-            _roots.append(_normal)
+            if (!memberAccess) {
+              const source = model.getValue();
+              const localNames = new Set();
+              const patterns = [
+                /^\s*(?:async\s+)?def\s+([A-Za-z_]\w*)/gm,
+                /^\s*class\s+([A-Za-z_]\w*)/gm,
+                /^\s*([A-Za-z_]\w*)\s*=/gm,
+                /^\s*([A-Za-z_]\w*)\s*[:,)]/gm,
+                /^\s*(?:from\s+[\w.]+\s+)?import\s+([A-Za-z_]\w*)/gm,
+              ];
+              for (const pattern of patterns) {
+                let match;
+                while ((match = pattern.exec(source))) localNames.add(match[1]);
+              }
+              for (const label of localNames) {
+                candidates.push({ label, kind: CompletionItemKind.Variable, detail: "Current file" });
+              }
+            }
 
-_files = []
-_seen = set()
-for _root in _roots:
-    try:
-        _entries = sorted(os.listdir(_root))
-    except OSError:
-        continue
-    for _name in _entries:
-        if (_name == "manimlib" or _name.startswith(".")
-            or _name in _EXCLUDED_DIRS
-            or _name.endswith(_EXCLUDED_SUFFIXES)):
-            continue
-        _candidate = os.path.join(_root, _name)
-        if os.path.isfile(_candidate):
-            if not (_name.endswith(_SOURCE_SUFFIXES) or _name == "py.typed"):
-                continue
-            if _name.endswith(".py") and os.path.isfile(_candidate[:-3] + ".pyi"):
-                continue
-            _relative = os.path.relpath(_candidate, _root).replace(os.sep, "/")
-            if _relative not in _seen:
-                _seen.add(_relative)
-                _files.append([_candidate, _relative])
-            continue
-        if not os.path.isdir(_candidate):
-            continue
-        for _directory, _subdirs, _filenames in os.walk(_candidate):
-            _subdirs[:] = sorted(
-                _subdir for _subdir in _subdirs
-                if _subdir not in _EXCLUDED_DIRS
-                and not _subdir.startswith(".")
-                and not _subdir.endswith(_EXCLUDED_SUFFIXES)
-            )
-            for _filename in sorted(_filenames):
-                if not (_filename.endswith(_SOURCE_SUFFIXES) or _filename == "py.typed"):
-                    continue
-                _path = os.path.join(_directory, _filename)
-                if _filename.endswith(".py") and os.path.isfile(_path[:-3] + ".pyi"):
-                    continue
-                _relative = os.path.relpath(_path, _root).replace(os.sep, "/")
-                if _relative in _seen:
-                    continue
-                _seen.add(_relative)
-                _files.append([_path, _relative])
-
-# Keep the Pyright mirror intentionally small. Copying every .py file from all
-# installed wheels duplicates a large part of site-packages in the worker's
-# Emscripten filesystem and can exhaust its ArrayBuffer/WASM memory.
-_PRIORITY_PACKAGES = [
-    "numpy", "scipy", "PIL", "sympy", "matplotlib", "wgpu",
-    "pygments", "yaml", "tqdm", "fontTools", "mpmath",
-    "contourpy", "kiwisolver", "dateutil", "cycler", "pyparsing",
-    "six", "packaging", "typing_extensions", "platformdirs",
-    "black", "pyflakes",
-]
-_PRIORITY = {name: index for index, name in enumerate(_PRIORITY_PACKAGES)}
-_MAX_FILES = 1000
-_MAX_TOTAL_BYTES = 6 * 1024 * 1024
-_MAX_PACKAGE_BYTES = 768 * 1024
-_MAX_STUB_BYTES = 64 * 1024
-_MAX_SOURCE_BYTES = 24 * 1024
-_candidates = []
-for _path, _relative in _files:
-    _base = os.path.basename(_path)
-    _is_stub = _base.endswith(".pyi")
-    _is_typed = _base == "py.typed"
-    _is_source = _base.endswith(".py")
-    if not (_is_stub or _is_typed or _is_source):
-        continue
-    try:
-        _size = os.path.getsize(_path)
-    except OSError:
-        continue
-    if _is_stub and _size > _MAX_STUB_BYTES:
-        continue
-    if _is_source and (_size > _MAX_SOURCE_BYTES or _relative.count("/") > 2):
-        continue
-    _top = _relative.split("/", 1)[0]
-    _package = _top[:-3] if _top.endswith(".py") else _top
-    _package_rank = _PRIORITY.get(_package, len(_PRIORITY))
-    _kind_rank = 0 if _is_stub else (1 if _is_typed else (2 if _base == "__init__.py" else 3))
-    _depth = _relative.count("/")
-    _candidates.append((_package_rank, _kind_rank, _depth, _relative, _path, _size, _package))
-_candidates.sort(key=lambda item: item[:4])
-_files = []
-_package_bytes = {}
-_total_bytes = 0
-for _, _, _, _relative, _path, _size, _package in _candidates:
-    if len(_files) >= _MAX_FILES or _total_bytes + _size > _MAX_TOTAL_BYTES:
-        continue
-    if _package_bytes.get(_package, 0) + _size > _MAX_PACKAGE_BYTES:
-        continue
-    _files.append([_path, _relative])
-    _package_bytes[_package] = _package_bytes.get(_package, 0) + _size
-    _total_bytes += _size
-
-json.dumps(_files)
-`);
-      const fileIndex = JSON.parse(String(indexResult));
-      const tree = {};
-      const changes = [];
-      for (const [absolutePath, rawRelativePath] of fileIndex) {
-        const relativePath = String(rawRelativePath).replace(/\\/g, "/");
-        let source;
-        try {
-          source = pyodide.FS.readFile(String(absolutePath), { encoding: "utf8" });
-          if (typeof source !== "string") source = String(source);
-        } catch (error) {
-          console.debug("[Pyright LSP] Skipping unreadable library source:", absolutePath, error);
-          continue;
-        }
-        const fingerprint = hashPythonSource(source);
-        const previous = pyrightRuntimeSourceFingerprints.get(relativePath);
-        if (!forceAll && previous === fingerprint) continue;
-
-        pyrightRuntimeSourceFingerprints.set(relativePath, fingerprint);
-        insertPythonSource(tree, relativePath, source);
-        changes.push({
-          path: relativePath,
-          type: previous === undefined ? 1 : 2,
-        });
-      }
-      return { tree, changes };
-    }
-
-    async function refreshPythonLanguageServerRuntimeSources() {
-      if (!pyrightReady || !pyrightProvider || !pyodide) return 0;
-      const update = async () => {
-        const snapshot = await collectPyrightRuntimeSources(false);
-        if (!snapshot.changes.length) return 0;
-
-        // This custom worker message mounts the changed files at the workspace
-        // root. They are not Python wheels: they are the actual .py/.pyi sources
-        // already installed in this Pyodide runtime.
-        pyrightProvider.lspClient.worker.postMessage({
-          type: "__manimgl_update_runtime_sources",
-          userFiles: snapshot.tree,
-        });
-        await pyrightProvider.lspClient.connection.sendNotification(
-          "workspace/didChangeWatchedFiles",
-          {
-            changes: snapshot.changes.map(change => ({
-              uri: "file:///" + change.path.split("/").map(encodeURIComponent).join("/"),
-              type: change.type,
-            })),
-          }
-        );
-        if (editor) {
-          await pyrightProvider.lspClient.updateDocVersion(editor.getValue());
-        }
-        console.info("[Pyright LSP] Indexed runtime Python files:", snapshot.changes.length);
-        return snapshot.changes.length;
-      };
-
-      const current = pyrightRuntimeRefreshPromise.then(update, update);
-      pyrightRuntimeRefreshPromise = current.catch(() => {});
-      return current;
-    }
-
-    async function initializePythonLanguageServer() {
-      if (pyrightInitPromise) return pyrightInitPromise;
-      pyrightInitPromise = (async () => {
-        if (!pyodide) {
-          throw new Error("Pyodide must finish installing Python dependencies before Pyright starts.");
-        }
-        setStatus("Loading Python language server and indexing installed dependencies…");
-        const MonacoPyrightProvider = window.MonacoPyrightProvider;
-        if (typeof MonacoPyrightProvider !== "function") {
-          throw new Error("The locally bundled Pyright provider is missing. Rebuild the Pyright browser bundle and reload the editor.");
-        }
-        const workerUrl = new URL("./vendor/pyright-worker.js", document.baseURI);
-        pyrightWorkerUrl = workerUrl.href;
-        const sourceResponse = await fetch("./vendor/manimlib-source.zip", { cache: "no-cache" });
-        if (!sourceResponse.ok) {
-          throw new Error("Could not load the real ManimGL source package: " + sourceResponse.status);
-        }
-        const manimlibSource = await sourceResponse.arrayBuffer();
-        // Start Pyright with ManimGL only. Copying third-party sources into
-        // the worker before init can allocate more memory than the browser has.
-        // The bounded runtime index is mounted after the LSP is already ready.
-        pyrightProvider = new MonacoPyrightProvider(pyrightWorkerUrl, {
-          features: {
-            hover: true,
-            completion: true,
-            signatureHelp: true,
-            diagnostic: true,
-            rename: true,
-            findDefinition: true,
-          },
-          diagnosticsInterval: 500,
-          typeStubs: {
-            manimlib: manimlibSource,
+            const prefix = word.word.toLowerCase();
+            const seen = new Set();
+            const suggestions = [];
+            for (const item of candidates) {
+              const label = typeof item.label === "string" ? item.label : item.label.label;
+              if (!label || seen.has(label) || !label.toLowerCase().startsWith(prefix)) continue;
+              seen.add(label);
+              suggestions.push({
+                ...item,
+                range,
+                sortText: label.toLowerCase().startsWith(prefix) ? "0" + label : "1" + label,
+              });
+            }
+            return { suggestions };
           },
         });
-        await pyrightProvider.init(monaco);
-        await pyrightProvider.setupDiagnostics(editor);
-        pyrightReady = true;
-        console.info("[Pyright LSP] Initialized with ManimGL. Starting bounded dependency indexing in the background.");
-        setStatus("Python language server ready; indexing installed dependencies…");
-        // Do not make editor startup wait for third-party source indexing. The
-        // editor remains usable with ManimGL completions while this runs.
-        void refreshPythonLanguageServerRuntimeSources().then(indexedFiles => {
-          if (pyrightReady) {
-            console.info("[Pyright LSP] Runtime source indexing finished.", {
-              indexedFiles,
-            });
-            setStatus("Python language server ready (ManimGL and available dependency sources indexed).");
-          }
-        }).catch(error => {
-          console.warn("[Pyright LSP] Third-party source indexing failed; keeping ManimGL language features enabled.", error);
-        });
-      })().catch(error => {
-        pyrightReady = false;
-        pyrightInitPromise = null;
-        console.error("[Pyright LSP]", error);
-        setStatus("Python language server failed to load: " + String(error?.message || error));
-        throw error;
-      });
-      return pyrightInitPromise;
     }
 
     async function lintPythonCode() {
@@ -2433,7 +2298,7 @@ _editor_scene_token = ${token}`;
           wordWrap: "off",
           bracketPairColorization: { enabled: true },
         });
-
+        registerLightweightPythonCompletions();
 
         await initializeProjects();
 
@@ -2732,14 +2597,6 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
           }
         }
         renderPythonDependencies();
-
-        // Pyright must start after Pyodide has installed its real runtime
-        // libraries; its worker cannot see the main thread's virtual FS itself.
-        try {
-          await initializePythonLanguageServer();
-        } catch (error) {
-          console.warn("[Pyright LSP] Continuing without language features:", error);
-        }
 
         setLoading(true, "Restoring saved assets…");
         ensureAssetDir();
