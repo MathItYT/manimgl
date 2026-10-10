@@ -863,10 +863,10 @@ class Demo(Scene):
         codeToolsPromise = (async () => {
           setStatus("Loading Python linting and formatting tools…");
           await pyodide.runPythonAsync(
-            "import micropip\\nawait micropip.install(['black', 'pyflakes'])"
+            "import micropip\nawait micropip.install(['black', 'pyflakes'])"
           );
           await pyodide.runPythonAsync(
-            "import ast, black, io, json, pyflakes.api\\nfrom pyflakes.reporter import Reporter"
+            "import ast, black, io, json, pyflakes.api\nfrom pyflakes.reporter import Reporter"
           );
         })().catch(error => {
           codeToolsPromise = null;
@@ -885,22 +885,22 @@ class Demo(Scene):
         await ensurePythonCodeTools();
         if (requestId !== lintRequestId) return;
         const result = await pyodide.runPythonAsync(
-          "import ast, io, json, pyflakes.api\\n" +
-          "from pyflakes.reporter import Reporter\\n" +
-          "_source = " + JSON.stringify(source) + "\\n" +
-          "_diagnostics = []\\n" +
-          "try:\\n    ast.parse(_source)\\n" +
-          "except SyntaxError as _error:\\n" +
-          "    _diagnostics.append({'line': _error.lineno or 1, 'column': _error.offset or 1, 'message': _error.msg, 'severity': 'error'})\\n" +
-          "else:\\n" +
-          "    _lint_out = io.StringIO()\\n    _lint_err = io.StringIO()\\n" +
-          "    _reporter = Reporter(_lint_out, _lint_err)\\n" +
-          "    pyflakes.api.check(_source, '<editor>', _reporter)\\n" +
-          "    for _line in _lint_out.getvalue().splitlines():\\n" +
-          "        _parts = _line.split(':', 3)\\n" +
-          "        if len(_parts) == 4 and _parts[0] == '<editor>':\\n" +
-          "            try:\\n                _diagnostics.append({'line': int(_parts[1]), 'column': int(_parts[2]), 'message': _parts[3].strip(), 'severity': 'warning'})\\n" +
-          "            except ValueError:\\n                pass\\n" +
+          "import ast, io, json, pyflakes.api\n" +
+          "from pyflakes.reporter import Reporter\n" +
+          "_source = " + JSON.stringify(source) + "\n" +
+          "_diagnostics = []\n" +
+          "try:\n    ast.parse(_source)\n" +
+          "except SyntaxError as _error:\n" +
+          "    _diagnostics.append({'line': _error.lineno or 1, 'column': _error.offset or 1, 'message': _error.msg, 'severity': 'error'})\n" +
+          "else:\n" +
+          "    _lint_out = io.StringIO()\n    _lint_err = io.StringIO()\n" +
+          "    _reporter = Reporter(_lint_out, _lint_err)\n" +
+          "    pyflakes.api.check(_source, '<editor>', _reporter)\n" +
+          "    for _line in _lint_out.getvalue().splitlines():\n" +
+          "        _parts = _line.split(':', 3)\n" +
+          "        if len(_parts) == 4 and _parts[0] == '<editor>':\n" +
+          "            try:\n                _diagnostics.append({'line': int(_parts[1]), 'column': int(_parts[2]), 'message': _parts[3].strip(), 'severity': 'warning'})\n" +
+          "            except ValueError:\n                pass\n" +
           "json.dumps(_diagnostics)"
         );
         if (requestId !== lintRequestId) return;
@@ -949,10 +949,10 @@ class Demo(Scene):
       try {
         await ensurePythonCodeTools();
         const result = await pyodide.runPythonAsync(
-          "import black, json\\n" +
-          "_source = " + JSON.stringify(source) + "\\n" +
-          "try:\\n    _formatted = black.format_file_contents(_source, fast=False, mode=black.FileMode())\\n" +
-          "except black.NothingChanged:\\n    _formatted = _source\\n" +
+          "import black, json\n" +
+          "_source = " + JSON.stringify(source) + "\n" +
+          "try:\n    _formatted = black.format_file_contents(_source, fast=False, mode=black.FileMode())\n" +
+          "except black.NothingChanged:\n    _formatted = _source\n" +
           "json.dumps(_formatted)"
         );
         const formatted = JSON.parse(String(result));
