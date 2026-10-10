@@ -887,23 +887,33 @@ class Scene(object):
             self.checkpoints.append((self.get_state(ignore=[self.camera.frame]), animations, duration, None))
         # requestAnimationFrame is the browser clock. The configured render FPS
         # controls update granularity, not elapsed wall-clock time.
-        start_time = await self._browser_frame()
-        last_t = 0.0
-        while last_t < duration:
+        last_frame_time = await self._browser_frame()
+        elapsed = 0.0
+        while elapsed < duration:
             self.window.poll_events()
             if self.should_end_playing:
                 self.should_end_playing = False
                 break
             frame_time = await self._browser_frame()
-            t = min(max(frame_time - start_time, 0.0), duration)
-            dt = float(t - last_t)
+            wall_dt = max(0.0, float(frame_time - last_frame_time))
+            last_frame_time = frame_time
+            dt = min(wall_dt, max(0.0, duration - elapsed))
             if dt <= 0:
                 continue
-            last_t = float(t)
+
+            # The scene clock is held if an audio event is behind. Advance the
+            # wall-clock sample regardless, but do not accumulate held time into
+            # the animation when audio catches up.
+            if not browser_audio.can_advance_scene(
+                self.time, self.time + dt, self._interactive_sound_events
+            ):
+                continue
+
+            elapsed += dt
             self.increment_time(dt)
             for animation in animations:
                 animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
-                animation.interpolate(float(t) / animation.run_time)
+                animation.interpolate(float(elapsed) / animation.run_time)
             await self.update_mobjects_async(dt)
             browser_audio.sync(self.time, self._interactive_sound_events)
             self.draw_frame(dt, force_draw=True)
@@ -956,9 +966,9 @@ class Scene(object):
             # Do not advance by a fixed 1 / camera.fps per requestAnimationFrame:
             # the browser may deliver RAF callbacks at a different rate (e.g.
             # 60 Hz while camera.fps is 30), which made waits finish too early.
-            start_time = await self._browser_frame()
-            last_t = 0.0
-            while last_t < duration:
+            last_frame_time = await self._browser_frame()
+            elapsed = 0.0
+            while elapsed < duration:
                 self.window.poll_events()
                 if self.should_end_playing and register:
                     self.should_end_playing = False
@@ -973,12 +983,18 @@ class Scene(object):
                     return
 
                 frame_time = await self._browser_frame()
-                t = min(max(float(frame_time - start_time), 0.0), duration)
-                dt = t - last_t
+                wall_dt = max(0.0, float(frame_time - last_frame_time))
+                last_frame_time = frame_time
+                dt = min(wall_dt, max(0.0, duration - elapsed))
                 if dt <= 0:
                     continue
-                last_t = t
 
+                if not browser_audio.can_advance_scene(
+                    self.time, self.time + dt, self._interactive_sound_events
+                ):
+                    continue
+
+                elapsed += dt
                 await self.update_frame_async(dt, force_draw=True)
                 browser_audio.sync(self.time, self._interactive_sound_events)
                 self.emit_frame()
@@ -1083,27 +1099,109 @@ class Scene(object):
         self.file_writer.add_sound(sound_file, time, gain, gain_to_background)
 
     async def browser_playback_loop(self, repeat: bool = False) -> None:
-        """Replay the checkpoint timeline without blocking the browser."""
+        """Play the checkpoint timeline forward without seeking every frame.
+
+        Audio and scene time share an advancing clock: if audio is ahead, its
+        player is paused; if audio is behind, scene rendering is held until it
+        catches up. Scene.seek/Scene.seek_async are not used for synchronization.
+        """
         if sys.platform != "emscripten":
             raise RuntimeError("browser_playback_loop() is only available in Pyodide")
         from manimlib.utils.browser_scheduler import next_animation_frame
+
+        if not self.checkpoints:
+            browser_audio.stop_all()
+            await self.update_frame_async(force_draw=True)
+            return
+
+        timeline_end = max(
+            [float(self.max_time)]
+            + [
+                float(state.time) + max(0.0, float(duration))
+                for state, _animations, duration, _stop_condition in self.checkpoints
+            ]
+        )
+
         while not self.is_window_closing():
-            await self.seek_async(0.0)
+            browser_audio.stop_all()
             self.should_end_playing = False
-            started_at = await next_animation_frame()
-            while not self.is_window_closing():
-                if self.should_end_playing:
-                    self.should_end_playing = False
+
+            # Restore the timeline's initial state once, not once per frame.
+            active_index = 0
+            for index, (state, _animations, _duration, _stop_condition) in enumerate(self.checkpoints):
+                if state.time <= 0.0:
+                    active_index = index
+                else:
                     break
+
+            state, animations, duration, _stop_condition = self.checkpoints[active_index]
+            self.restore_state(state)
+            scene_time = 0.0
+            self.time = scene_time
+            self.current_checkpoint = active_index
+            for animation in animations:
+                animation.interpolate(0.0)
+            await self.update_mobjects_async(0.0)
+            self.draw_frame(force_draw=True)
+            browser_audio.sync(scene_time, self._interactive_sound_events)
+
+            previous_frame_time = await next_animation_frame()
+            while (
+                not self.is_window_closing()
+                and scene_time < timeline_end
+                and not self.should_end_playing
+            ):
                 frame_time = await next_animation_frame()
-                elapsed = frame_time - started_at
-                if elapsed >= self.max_time:
-                    await self.seek_async(self.max_time, sync_audio=False)
+                dt = max(0.0, float(frame_time - previous_frame_time))
+                previous_frame_time = frame_time
+                if dt <= 0.0:
+                    continue
+
+                proposed_time = min(scene_time + dt, timeline_end)
+                if proposed_time <= scene_time:
                     break
-                await self.seek_async(elapsed, sync_audio=False)
-                browser_audio.sync(elapsed, self._interactive_sound_events)
-            if not repeat:
+
+                # If the proposed scene time would pass an audio media clock,
+                # keep the current frame/time. If audio is ahead, BrowserAudio
+                # pauses it until scene time catches up.
+                if not browser_audio.can_advance_scene(
+                    scene_time, proposed_time, self._interactive_sound_events
+                ):
+                    continue
+
+                scene_dt = proposed_time - scene_time
+                next_index = active_index
+                for index, (checkpoint_state, _anims, _duration, _condition) in enumerate(self.checkpoints):
+                    if checkpoint_state.time <= proposed_time:
+                        next_index = index
+                    else:
+                        break
+
+                if next_index != active_index:
+                    state, animations, duration, _stop_condition = self.checkpoints[next_index]
+                    self.restore_state(state)
+                    active_index = next_index
+                    self.current_checkpoint = active_index
+
+                scene_time = proposed_time
+                self.time = scene_time
+                if animations:
+                    segment_duration = max(0.0, float(duration))
+                    alpha = (
+                        float(np.clip((scene_time - state.time) / segment_duration, 0.0, 1.0))
+                        if segment_duration > 0.0 else 1.0
+                    )
+                    for animation in animations:
+                        animation.interpolate(alpha)
+
+                await self.update_mobjects_async(scene_dt)
+                self.draw_frame(scene_dt, force_draw=True)
+                browser_audio.sync(scene_time, self._interactive_sound_events)
+
+            self.should_end_playing = False
+            if not repeat or self.is_window_closing():
                 break
+
         browser_audio.stop_all()
 
     async def browser_interaction_loop(self) -> None:
