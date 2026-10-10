@@ -1705,11 +1705,10 @@ _editor_scene_token = ${token}`;
         }
         window.__manimCaptureTrack = videoTrack;
         window.__manimRequestCaptureFrame = () => {
-          const targetCanvas = window.__manimCanvasElement;
-          const view = targetCanvas?.ownerDocument?.defaultView || window;
-          view.requestAnimationFrame(() => {
-            if (mediaRecorder?.state === "recording") videoTrack.requestFrame();
-          });
+          // Window.draw() calls this during the frame's draw/present cycle.
+          // Request capture synchronously so it is armed for that presentation,
+          // instead of queuing a popup rAF that may run after recording stops.
+          if (mediaRecorder?.state === "recording") videoTrack.requestFrame();
         };
         for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
         const mimeType = getRecordingMimeType();
