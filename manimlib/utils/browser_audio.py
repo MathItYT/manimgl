@@ -152,13 +152,19 @@ class BrowserAudio:
         scene_is_waiting = False
         tolerance = self.SYNC_TOLERANCE
 
-        for event_time, sound_file, _duration in events:
+        for event_index, (event_time, sound_file, _duration) in enumerate(events):
             event_time = float(event_time)
             if proposed_time < event_time:
                 continue
 
             audio = self._players.get(sound_file)
             if audio is None or bool(audio.ended):
+                continue
+
+            # A single HTMLAudioElement is reused per file. Only compare it with
+            # the event which most recently activated that element.
+            event_key = f"{event_index}:{event_time:.9f}:{sound_file}"
+            if str(getattr(audio, "manimEventKey", "")) != event_key:
                 continue
 
             try:
