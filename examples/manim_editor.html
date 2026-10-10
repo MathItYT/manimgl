@@ -876,126 +876,100 @@ class Demo(Scene):
       return codeToolsPromise;
     }
 
-    async function queryJedi(source, line, column, mode) {
-      await ensurePythonCodeTools();
-      const result = await pyodide.runPythonAsync(
-        "import json, jedi\n" +
-        "_source = " + JSON.stringify(source) + "\n" +
-        "_line = " + Number(line) + "\n" +
-        "_column = " + Number(column) + "\n" +
-        "_mode = " + JSON.stringify(mode) + "\n" +
-        "_script = jedi.Script(code=_source, path='main.py')\n" +
-        "_items = []\n" +
-        "if _mode == 'completion':\n" +
-        "    for _item in _script.complete(_line, _column):\n" +
-        "        _items.append({'label': _item.name, 'insertText': _item.name, 'kind': _item.type, 'detail': _item.description, 'documentation': _item.docstring(raw=False)})\n" +
-        "elif _mode == 'signature':\n" +
-        "    for _signature in _script.get_signatures(_line, _column):\n" +
-        "        _params = [{'label': _param.name, 'documentation': _param.description} for _param in _signature.params]\n" +
-        "        _items.append({'label': _signature.to_string(), 'documentation': _signature.docstring(raw=False), 'parameters': _params, 'activeParameter': max(0, _signature.index or 0)})\n" +
-        "elif _mode == 'hover':\n" +
-        "    for _item in _script.infer(_line, _column):\n" +
-        "        _doc = _item.docstring(raw=False)\n" +
-        "        _items.append({'label': _item.description, 'documentation': _doc})\n" +
-        "        if len(_items) >= 3: break\n" +
-        "json.dumps(_items)"
-      );
-      return JSON.parse(String(result));
-    }
+    let pyrightProvider = null;
+    let pyrightWorkerUrl = null;
+    let pyrightInitPromise = null;
 
-    function registerPythonLanguageFeatures() {
-      if (window.__manimJediProvidersRegistered) return;
-      window.__manimJediProvidersRegistered = true;
-      monaco.languages.registerCompletionItemProvider("python", {
-        triggerCharacters: [".", "_"],
-        provideCompletionItems: async (model, position) => {
-          try {
-            const items = await queryJedi(
-              model.getValue(), position.lineNumber, position.column - 1, "completion"
-            );
-            const kindMap = {
-              function: monaco.languages.CompletionItemKind.Function,
-              class: monaco.languages.CompletionItemKind.Class,
-              module: monaco.languages.CompletionItemKind.Module,
-              instance: monaco.languages.CompletionItemKind.Variable,
-              statement: monaco.languages.CompletionItemKind.Keyword,
-              keyword: monaco.languages.CompletionItemKind.Keyword,
-              param: monaco.languages.CompletionItemKind.Variable,
-              property: monaco.languages.CompletionItemKind.Property,
-            };
-            return {
-              suggestions: items.map(item => ({
-                label: item.label,
-                insertText: item.insertText,
-                kind: kindMap[item.kind] || monaco.languages.CompletionItemKind.Text,
-                detail: item.detail || "",
-                documentation: item.documentation || "",
-                range: new monaco.Range(
-                  position.lineNumber,
-                  position.column - (model.getWordUntilPosition(position).word.length),
-                  position.lineNumber,
-                  position.column
-                ),
-                sortText: item.label,
-              })),
-            };
-          } catch (error) {
-            console.warn("[Jedi completion]", error);
-            return { suggestions: [] };
-          }
-        },
+    async function initializePythonLanguageServer() {
+      if (pyrightInitPromise) return pyrightInitPromise;
+      pyrightInitPromise = (async () => {
+        setStatus("Loading Python language server (Pyright)…");
+        const moduleUrl = "https://esm.sh/monaco-pyright-lsp@0.1.7?bundle";
+        const workerUrl = "https://cdn.jsdelivr.net/npm/monaco-pyright-lsp@0.1.7/dist/worker.js";
+        const [module, workerResponse] = await Promise.all([
+          import(moduleUrl),
+          fetch(workerUrl, { cache: "force-cache" }),
+        ]);
+        if (!workerResponse.ok) {
+          throw new Error("Could not download the Pyright language-server worker: " + workerResponse.status);
+        }
+        const workerSource = await workerResponse.blob();
+        pyrightWorkerUrl = URL.createObjectURL(
+          new Blob([workerSource], { type: "text/javascript" })
+        );
+        const MonacoPyrightProvider = module.MonacoPyrightProvider;
+        if (typeof MonacoPyrightProvider !== "function") {
+          throw new Error("The Pyright language-server package did not export MonacoPyrightProvider.");
+        }
+        pyrightProvider = new MonacoPyrightProvider(pyrightWorkerUrl, {
+          features: {
+            hover: true,
+            completion: true,
+            signatureHelp: true,
+            diagnostic: true,
+            rename: true,
+            findDefinition: true,
+          },
+          diagnosticsInterval: 500,
+          typeStubs: {
+            "manimlib/__init__.pyi": `
+from typing import Any, Callable, Iterable, Optional, Sequence
+class Mobject:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def add(self, *mobjects: Mobject) -> Mobject: ...
+    def remove(self, *mobjects: Mobject) -> Mobject: ...
+    def copy(self) -> Mobject: ...
+    def shift(self, *args: Any, **kwargs: Any) -> Mobject: ...
+    def move_to(self, *args: Any, **kwargs: Any) -> Mobject: ...
+    def scale(self, factor: float, **kwargs: Any) -> Mobject: ...
+    def set_color(self, color: Any, **kwargs: Any) -> Mobject: ...
+    def set_opacity(self, opacity: float, **kwargs: Any) -> Mobject: ...
+class Scene:
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+    def construct(self) -> None: ...
+    def add(self, *mobjects: Mobject) -> None: ...
+    def remove(self, *mobjects: Mobject) -> None: ...
+    def play(self, *animations: Any, **kwargs: Any) -> None: ...
+    def wait(self, duration: float = ...) -> None: ...
+class Text(Mobject):
+    def __init__(self, text: str, *args: Any, **kwargs: Any) -> None: ...
+class Tex(Mobject):
+    def __init__(self, *tex_strings: str, **kwargs: Any) -> None: ...
+class Circle(Mobject):
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+class Square(Mobject):
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+class Rectangle(Mobject):
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+class Line(Mobject):
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+class Dot(Mobject):
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
+class VGroup(Mobject):
+    def __init__(self, *mobjects: Mobject, **kwargs: Any) -> None: ...
+class Animation:
+    def __init__(self, mobject: Mobject, *args: Any, **kwargs: Any) -> None: ...
+class Create(Animation): ...
+class Write(Animation): ...
+class FadeIn(Animation): ...
+class FadeOut(Animation): ...
+class Transform(Animation):
+    def __init__(self, mobject: Mobject, target_mobject: Mobject, **kwargs: Any) -> None: ...
+def linear(t: float) -> float: ...
+def smooth(t: float) -> float: ...
+`,
+        });
+        await pyrightProvider.init(monaco);
+        await pyrightProvider.setupDiagnostics(editor);
+        console.info("[Pyright LSP] Initialized with completion, hover, signatures, definitions, rename and diagnostics.");
+        setStatus("Python language server ready (Pyright).");
+      })().catch(error => {
+        pyrightInitPromise = null;
+        console.error("[Pyright LSP]", error);
+        setStatus("Python language server failed to load: " + String(error?.message || error));
+        throw error;
       });
-      monaco.languages.registerSignatureHelpProvider("python", {
-        signatureHelpTriggerCharacters: ["(", ","],
-        signatureHelpRetriggerCharacters: [","],
-        provideSignatureHelp: async (model, position) => {
-          try {
-            const items = await queryJedi(
-              model.getValue(), position.lineNumber, position.column - 1, "signature"
-            );
-            return {
-              value: {
-                signatures: items.map(item => ({
-                  label: item.label,
-                  documentation: item.documentation || "",
-                  parameters: (item.parameters || []).map(parameter => ({
-                    label: parameter.label,
-                    documentation: parameter.documentation || "",
-                  })),
-                })),
-                activeSignature: 0,
-                activeParameter: items[0]?.activeParameter || 0,
-              },
-              dispose: () => {},
-            };
-          } catch (error) {
-            console.warn("[Jedi signature help]", error);
-            return { value: { signatures: [], activeSignature: 0, activeParameter: 0 }, dispose: () => {} };
-          }
-        },
-      });
-      monaco.languages.registerHoverProvider("python", {
-        provideHover: async (model, position) => {
-          try {
-            const items = await queryJedi(
-              model.getValue(), position.lineNumber, position.column - 1, "hover"
-            );
-            if (!items.length) return null;
-            return {
-              range: model.getWordAtPosition(position)
-                ? new monaco.Range(position.lineNumber, model.getWordAtPosition(position).startColumn, position.lineNumber, model.getWordAtPosition(position).endColumn)
-                : undefined,
-              contents: items.flatMap(item => [
-                { value: "`" + item.label + "`" },
-                ...(item.documentation ? [{ value: item.documentation }] : []),
-              ]),
-            };
-          } catch (error) {
-            console.warn("[Jedi hover]", error);
-            return null;
-          }
-        },
-      });
+      return pyrightInitPromise;
     }
 
     async function lintPythonCode() {
@@ -2003,10 +1977,12 @@ _editor_scene_token = ${token}`;
           wordWrap: "off",
           bracketPairColorization: { enabled: true },
         });
-        registerPythonLanguageFeatures();
+
 
         await initializeProjects();
 
+        initializePythonLanguageServer().catch(() => {});
+        
         editor.onDidChangeModelContent(() => {
           scheduleProjectSave();
           schedulePythonLint();
