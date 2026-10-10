@@ -24,6 +24,7 @@ const replacement = [
   'self.addEventListener("message", (event) => {',
   '  const update = event.data;',
   '  if (update && update.type === "__manimgl_update_runtime_sources" && update.userFiles) {',
+  '    event.stopImmediatePropagation();',
   '    createUserFiles("/", update.userFiles);',
   '  }',
   '});'
