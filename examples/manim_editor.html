@@ -346,7 +346,7 @@
 <body>
   <div id="toolbar">
     <button id="run" class="primary" disabled>▶ Run</button>
-    <button id="run-record" class="record" disabled>● Ejecutar y grabar</button>
+    <button id="run-record" class="record" disabled>● Run & Record</button>
     <button id="canvas-window" disabled>↗ Open Canvas</button>
     <button id="stop" disabled>■ Stop</button>
     <button id="record" class="record" disabled>● Record</button>
@@ -863,10 +863,10 @@ class Demo(Scene):
         info.className = "project-info";
         const name = document.createElement("div");
         name.className = "project-name";
-        name.textContent = project.name || "Proyecto sin nombre";
+        name.textContent = project.name || "Untitled Project";
         const meta = document.createElement("div");
         meta.className = "project-meta";
-        const date = project.updatedAt ? new Date(project.updatedAt).toLocaleString() : "Sin guardar";
+        const date = project.updatedAt ? new Date(project.updatedAt).toLocaleString() : "Not saved";
         meta.textContent = date;
         info.append(name, meta);
         row.appendChild(info);
@@ -874,7 +874,7 @@ class Demo(Scene):
           const current = document.createElement("span");
           current.textContent = "●";
           current.style.color = "var(--accent)";
-          current.title = "Proyecto actual";
+          current.title = "Current project";
           row.appendChild(current);
         }
         fragment.appendChild(row);
@@ -932,14 +932,14 @@ class Demo(Scene):
       editor.setValue(next.source || "");
       saveSource(next.source || "");
       renderProjects(projects);
-      setStatus("Proyecto abierto: " + next.name);
+      setStatus("Project opened: " + next.name);
     }
 
     async function createProject() {
       if (activeProject) await persistActiveProject();
       const name = prompt("New project name:", "New project");
       if (name === null) return;
-      const cleanName = name.trim() || "Proyecto sin nombre";
+      const cleanName = name.trim() || "Untitled Project";
       const project = {
         id: (typeof crypto !== "undefined" && crypto.randomUUID)
           ? crypto.randomUUID()
@@ -954,7 +954,7 @@ class Demo(Scene):
       editor.setValue(project.source);
       saveSource(project.source);
       await refreshProjects();
-      setStatus("Proyecto creado: " + project.name);
+      setStatus("Project created: " + project.name);
     }
 
     async function renameProject() {
@@ -964,7 +964,7 @@ class Demo(Scene):
       activeProject.name = name.trim() || activeProject.name;
       await persistActiveProject();
       await refreshProjects();
-      setStatus("Proyecto renombrado: " + activeProject.name);
+      setStatus("Project renamed: " + activeProject.name);
     }
 
     async function removeActiveProject() {
@@ -974,7 +974,7 @@ class Demo(Scene):
         setStatus("At least one project must remain. Create another project before deleting this one.");
         return;
       }
-      if (!confirm("¿Delete el proyecto «" + activeProject.name + "”? This action cannot be undone.")) return;
+      if (!confirm("Delete project “" + activeProject.name + "”? This action cannot be undone.")) return;
       const removedId = activeProject.id;
       await deleteProject(removedId);
       const remaining = (await getProjects()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -983,7 +983,7 @@ class Demo(Scene):
       editor.setValue(activeProject.source || "");
       saveSource(activeProject.source || "");
       renderProjects(remaining);
-      setStatus("Proyecto eliminado. Abierto: " + activeProject.name);
+      setStatus("Project deleted. Opened: " + activeProject.name);
     }
 
     async function initializeProjects() {
@@ -994,7 +994,7 @@ class Demo(Scene):
           id: (typeof crypto !== "undefined" && crypto.randomUUID)
             ? crypto.randomUUID()
             : "project-" + Date.now() + "-" + Math.random().toString(16).slice(2),
-          name: "Mi primer proyecto",
+          name: "My First Project",
           source: legacySource !== null ? legacySource : editor.getValue(),
           updatedAt: Date.now(),
         };
@@ -1783,7 +1783,7 @@ _editor_scene_token = ${token}`;
         const pango = await import("./browser_wasm/dist/pango_text_loader.js");
         await pango.initializePangoText();
 
-        setStatus("Loading las fuentes básicas…");
+        setStatus("Loading basic fonts…");
 
         async function registerCatalogFont(fileName, url) {
           const response = await fetch(url, { cache: "force-cache" });
@@ -1935,7 +1935,7 @@ _editor_scene_token = ${token}`;
             fontStats.success++;
             if (result.errors.length) {
               failedFontNames.set(fileName, result.errors.join(" | "));
-              console.warn("[font catalog] Registro parcial:", fileName, result.errors);
+              console.warn("[font catalog] Partial registration:", fileName, result.errors);
             }
           } catch (error) {
             failedFontNames.set(fileName, String(error?.message || error));
@@ -1962,7 +1962,7 @@ _editor_scene_token = ${token}`;
             for (const font of pending) {
               await loadCatalogFont(font);
               done++;
-              updateFontsSummary("Loading fuentes adicionales: " + done + "/" + pending.length);
+              updateFontsSummary("Loading additional fonts: " + done + "/" + pending.length);
             }
           } finally {
             fontsLoadSelected.disabled = false;
@@ -1995,8 +1995,8 @@ _editor_scene_token = ${token}`;
         fontsLoadAll.addEventListener("click", () => loadFontBatch(availableFonts));
         renderFontCatalog();
 
-        // Cargar solo un conjunto pequeño de fuentes habituales. El resto del catálogo
-        // permanece disponible en "Fonts" y se descarga únicamente cuando se solicita.
+        // Load only a small set of commonly used fonts. The rest of the catalog
+        // remains available under “Fonts” and is downloaded only when requested.
         const basicFonts = availableFonts.filter(font =>
           basicFontNames.has(font.fileName || font.name) ||
           basicFontNames.has(font.name)
@@ -2013,8 +2013,8 @@ _editor_scene_token = ${token}`;
           loadedInTypst: fontStats.typst,
           failed: Array.from(failedFontNames.entries()),
         });
-        setStatus("Fonts básicas listas (" + loadedFontNames.size + "/" + availableFonts.length +
-          "). Las demás se cargan desde «Fonts».");
+        setStatus("Basic fonts ready (" + loadedFontNames.size + "/" + availableFonts.length +
+          "). Load the remaining fonts from “Fonts”.");
         
         setLoading(true, "Loading Pyodide…");
         const { loadPyodide } = await import(PYODIDE_URL);
@@ -2066,7 +2066,7 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
                 await registerFontAsset(path);
                 assetFontMetadata.set(path, metadata);
               } catch (error) {
-                console.warn("[asset persistence] Could not restore la fuente:", savedAsset.name, error);
+                console.warn("[asset persistence] Could not restore font:", savedAsset.name, error);
               }
             }
           }
