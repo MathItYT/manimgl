@@ -297,13 +297,12 @@ class Window(object):
         self.frame_view = frame_view
         self.canvas.force_draw()
         if sys.platform == "emscripten":
-            # Capture after force_draw() has completed rendercanvas's draw/present
-            # cycle. Window.draw() itself runs inside that cycle, before the outer
-            # canvas presentation has finished.
+            # Snapshot the completed WebGPU canvas as a VideoFrame after
+            # rendercanvas has completed its draw/present cycle.
             from js import window
-            request_capture = getattr(window, "__manimRequestCaptureFrame", None)
-            if request_capture:
-                request_capture()
+            capture_frame = getattr(window, "__manimCaptureWebGPUFrame", None)
+            if capture_frame:
+                capture_frame()
         self.undrawn_event = False
         self.poll_events()
 
