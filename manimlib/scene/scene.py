@@ -1127,11 +1127,18 @@ class Scene(object):
             self.window.poll_events()
             has_undrawn_event = self.window.has_undrawn_event()
 
-            # Unlike native interact(), the browser cannot use a blocking
-            # loop. requestAnimationFrame is therefore the interactive clock:
-            # run mobject updaters on every frame when the scene needs them,
-            # while still avoiding unnecessary redraws for an idle scene.
-            if self.should_update_mobjects():
+            # Keep the live canvas advancing while browser recording is active.
+            # Otherwise a static scene draws only in response to input events,
+            # so the recorder gets no frames throughout an idle interactive period.
+            from js import window
+            recording_active = bool(
+                getattr(window, "__manimCaptureWebGPUFrame", None)
+            )
+
+            # requestAnimationFrame is the browser clock. Update animated scenes
+            # as usual, and also draw every browser frame while recording so the
+            # capture callback receives a continuous video timeline.
+            if self.should_update_mobjects() or recording_active:
                 await self.update_frame_async(dt=dt, force_draw=True)
             elif has_undrawn_event:
                 postprocess_settle_until = (
