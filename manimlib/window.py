@@ -546,7 +546,19 @@ class Window(object):
             return
         self.pressed_keys.add(key)
         if self.scene:
-            self.scene.on_key_press(key, to_mods(event["modifiers"]))
+            result = self.scene.on_key_press(key, to_mods(event["modifiers"]))
+            if sys.platform == "emscripten":
+                # Browser source transformation makes event handlers async when they
+                # call self.play(), because that becomes await self.play_async().
+                # rendercanvas invokes input handlers synchronously, so explicitly
+                # schedule the returned coroutine instead of silently dropping it.
+                import asyncio
+                import inspect
+                if inspect.isawaitable(result):
+                    task = asyncio.create_task(result)
+                    self._browser_input_tasks = getattr(self, "_browser_input_tasks", set())
+                    self._browser_input_tasks.add(task)
+                    task.add_done_callback(self._browser_input_tasks.discard)
 
     def on_key_up(self, event: dict) -> None:
         self.note_event()
@@ -555,7 +567,15 @@ class Window(object):
             return
         self.pressed_keys.discard(key)
         if self.scene:
-            self.scene.on_key_release(key, to_mods(event["modifiers"]))
+            result = self.scene.on_key_release(key, to_mods(event["modifiers"]))
+            if sys.platform == "emscripten":
+                import asyncio
+                import inspect
+                if inspect.isawaitable(result):
+                    task = asyncio.create_task(result)
+                    self._browser_input_tasks = getattr(self, "_browser_input_tasks", set())
+                    self._browser_input_tasks.add(task)
+                    task.add_done_callback(self._browser_input_tasks.discard)
 
     def on_resize(self, event: dict) -> None:
         self.note_event()
