@@ -969,6 +969,18 @@ class Demo(Scene):
         await pyodide.runPythonAsync("import micropip\nawait micropip.install(" + JSON.stringify(name) + ")");
         installedDependencyNames.add(name);
         dependenciesStatus.textContent = name + " was installed successfully.";
+        if (pyrightReady) {
+          dependenciesStatus.textContent = name + " installed; indexing its Python API for autocomplete…";
+          try {
+            const indexedFiles = await refreshPythonLanguageServerRuntimeSources();
+            dependenciesStatus.textContent = name + " installed; Pyright indexed "
+              + indexedFiles + " updated Python source files.";
+          } catch (lspError) {
+            console.error("[Pyright LSP] Could not index newly installed dependency:", lspError);
+            dependenciesStatus.textContent = name + " installed, but Pyright could not refresh: "
+              + String(lspError?.message || lspError);
+          }
+        }
       } catch (error) {
         dependenciesStatus.textContent = "Could not install " + name + ": " + String(error?.message || error);
         throw error;
@@ -1027,11 +1039,171 @@ class Demo(Scene):
     let pyrightProvider = null;
     let pyrightWorkerUrl = null;
     let pyrightInitPromise = null;
+    let pyrightReady = false;
+    let pyrightRuntimeRefreshPromise = Promise.resolve();
+    const pyrightRuntimeSourceFingerprints = new Map();
+
+    function hashPythonSource(source) {
+      // Small deterministic fingerprint avoids retaining another copy of every
+      // installed library source just to notice newly added/changed files.
+      let hash = 2166136261;
+      for (let i = 0; i < source.length; i++) {
+        hash ^= source.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return source.length + ":" + (hash >>> 0);
+    }
+
+    function insertPythonSource(tree, relativePath, source) {
+      const parts = relativePath.split("/");
+      let node = tree;
+      for (const part of parts.slice(0, -1)) {
+        if (!node[part] || typeof node[part] !== "object"
+            || node[part] instanceof ArrayBuffer) {
+          node[part] = {};
+        }
+        node = node[part];
+      }
+      node[parts[parts.length - 1]] = source;
+    }
+
+    async function collectPyrightRuntimeSources(forceAll = false) {
+      if (!pyodide) throw new Error("Pyodide is not ready yet.");
+      const indexResult = await pyodide.runPythonAsync(String.raw`
+import json
+import os
+import sys
+
+_EXCLUDED_DIRS = {
+    "__pycache__", "test", "tests", "testing", "_tests", "testdata",
+    "benchmarks", "benchmark", "examples", "example", "docs", "doc",
+    "dist", "build", ".git",
+}
+_EXCLUDED_SUFFIXES = (".dist-info", ".egg-info", ".data", ".libs")
+_SOURCE_SUFFIXES = (".py", ".pyi")
+_roots = []
+for _entry in sys.path:
+    if not _entry or not os.path.isdir(_entry):
+        continue
+    _normal = os.path.normpath(_entry).replace("\\", "/")
+    if "site-packages" in _normal or "dist-packages" in _normal:
+        if _normal not in _roots:
+            _roots.append(_normal)
+
+_files = []
+_seen = set()
+for _root in _roots:
+    try:
+        _entries = sorted(os.listdir(_root))
+    except OSError:
+        continue
+    for _name in _entries:
+        if (_name == "manimlib" or _name.startswith(".")
+            or _name in _EXCLUDED_DIRS
+            or _name.endswith(_EXCLUDED_SUFFIXES)):
+            continue
+        _candidate = os.path.join(_root, _name)
+        if os.path.isfile(_candidate):
+            if not (_name.endswith(_SOURCE_SUFFIXES) or _name == "py.typed"):
+                continue
+            if _name.endswith(".py") and os.path.isfile(_candidate[:-3] + ".pyi"):
+                continue
+            _relative = os.path.relpath(_candidate, _root).replace(os.sep, "/")
+            if _relative not in _seen:
+                _seen.add(_relative)
+                _files.append([_candidate, _relative])
+            continue
+        if not os.path.isdir(_candidate):
+            continue
+        for _directory, _subdirs, _filenames in os.walk(_candidate):
+            _subdirs[:] = sorted(
+                _subdir for _subdir in _subdirs
+                if _subdir not in _EXCLUDED_DIRS
+                and not _subdir.startswith(".")
+                and not _subdir.endswith(_EXCLUDED_SUFFIXES)
+            )
+            for _filename in sorted(_filenames):
+                if not (_filename.endswith(_SOURCE_SUFFIXES) or _filename == "py.typed"):
+                    continue
+                _path = os.path.join(_directory, _filename)
+                if _filename.endswith(".py") and os.path.isfile(_path[:-3] + ".pyi"):
+                    continue
+                _relative = os.path.relpath(_path, _root).replace(os.sep, "/")
+                if _relative in _seen:
+                    continue
+                _seen.add(_relative)
+                _files.append([_path, _relative])
+
+json.dumps(_files)
+`);
+      const fileIndex = JSON.parse(String(indexResult));
+      const tree = {};
+      const changes = [];
+      for (const [absolutePath, rawRelativePath] of fileIndex) {
+        const relativePath = String(rawRelativePath).replace(/\\/g, "/");
+        let source;
+        try {
+          source = pyodide.FS.readFile(String(absolutePath), { encoding: "utf8" });
+          if (typeof source !== "string") source = String(source);
+        } catch (error) {
+          console.debug("[Pyright LSP] Skipping unreadable library source:", absolutePath, error);
+          continue;
+        }
+        const fingerprint = hashPythonSource(source);
+        const previous = pyrightRuntimeSourceFingerprints.get(relativePath);
+        if (!forceAll && previous === fingerprint) continue;
+
+        pyrightRuntimeSourceFingerprints.set(relativePath, fingerprint);
+        insertPythonSource(tree, relativePath, source);
+        changes.push({
+          path: relativePath,
+          type: previous === undefined ? 1 : 2,
+        });
+      }
+      return { tree, changes };
+    }
+
+    async function refreshPythonLanguageServerRuntimeSources() {
+      if (!pyrightReady || !pyrightProvider || !pyodide) return 0;
+      const update = async () => {
+        const snapshot = await collectPyrightRuntimeSources(false);
+        if (!snapshot.changes.length) return 0;
+
+        // This custom worker message mounts the changed files at the workspace
+        // root. They are not Python wheels: they are the actual .py/.pyi sources
+        // already installed in this Pyodide runtime.
+        pyrightProvider.lspClient.worker.postMessage({
+          type: "__manimgl_update_runtime_sources",
+          userFiles: snapshot.tree,
+        });
+        await pyrightProvider.lspClient.connection.sendNotification(
+          "workspace/didChangeWatchedFiles",
+          {
+            changes: snapshot.changes.map(change => ({
+              uri: "file:///" + change.path.split("/").map(encodeURIComponent).join("/"),
+              type: change.type,
+            })),
+          }
+        );
+        if (editor) {
+          await pyrightProvider.lspClient.updateDocVersion(editor.getValue());
+        }
+        console.info("[Pyright LSP] Indexed runtime Python files:", snapshot.changes.length);
+        return snapshot.changes.length;
+      };
+
+      const current = pyrightRuntimeRefreshPromise.then(update, update);
+      pyrightRuntimeRefreshPromise = current.catch(() => {});
+      return current;
+    }
 
     async function initializePythonLanguageServer() {
       if (pyrightInitPromise) return pyrightInitPromise;
       pyrightInitPromise = (async () => {
-        setStatus("Loading Python language server (Pyright)…");
+        if (!pyodide) {
+          throw new Error("Pyodide must finish installing Python dependencies before Pyright starts.");
+        }
+        setStatus("Loading Python language server and indexing installed dependencies…");
         const MonacoPyrightProvider = window.MonacoPyrightProvider;
         if (typeof MonacoPyrightProvider !== "function") {
           throw new Error("The locally bundled Pyright provider is missing. Rebuild the Pyright browser bundle and reload the editor.");
@@ -1043,6 +1215,10 @@ class Demo(Scene):
           throw new Error("Could not load the real ManimGL source package: " + sourceResponse.status);
         }
         const manimlibSource = await sourceResponse.arrayBuffer();
+        // Index the installed packages from the actual Pyodide environment,
+        // not only ManimGL's source zip. This includes NumPy, SciPy, Pillow,
+        // Matplotlib, SymPy and user-installed packages with .py/.pyi sources.
+        const runtimeSources = await collectPyrightRuntimeSources(true);
         pyrightProvider = new MonacoPyrightProvider(pyrightWorkerUrl, {
           features: {
             hover: true,
@@ -1053,14 +1229,22 @@ class Demo(Scene):
             findDefinition: true,
           },
           diagnosticsInterval: 500,
-          // These are the repository .py files, not generated declarations.
-          typeStubs: { "manimlib": manimlibSource },
+          typeStubs: {
+            manimlib: manimlibSource,
+            __pyright_runtime_sources__: runtimeSources.tree,
+          },
         });
         await pyrightProvider.init(monaco);
         await pyrightProvider.setupDiagnostics(editor);
-        console.info("[Pyright LSP] Initialized with completion, hover, signatures, definitions, rename and diagnostics.");
-        setStatus("Python language server ready (Pyright).");
+        pyrightReady = true;
+        console.info("[Pyright LSP] Initialized with ManimGL and installed Python sources.", {
+          runtimeFiles: runtimeSources.changes.length,
+        });
+        setStatus("Python language server ready (ManimGL and installed dependencies indexed).");
+        // Packages may have been added while the LSP worker was starting.
+        await refreshPythonLanguageServerRuntimeSources();
       })().catch(error => {
+        pyrightReady = false;
         pyrightInitPromise = null;
         console.error("[Pyright LSP]", error);
         setStatus("Python language server failed to load: " + String(error?.message || error));
@@ -2193,7 +2377,6 @@ _editor_scene_token = ${token}`;
 
         await initializeProjects();
 
-        initializePythonLanguageServer().catch(() => {});
         
         editor.onDidChangeModelContent(() => {
           scheduleProjectSave();
@@ -2489,6 +2672,14 @@ await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).hre
           }
         }
         renderPythonDependencies();
+
+        // Pyright must start after Pyodide has installed its real runtime
+        // libraries; its worker cannot see the main thread's virtual FS itself.
+        try {
+          await initializePythonLanguageServer();
+        } catch (error) {
+          console.warn("[Pyright LSP] Continuing without language features:", error);
+        }
 
         setLoading(true, "Restoring saved assets…");
         ensureAssetDir();
