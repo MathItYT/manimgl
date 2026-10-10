@@ -113,14 +113,14 @@ class BrowserAudio:
             duration = float(audio.duration)
             if duration == duration and offset >= duration:
                 continue
-            if bool(audio.ended):
-                continue
 
             # A player is positioned once when its scene event becomes active.
             # Repeated sync calls must not reset currentTime: that used to cut
             # speech and made the sound jump whenever the scene clock drifted.
             event_key = f"{event_index}:{float(event_time):.9f}:{sound_file}"
             active_key = str(getattr(audio, "manimEventKey", ""))
+            if bool(audio.ended) and active_key == event_key:
+                continue
             if active_key != event_key:
                 audio.pause()
                 setattr(audio, "manimEventKey", event_key)
