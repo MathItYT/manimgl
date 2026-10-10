@@ -2875,143 +2875,6 @@ RadialBlur = ZoomBlur
 RadialBlurEffect = ZoomBlur
 
 
-# ---------------------------------------------------------------------
-# Extensión dinámica de Mobject
-# ---------------------------------------------------------------------
-
-def set_hidden(self: Mobject, hidden: bool = True, recurse: bool = True) -> Mobject:
-    targets = self.get_family(recurse=recurse)
-    for mob in targets:
-        mob.hidden = bool(hidden)
-    return self
-
-
-def is_hidden(self: Mobject) -> bool:
-    return getattr(self, "hidden", False)
-
-
-def add_vfx(self: Mobject, effect: PostProcessEffect | str, recurse: bool = False) -> Mobject:
-    if isinstance(effect, str):
-        effect = CustomVFX(fragment_code=effect)
-
-    if not hasattr(self, "_vfx_effects"):
-        self._vfx_effects = []
-
-    eff = effect.copy()
-    eff._source_effect = effect  # Guarda referencia al objeto original
-    effect._target_effect = eff
-    eff.attach(self)
-
-    if not getattr(eff, "allow_multiple", False):
-        existing = [e for e in self._vfx_effects if e.name == eff.name]
-        if existing:
-            self._vfx_effects.remove(existing[0])
-
-    self._vfx_effects.append(eff)
-
-    is_group = getattr(eff, "is_group_effect", False) or (eff.name in ("Glow", "Mask", "LiquidGlass", "DropShadow", "GaussianBlur", "Vignette"))
-
-    for mob in self.get_family():
-        if is_group:
-            mob._vfx_group = self
-        else:
-            mob._vfx_local = self
-            if not hasattr(mob, "_vfx_group"):
-                mob._vfx_group = self
-
-    return self
-
-
-def remove_vfx(self: Mobject, effect_type_or_name: Any, recurse: bool = False) -> Mobject:
-    if hasattr(self, "_vfx_effects"):
-        if isinstance(effect_type_or_name, str):
-            self._vfx_effects = [e for e in self._vfx_effects if e.name != effect_type_or_name]
-        elif isinstance(effect_type_or_name, type):
-            self._vfx_effects = [e for e in self._vfx_effects if not isinstance(e, effect_type_or_name)]
-        else:
-            # Comprueba la instancia exacta, la referencia original guardada o el nombre del efecto
-            target_name = getattr(effect_type_or_name, "name", None)
-            self._vfx_effects = [
-                e for e in self._vfx_effects
-                if e is not effect_type_or_name 
-                and getattr(e, "_source_effect", None) is not effect_type_or_name
-                and (target_name is None or e.name != target_name)
-            ]
-
-        if not any(getattr(e, "is_group_effect", False) or e.name in ("Glow", "Mask", "LiquidGlass", "DropShadow") for e in self._vfx_effects):
-            for mob in self.get_family():
-                if hasattr(mob, "_vfx_group") and mob._vfx_group is self:
-                    delattr(mob, "_vfx_group")
-                if hasattr(mob, "_vfx_local") and mob._vfx_local is self:
-                    delattr(mob, "_vfx_local")
-    return self
-
-
-def clear_vfx(self: Mobject, recurse: bool = False) -> Mobject:
-    for mob in self.get_family():
-        if hasattr(mob, "_vfx_effects"):
-            mob._vfx_effects.clear()
-        if hasattr(mob, "_vfx_group"):
-            delattr(mob, "_vfx_group")
-        if hasattr(mob, "_vfx_local"):
-            delattr(mob, "_vfx_local")
-    return self
-
-
-def has_vfx(self: Mobject) -> bool:
-    return bool(getattr(self, "_vfx_effects", None))
-
-
-def get_vfx_list(self: Mobject) -> list[PostProcessEffect]:
-    return getattr(self, "_vfx_effects", [])
-
-
-def set_mask(
-    self: Mobject,
-    mask: Mobject | Sequence[Mobject],
-    invert: bool = False,
-    use_luminance: bool = False,
-    mode: str = "intersect",
-) -> Mobject:
-    self.remove_mask()
-    self.add_mask(mask, invert=invert, use_luminance=use_luminance, mode=mode)
-    return self
-
-
-def add_mask(
-    self: Mobject,
-    mask: Mobject | Sequence[Mobject],
-    invert: bool = False,
-    use_luminance: bool = False,
-    mode: str = "intersect",
-) -> Mobject:
-    if isinstance(mask, (list, tuple)):
-        from manimlib.mobject.mobject import Group
-        mask = Group(*mask)
-    mask.set_hidden(True)
-    self.add_vfx(Mask(mask, invert=invert, use_luminance=use_luminance, mode=mode))
-    return self
-
-
-def remove_mask(self: Mobject, mask: Mobject | None = None) -> Mobject:
-    if hasattr(self, "_vfx_effects"):
-        masks_to_remove = [
-            eff for eff in self._vfx_effects
-            if eff.name == "Mask" and (mask is None or getattr(eff, "mask", None) is mask)
-        ]
-        for eff in masks_to_remove:
-            if hasattr(eff, "mask"):
-                eff.mask.set_hidden(False)
-            self._vfx_effects.remove(eff)
-
-        has_other_group_effects = any(getattr(e, "name", "") in ("Glow", "Mask", "LiquidGlass") for e in self._vfx_effects)
-        if not has_other_group_effects:
-            for mob in self.get_family():
-                if hasattr(mob, "_vfx_group") and mob._vfx_group is self:
-                    delattr(mob, "_vfx_group")
-    return self
-
-
 # =====================================================================
 # Preset: Liquid Glass (port de OverShifted/LiquidGlass, MIT)
 # =====================================================================
@@ -3708,19 +3571,6 @@ def set_liquid_glass(self: Mobject, **kwargs: Any) -> Mobject:
     return self
 
 
-Mobject.hidden = False
-Mobject.set_hidden = set_hidden
-Mobject.is_hidden = is_hidden
-Mobject.add_vfx = add_vfx
-Mobject.remove_vfx = remove_vfx
-Mobject.clear_vfx = clear_vfx
-Mobject.has_vfx = has_vfx
-Mobject.get_vfx_list = get_vfx_list
-Mobject.set_mask = set_mask
-Mobject.add_mask = add_mask
-Mobject.remove_mask = remove_mask
-Mobject.set_liquid_glass = set_liquid_glass
-
 DROP_SHADOW_PASS1_WGSL = """
 @group(0) @binding(0) var in_tex: texture_2d<f32>;
 @group(0) @binding(1) var in_smp: sampler;
@@ -4013,70 +3863,9 @@ class DropShadow(PostProcessEffect):
         return self.copy()
 
 
-def set_drop_shadow(
-    self: Mobject,
-    offset: Sequence[float] = (6.0, -6.0),
-    radius: float = 12.0,
-    opacity: float = 0.75,
-    color: Sequence[float] | str | None = None,
-    shadow_only: bool = False,
-) -> Mobject:
-    self.add_vfx(DropShadow(
-        offset=offset,
-        radius=radius,
-        opacity=opacity,
-        color=color,
-        shadow_only=shadow_only,
-    ))
-    return self
-
-
-def set_gaussian_blur(self: Mobject, radius: float = 12.0, downscale: float = 1.0) -> Mobject:
-    self.add_vfx(GaussianBlur(radius=radius, downscale=downscale))
-    return self
-
-def set_grain(self: Mobject, intensity: float = 0.08, speed: float = 24.0, colored: bool = False) -> Mobject:
-    self.add_vfx(Grain(intensity=intensity, speed=speed, colored=colored))
-    return self
-
-def set_vignette(
-    self: Mobject,
-    radius: float = 0.5,
-    softness: float = 0.45,
-    intensity: float = 0.7,
-    center: Sequence[float] = (0.5, 0.5),
-    color: Sequence[float] | str | None = None,
-    keep_circular: bool = True,
-) -> Mobject:
-    self.add_vfx(Vignette(
-        radius=radius,
-        softness=softness,
-        intensity=intensity,
-        center=center,
-        color=color,
-        keep_circular=keep_circular,
-    ))
-    return self
-
 # Aliases
 Blur = GaussianBlur
 FilmGrain = Grain
 
-Mobject.set_gaussian_blur = set_gaussian_blur
-Mobject.set_grain = set_grain
-Mobject.set_vignette = set_vignette
 Shadow = DropShadow
 ShadowEffect = DropShadow
-Mobject.set_drop_shadow = set_drop_shadow
-Mobject.hidden = False
-Mobject.set_hidden = set_hidden
-Mobject.is_hidden = is_hidden
-Mobject.add_vfx = add_vfx
-Mobject.remove_vfx = remove_vfx
-Mobject.clear_vfx = clear_vfx
-Mobject.has_vfx = has_vfx
-Mobject.get_vfx_list = get_vfx_list
-Mobject.set_mask = set_mask
-Mobject.add_mask = add_mask
-Mobject.remove_mask = remove_mask
-Mobject.set_liquid_glass = set_liquid_glass
