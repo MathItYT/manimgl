@@ -282,6 +282,28 @@ class Scene(object):
     def tear_down(self) -> None:
         self.stop_sound_processes()
         self.stop_skipping()
+
+        # Stop browser tasks owned by this scene before the shared Window is
+        # handed to the next scene.
+        interaction_task = getattr(self, "_browser_interaction_task", None)
+        if interaction_task is not None and not interaction_task.done():
+            interaction_task.cancel()
+        if self.window is not None:
+            for task in tuple(getattr(self.window, "_browser_input_tasks", ())):
+                task.cancel()
+
+        # EventDispatcher is global, so listeners otherwise survive after this
+        # scene is discarded and fire alongside listeners from the next run.
+        seen = set()
+        for mobject in self.mobjects:
+            for member in mobject.get_family():
+                if id(member) in seen:
+                    continue
+                seen.add(id(member))
+                for listener in tuple(member.get_event_listners()):
+                    EVENT_DISPATCHER.remove_listner(listener)
+                member.event_listners.clear()
+
         self.file_writer.finish()
         if self.window:
             self.window.destroy()
