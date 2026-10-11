@@ -596,11 +596,28 @@ class Window(object):
 
 
 if sys.platform == "emscripten":
-    async def run_scene_from_class(scene_class: type[Scene], canvas_id: str, size: tuple[int, int] = (1920, 1080)) -> Scene:
+    async def run_scene_from_class(
+        scene_class: type[Scene],
+        canvas_id: str,
+        size: tuple[int, int] = (1920, 1080),
+        window: Window | None = None,
+    ) -> Scene:
         """Build a Manim scene in an HTML canvas without blocking the caller."""
         import asyncio
 
-        window = await Window.create_for_pyodide(canvas_id, size=size)
+        if window is None:
+            window = await Window.create_for_pyodide(canvas_id, size=size)
+        else:
+            # The editor reuses its canvas Window. Wait for the previous scene's
+            # animation loop to stop before Window.init_for_scene changes ownership.
+            previous_task = getattr(window, "_browser_interaction_task", None)
+            if previous_task is not None and not previous_task.done():
+                previous_task.cancel()
+                try:
+                    await previous_task
+                except asyncio.CancelledError:
+                    pass
+
         scene = scene_class(window=window)
 
         # Execute the scene itself as the awaited operation. The browser
@@ -614,5 +631,6 @@ if sys.platform == "emscripten":
         scene._browser_interaction_task = asyncio.create_task(
             scene.browser_interaction_loop()
         )
+        window._browser_interaction_task = scene._browser_interaction_task
         return scene
 
