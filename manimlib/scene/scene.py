@@ -1444,6 +1444,7 @@ class Scene(object):
         # Handle frame movements
         elif self.window.is_key_pressed(ord(manim_config.key_bindings.pan)):
             frame.shift(-d_point)
+
     def on_mouse_drag(
         self,
         point: Vect3,
@@ -1511,6 +1512,7 @@ class Scene(object):
         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseDragEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
+
     def on_mouse_press(
         self,
         point: Vect3,
@@ -1562,6 +1564,7 @@ class Scene(object):
         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MousePressEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
+
     def on_mouse_release(
         self,
         point: Vect3,
@@ -1609,6 +1612,7 @@ class Scene(object):
         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseReleaseEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
+
     def on_mouse_scroll(
         self,
         point: Vect3,
@@ -1695,6 +1699,7 @@ class Scene(object):
             1 - self.scroll_sensitivity * rel_offset,
             about_point=point
         )
+
     def on_key_release(
         self,
         symbol: int,
@@ -1738,6 +1743,7 @@ class Scene(object):
         propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyReleaseEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
+
     def on_key_press(
         self,
         symbol: int,
@@ -1864,6 +1870,7 @@ class Scene(object):
         # Space or right arrow
         elif char == " " or symbol == Keys.RIGHT:
             self.hold_on_wait = False
+
     def on_resize(self, width: int, height: int) -> None:
         pass
 
@@ -1890,6 +1897,7 @@ class Scene(object):
 
     def on_close(self, *args, **kwargs):
         pass
+
     def on_show(self) -> None:
         pass
 
@@ -1942,6 +1950,7 @@ class SceneState()
 
 class SceneState():
         pass
+
     def focus(self) -> None:
         """
         Puts focus on the ManimGL window.
