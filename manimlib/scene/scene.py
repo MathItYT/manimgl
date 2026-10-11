@@ -1363,10 +1363,26 @@ class Scene(object):
         else:
             raise Exception("Only `xz` and `xy` are valid floor planes")
 
-    def on_mouse_motion(self, *args, **kwargs):
-        return self.on_mouse_motion_async(*args, **kwargs)
+    def on_mouse_motion(
+        self,
+        point: Vect3,
+        d_point: Vect3
+    ) -> None:
+        assert self.window is not None
+        self.mouse_point.move_to(point)
 
-    def on_mouse_motion_async(
+        event_data = {"point": point, "d_point": d_point}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseMotionEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        frame = self.camera.frame
+        # Handle perspective changes
+        if self.window.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
+        if sys.platform == "emscripten":
+            return self.on_mouse_motion_async(point, d_point, "d_point", **event_data)
+        if propagate_event is not None and propagate_event is False)
+
         self,
         point: Vect3,
         d_point: Vect3
@@ -1390,10 +1406,45 @@ class Scene(object):
         elif self.window.is_key_pressed(ord(manim_config.key_bindings.pan)):
             frame.shift(-d_point)
 
-    def on_mouse_drag(self, *args, **kwargs):
-        return self.on_mouse_drag_async(*args, **kwargs)
+    async def on_mouse_motion_async(
+        self,
+        point: Vect3,
+        d_point: Vect3
+    ) -> None:
+        assert self.window is not None
+        self.mouse_point.move_to(point)
 
-    def on_mouse_drag_async(
+        event_data = {"point": point, "d_point": d_point}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseMotionEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        frame = self.camera.frame
+        # Handle perspective changes
+        if self.window.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
+        self,
+        point: Vect3,
+        d_point: Vect3
+    ) -> None:
+        assert self.window is not None
+        self.mouse_point.move_to(point)
+
+        event_data = {"point": point, "d_point": d_point}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseMotionEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        frame = self.camera.frame
+        # Handle perspective changes
+        if self.window.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
+            ff_d_point = frame.to_fixed_frame_point(d_point, relative=True)
+            ff_d_point *= self.pan_sensitivity
+            frame.increment_theta(-ff_d_point[0])
+            frame.increment_phi(ff_d_point[1])
+        # Handle frame movements
+        elif self.window.is_key_pressed(ord(manim_config.key_bindings.pan)):
+            frame.shift(-d_point)
+    def on_mouse_drag(
         self,
         point: Vect3,
         d_point: Vect3,
@@ -1410,9 +1461,57 @@ class Scene(object):
             return
 
     def on_mouse_press(self, *args, **kwargs):
-        return self.on_mouse_press_async(*args, **kwargs)
+        if sys.platform == "emscripten":
+            return self.on_mouse_drag_async(point, d_point, buttons, modifiers, "d_point", "buttons", "modifiers", **event_data)
+        if propagate_event is not None and propagate_event is False, *args, **kwargs)
 
-    def on_mouse_press_async(
+        self,
+        point: Vect3,
+        d_point: Vect3,
+        buttons: int,
+        modifiers: int
+    ) -> None:
+        self.mouse_drag_point.move_to(point)
+        if self.drag_to_pan:
+            self.frame.shift(-d_point)
+
+        event_data = {"point": point, "d_point": d_point, "buttons": buttons, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseDragEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    async def on_mouse_drag_async(
+        self,
+        point: Vect3,
+        d_point: Vect3,
+        buttons: int,
+        modifiers: int
+    ) -> None:
+        self.mouse_drag_point.move_to(point)
+        if self.drag_to_pan:
+            self.frame.shift(-d_point)
+
+        event_data = {"point": point, "d_point": d_point, "buttons": buttons, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseDragEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    def on_mouse_press(self, *args, **kwargs):
+        self,
+        point: Vect3,
+        d_point: Vect3,
+        buttons: int,
+        modifiers: int
+    ) -> None:
+        self.mouse_drag_point.move_to(point)
+        if self.drag_to_pan:
+            self.frame.shift(-d_point)
+
+        event_data = {"point": point, "d_point": d_point, "buttons": buttons, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseDragEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+    def on_mouse_press(
         self,
         point: Vect3,
         button: int,
@@ -1425,9 +1524,45 @@ class Scene(object):
             return
 
     def on_mouse_release(self, *args, **kwargs):
-        return self.on_mouse_release_async(*args, **kwargs)
+        if sys.platform == "emscripten":
+            return self.on_mouse_press_async(point, button, mods, "button", "mods", **event_data)
+        if propagate_event is not None and propagate_event is False, *args, **kwargs)
 
-    def on_mouse_release_async(
+        self,
+        point: Vect3,
+        button: int,
+        mods: int
+    ) -> None:
+        self.mouse_drag_point.move_to(point)
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MousePressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    async def on_mouse_press_async(
+        self,
+        point: Vect3,
+        button: int,
+        mods: int
+    ) -> None:
+        self.mouse_drag_point.move_to(point)
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MousePressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    def on_mouse_release(self, *args, **kwargs):
+        self,
+        point: Vect3,
+        button: int,
+        mods: int
+    ) -> None:
+        self.mouse_drag_point.move_to(point)
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MousePressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+    def on_mouse_release(
         self,
         point: Vect3,
         button: int,
@@ -1439,9 +1574,42 @@ class Scene(object):
             return
 
     def on_mouse_scroll(self, *args, **kwargs):
-        return self.on_mouse_scroll_async(*args, **kwargs)
+        if sys.platform == "emscripten":
+            return self.on_mouse_release_async(point, button, mods, "button", "mods", **event_data)
+        if propagate_event is not None and propagate_event is False, *args, **kwargs)
 
-    def on_mouse_scroll_async(
+        self,
+        point: Vect3,
+        button: int,
+        mods: int
+    ) -> None:
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    async def on_mouse_release_async(
+        self,
+        point: Vect3,
+        button: int,
+        mods: int
+    ) -> None:
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    def on_mouse_scroll(self, *args, **kwargs):
+        self,
+        point: Vect3,
+        button: int,
+        mods: int
+    ) -> None:
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+    def on_mouse_scroll(
         self,
         point: Vect3,
         offset: Vect3,
@@ -1462,9 +1630,72 @@ class Scene(object):
         )
 
     def on_key_release(self, *args, **kwargs):
-        return self.on_key_release_async(*args, **kwargs)
+        if sys.platform == "emscripten":
+            return self.on_mouse_scroll_async(point, offset, x_pixel_offset, y_pixel_offset, "offset", **event_data)
+        if propagate_event is not None and propagate_event is False, about_point=point
+        )
 
-    def on_key_release_async(
+    def on_key_release(self, *args, **kwargs)
+
+        self,
+        point: Vect3,
+        offset: Vect3,
+        x_pixel_offset: float,
+        y_pixel_offset: float
+    ) -> None:
+        event_data = {"point": point, "offset": offset}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseScrollEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        rel_offset = -y_pixel_offset / self.camera.get_pixel_height()
+        if self.invert_zoom_scroll:
+            rel_offset *= -1
+        self.frame.scale(
+            1 - self.scroll_sensitivity * rel_offset,
+            about_point=point
+        )
+
+    async def on_mouse_scroll_async(
+        self,
+        point: Vect3,
+        offset: Vect3,
+        x_pixel_offset: float,
+        y_pixel_offset: float
+    ) -> None:
+        event_data = {"point": point, "offset": offset}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseScrollEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        rel_offset = -y_pixel_offset / self.camera.get_pixel_height()
+        if self.invert_zoom_scroll:
+            rel_offset *= -1
+        self.frame.scale(
+            1 - self.scroll_sensitivity * rel_offset,
+            about_point=point
+        )
+
+    def on_key_release(self, *args, **kwargs):
+        self,
+        point: Vect3,
+        offset: Vect3,
+        x_pixel_offset: float,
+        y_pixel_offset: float
+    ) -> None:
+        event_data = {"point": point, "offset": offset}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseScrollEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        rel_offset = -y_pixel_offset / self.camera.get_pixel_height()
+        if self.invert_zoom_scroll:
+            rel_offset *= -1
+        self.frame.scale(
+            1 - self.scroll_sensitivity * rel_offset,
+            about_point=point
+        )
+    def on_key_release(
         self,
         symbol: int,
         modifiers: int
@@ -1475,9 +1706,64 @@ class Scene(object):
             return
 
     def on_key_press(self, *args, **kwargs):
-        return self.on_key_press_async(*args, **kwargs)
+        if sys.platform == "emscripten":
+            return self.on_key_release_async(symbol, modifiers, "modifiers", **event_data)
+        if propagate_event is not None and propagate_event is False, *args, **kwargs)
 
-    def on_key_press_async(
+        self,
+        symbol: int,
+        modifiers: int
+    ) -> None:
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    async def on_key_release_async(
+        self,
+        symbol: int,
+        modifiers: int
+    ) -> None:
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+    def on_key_press(self, *args, **kwargs):
+        self,
+        symbol: int,
+        modifiers: int
+    ) -> None:
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+    def on_key_press(
+        self,
+        symbol: int,
+        modifiers: int
+    ) -> None:
+        try:
+            char = chr(symbol)
+        except OverflowError:
+            log.warning("The value of the pressed key is too large.")
+            return
+
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyPressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        if char == manim_config.key_bindings.reset:
+            if sys.platform == "emscripten":
+                import asyncio
+                task = getattr(self, "_browser_animation_task", None)
+                if task is not None and not task.done():
+        if sys.platform == "emscripten":
+            return self.on_key_press_async(symbol, modifiers, "modifiers", **event_data)
+        if propagate_event is not None and propagate_event is False, "_browser_animation_task", None)
+                if task is not None and not task.done()
+
         self,
         symbol: int,
         modifiers: int
@@ -1518,10 +1804,67 @@ class Scene(object):
         elif char == " " or symbol == Keys.RIGHT:
             self.hold_on_wait = False
 
-    def on_resize(self, *args, **kwargs):
-        return self.on_resize_async(*args, **kwargs)
+    async def on_key_press_async(
+        self,
+        symbol: int,
+        modifiers: int
+    ) -> None:
+        try:
+            char = chr(symbol)
+        except OverflowError:
+            log.warning("The value of the pressed key is too large.")
+            return
 
-    def on_resize_async(self, width: int, height: int) -> None:
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyPressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        if char == manim_config.key_bindings.reset:
+            if sys.platform == "emscripten":
+                import asyncio
+                task = getattr(self, "_browser_animation_task", None)
+                if task is not None and not task.done():
+        self,
+        symbol: int,
+        modifiers: int
+    ) -> None:
+        try:
+            char = chr(symbol)
+        except OverflowError:
+            log.warning("The value of the pressed key is too large.")
+            return
+
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyPressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        if char == manim_config.key_bindings.reset:
+            if sys.platform == "emscripten":
+                import asyncio
+                task = getattr(self, "_browser_animation_task", None)
+                if task is not None and not task.done():
+                    task.cancel()
+                self._browser_animation_task = asyncio.create_task(
+                    self.play_async(
+                        self.camera.frame.animate.to_default_state(),
+                        register=False,
+                    )
+                )
+            else:
+                self.play(self.camera.frame.animate.to_default_state(), register=False)
+        elif char == "z" and (modifiers & Mods.CTRL_OR_CMD):
+            self.undo()
+        elif char == "z" and (modifiers & (Mods.CTRL_OR_CMD | Mods.SHIFT)):
+            self.redo()
+        # command + q
+        elif char == manim_config.key_bindings.quit and (modifiers & Mods.CTRL_OR_CMD):
+            self.quit_interaction = True
+        # Space or right arrow
+        elif char == " " or symbol == Keys.RIGHT:
+            self.hold_on_wait = False
+    def on_resize(self, width: int, height: int) -> None:
         pass
 
     def on_show(self) -> None:
@@ -1531,11 +1874,74 @@ class Scene(object):
         pass
 
     def on_close(self, *args, **kwargs):
-        return self.on_close_async(*args, **kwargs)
+        if sys.platform == "emscripten":
+            return self.on_resize_async(width, height, *args, **kwargs)
 
-    def on_close_async(self) -> None:
         pass
 
+    async def on_resize_async(self, width: int, height: int) -> None:
+        pass
+
+    def on_show(self) -> None:
+        pass
+
+    def on_hide(self) -> None:
+        pass
+
+    def on_close(self, *args, **kwargs):
+        pass
+    def on_show(self) -> None:
+        pass
+
+    def on_hide(self) -> None:
+        pass
+
+    def on_close(self) -> None:
+        pass
+
+    def focus(self) -> None:
+        """
+        Puts focus on the ManimGL window.
+        """
+        if not self.window:
+            return
+        self.window.focus()
+
+    def set_background_color(self, background_color, background_opacity=1) -> None:
+        self.camera.background_rgba = list(color_to_rgba(
+            background_color, background_opacity
+        ))
+
+
+class SceneState():
+        if sys.platform == "emscripten":
+            return self.on_close_async(self) -> None, background_color, background_opacity=1) -> None, background_opacity
+        ))
+
+
+class SceneState()
+
+        pass
+
+    async def on_close_async(self) -> None:
+        pass
+
+    def focus(self) -> None:
+        """
+        Puts focus on the ManimGL window.
+        """
+        if not self.window:
+            return
+        self.window.focus()
+
+    def set_background_color(self, background_color, background_opacity=1) -> None:
+        self.camera.background_rgba = list(color_to_rgba(
+            background_color, background_opacity
+        ))
+
+
+class SceneState():
+        pass
     def focus(self) -> None:
         """
         Puts focus on the ManimGL window.
