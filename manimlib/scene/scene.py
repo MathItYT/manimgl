@@ -377,11 +377,29 @@ class Scene(object):
             self.update_mobjects(dt)
         self.draw_frame(dt, force_draw)
 
+    async def update_mobjects_in_steps_async(self, dt: float) -> None:
+        """Apply a possibly delayed browser time interval in safe updater steps.
+
+        Browsers throttle requestAnimationFrame when a window/tab is hidden.
+        On return, a single large dt can destabilize time-based updaters. Keep
+        the full elapsed timeline interval, but subdivide updater calls and draw
+        only after the caller has finished catching up.
+        """
+        remaining = max(0.0, float(dt))
+        max_step = 1.0 / max(1.0, float(self.camera.fps))
+        while remaining > 1e-9:
+            step = min(remaining, max_step)
+            await self.update_mobjects_async(step)
+            remaining -= step
+
     async def update_frame_async(self, dt: float = 0, force_draw: bool = False) -> None:
         if not self.paused:
             self.increment_time(dt)
             self.progress_current_checkpoint(dt)
-            await self.update_mobjects_async(dt)
+            if sys.platform == "emscripten" and dt > 1.0 / max(1.0, float(self.camera.fps)):
+                await self.update_mobjects_in_steps_async(dt)
+            else:
+                await self.update_mobjects_async(dt)
         self.draw_frame(dt, force_draw)
 
     def draw_frame(self, dt: float = 0, force_draw: bool = False) -> None:
@@ -917,7 +935,7 @@ class Scene(object):
             for animation in animations:
                 animation.update_reference_mobjects(dt, frame_rate=self.camera.fps)
                 animation.interpolate(float(elapsed) / animation.run_time)
-            await self.update_mobjects_async(dt)
+            await self.update_mobjects_in_steps_async(dt)
             browser_audio.sync(self.time, self._interactive_sound_events)
             self.draw_frame(dt, force_draw=True)
             self.emit_frame()
@@ -1214,7 +1232,7 @@ class Scene(object):
                     for animation in animations:
                         animation.interpolate(alpha)
 
-                await self.update_mobjects_async(scene_dt)
+                await self.update_mobjects_in_steps_async(scene_dt)
                 self.draw_frame(scene_dt, force_draw=True)
                 browser_audio.sync(scene_time, self._interactive_sound_events)
 
