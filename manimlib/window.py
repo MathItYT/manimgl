@@ -493,6 +493,29 @@ class Window(object):
     def event_point(self, event: dict) -> np.ndarray:
         return self.pixel_coords_to_space_coords(*self.event_position(event))
 
+    def _dispatch_scene_event(self, method_name: str, *args):
+        """Dispatch a scene input callback without blocking the browser event loop.
+
+        rendercanvas invokes its event handlers synchronously. Browser-transformed
+        scene callbacks can therefore return coroutines, which must be scheduled
+        explicitly or their awaits (including play_async/wait_async) never run.
+        Keep strong references to outstanding tasks for the lifetime of the window.
+        """
+        if self.scene is None:
+            return None
+        result = getattr(self.scene, method_name)(*args)
+        if sys.platform == "emscripten":
+            import asyncio
+            import inspect
+            if inspect.isawaitable(result):
+                task = asyncio.create_task(result)
+                tasks = getattr(self, "_browser_input_tasks", None)
+                if tasks is None:
+                    tasks = self._browser_input_tasks = set()
+                tasks.add(task)
+                task.add_done_callback(tasks.discard)
+        return result
+
     def on_pointer_move(self, event: dict) -> None:
         self.note_event()
         if self.scene is None:
@@ -505,18 +528,20 @@ class Window(object):
         if event["buttons"]:
             # A move with a button held is what manim means by a drag; nothing but the
             # buttons distinguishes the two
-            self.scene.on_mouse_drag(
+            self._dispatch_scene_event(
+                "on_mouse_drag",
                 point, d_point, event["buttons"], to_mods(event["modifiers"]),
             )
         else:
-            self.scene.on_mouse_motion(point, d_point)
+            self._dispatch_scene_event("on_mouse_motion", point, d_point)
 
     def on_pointer_down(self, event: dict) -> None:
         self.note_event()
         if self.scene is None:
             return
         self.pointer_position = self.event_position(event)
-        self.scene.on_mouse_press(
+        self._dispatch_scene_event(
+            "on_mouse_press",
             self.event_point(event), event["button"], to_mods(event["modifiers"]),
         )
 
@@ -524,7 +549,8 @@ class Window(object):
         self.note_event()
         if self.scene is None:
             return
-        self.scene.on_mouse_release(
+        self._dispatch_scene_event(
+            "on_mouse_release",
             self.event_point(event), event["button"], to_mods(event["modifiers"]),
         )
 
@@ -533,7 +559,8 @@ class Window(object):
         if self.scene is None:
             return
         notches = np.array([event["dx"], event["dy"]]) / WHEEL_NOTCH
-        self.scene.on_mouse_scroll(
+        self._dispatch_scene_event(
+            "on_mouse_scroll",
             self.event_point(event),
             self.pixel_coords_to_space_coords(*notches, relative=True),
             *notches,
@@ -546,19 +573,7 @@ class Window(object):
             return
         self.pressed_keys.add(key)
         if self.scene:
-            result = self.scene.on_key_press(key, to_mods(event["modifiers"]))
-            if sys.platform == "emscripten":
-                # Browser source transformation makes event handlers async when they
-                # call self.play(), because that becomes await self.play_async().
-                # rendercanvas invokes input handlers synchronously, so explicitly
-                # schedule the returned coroutine instead of silently dropping it.
-                import asyncio
-                import inspect
-                if inspect.isawaitable(result):
-                    task = asyncio.create_task(result)
-                    self._browser_input_tasks = getattr(self, "_browser_input_tasks", set())
-                    self._browser_input_tasks.add(task)
-                    task.add_done_callback(self._browser_input_tasks.discard)
+            self._dispatch_scene_event("on_key_press", key, to_mods(event["modifiers"]))
 
     def on_key_up(self, event: dict) -> None:
         self.note_event()
@@ -567,25 +582,17 @@ class Window(object):
             return
         self.pressed_keys.discard(key)
         if self.scene:
-            result = self.scene.on_key_release(key, to_mods(event["modifiers"]))
-            if sys.platform == "emscripten":
-                import asyncio
-                import inspect
-                if inspect.isawaitable(result):
-                    task = asyncio.create_task(result)
-                    self._browser_input_tasks = getattr(self, "_browser_input_tasks", set())
-                    self._browser_input_tasks.add(task)
-                    task.add_done_callback(self._browser_input_tasks.discard)
+            self._dispatch_scene_event("on_key_release", key, to_mods(event["modifiers"]))
 
     def on_resize(self, event: dict) -> None:
         self.note_event()
         if self.scene:
-            self.scene.on_resize(event["width"], event["height"])
+            self._dispatch_scene_event("on_resize", event["width"], event["height"])
 
     def on_close(self, event: dict) -> None:
         self.note_event()
         if self.scene:
-            self.scene.on_close()
+            self._dispatch_scene_event("on_close")
 
 
 if sys.platform == "emscripten":
