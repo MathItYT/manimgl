@@ -1399,7 +1399,7 @@ class Scene(object):
         self.mouse_point.move_to(point)
 
         event_data = {"point": point, "d_point": d_point}
-        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseMotionEvent, **event_data)
+        propagate_event = await EVENT_DISPATCHER.dispatch_async(EventType.MouseMotionEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
 
@@ -1445,7 +1445,7 @@ class Scene(object):
             self.frame.shift(-d_point)
 
         event_data = {"point": point, "d_point": d_point, "buttons": buttons, "modifiers": modifiers}
-        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseDragEvent, **event_data)
+        propagate_event = await EVENT_DISPATCHER.dispatch_async(EventType.MouseDragEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
 
@@ -1473,7 +1473,7 @@ class Scene(object):
     ) -> None:
         self.mouse_drag_point.move_to(point)
         event_data = {"point": point, "button": button, "mods": mods}
-        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MousePressEvent, **event_data)
+        propagate_event = await EVENT_DISPATCHER.dispatch_async(EventType.MousePressEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
 
@@ -1499,7 +1499,7 @@ class Scene(object):
         mods: int
     ) -> None:
         event_data = {"point": point, "button": button, "mods": mods}
-        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseReleaseEvent, **event_data)
+        propagate_event = await EVENT_DISPATCHER.dispatch_async(EventType.MouseReleaseEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
 
@@ -1535,7 +1535,7 @@ class Scene(object):
         y_pixel_offset: float
     ) -> None:
         event_data = {"point": point, "offset": offset}
-        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseScrollEvent, **event_data)
+        propagate_event = await EVENT_DISPATCHER.dispatch_async(EventType.MouseScrollEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
 
@@ -1567,7 +1567,7 @@ class Scene(object):
         modifiers: int
     ) -> None:
         event_data = {"symbol": symbol, "modifiers": modifiers}
-        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyReleaseEvent, **event_data)
+        propagate_event = await EVENT_DISPATCHER.dispatch_async(EventType.KeyReleaseEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
 
@@ -1616,7 +1616,7 @@ class Scene(object):
             return
 
         event_data = {"symbol": symbol, "modifiers": modifiers}
-        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyPressEvent, **event_data)
+        propagate_event = await EVENT_DISPATCHER.dispatch_async(EventType.KeyPressEvent, **event_data)
         if propagate_event is not None and propagate_event is False:
             return
 
