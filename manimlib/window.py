@@ -529,11 +529,11 @@ class Window(object):
             # A move with a button held is what manim means by a drag; nothing but the
             # buttons distinguishes the two
             self._dispatch_scene_event(
-                "on_mouse_drag",
+                "on_mouse_drag_async",
                 point, d_point, event["buttons"], to_mods(event["modifiers"]),
             )
         else:
-            self._dispatch_scene_event("on_mouse_motion", point, d_point)
+            self._dispatch_scene_event("on_mouse_motion_async", point, d_point)
 
     def on_pointer_down(self, event: dict) -> None:
         self.note_event()
@@ -541,7 +541,7 @@ class Window(object):
             return
         self.pointer_position = self.event_position(event)
         self._dispatch_scene_event(
-            "on_mouse_press",
+            "on_mouse_press_async",
             self.event_point(event), event["button"], to_mods(event["modifiers"]),
         )
 
@@ -550,7 +550,7 @@ class Window(object):
         if self.scene is None:
             return
         self._dispatch_scene_event(
-            "on_mouse_release",
+            "on_mouse_release_async",
             self.event_point(event), event["button"], to_mods(event["modifiers"]),
         )
 
@@ -560,7 +560,7 @@ class Window(object):
             return
         notches = np.array([event["dx"], event["dy"]]) / WHEEL_NOTCH
         self._dispatch_scene_event(
-            "on_mouse_scroll",
+            "on_mouse_scroll_async",
             self.event_point(event),
             self.pixel_coords_to_space_coords(*notches, relative=True),
             *notches,
@@ -573,7 +573,7 @@ class Window(object):
             return
         self.pressed_keys.add(key)
         if self.scene:
-            self._dispatch_scene_event("on_key_press", key, to_mods(event["modifiers"]))
+            self._dispatch_scene_event("on_key_press_async", key, to_mods(event["modifiers"]))
 
     def on_key_up(self, event: dict) -> None:
         self.note_event()
@@ -582,17 +582,17 @@ class Window(object):
             return
         self.pressed_keys.discard(key)
         if self.scene:
-            self._dispatch_scene_event("on_key_release", key, to_mods(event["modifiers"]))
+            self._dispatch_scene_event("on_key_release_async", key, to_mods(event["modifiers"]))
 
     def on_resize(self, event: dict) -> None:
         self.note_event()
         if self.scene:
-            self._dispatch_scene_event("on_resize", event["width"], event["height"])
+            self._dispatch_scene_event("on_resize_async", event["width"], event["height"])
 
     def on_close(self, event: dict) -> None:
         self.note_event()
         if self.scene:
-            self._dispatch_scene_event("on_close")
+            self._dispatch_scene_event("on_close_async")
 
 
 if sys.platform == "emscripten":
