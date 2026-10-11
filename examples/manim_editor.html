@@ -2037,9 +2037,15 @@ async def _browser_add_number_line_numbers(line):
     await line.add_numbers_async(excluding=line.numbers_to_exclude)
     return line
 
-if globals().get("_editor_scene") is not None:
+_previous_scene = globals().get("_editor_scene")
+_reusable_window = (
+    getattr(_previous_scene, "window", None)
+    if _previous_scene is not None
+    else None
+)
+if _previous_scene is not None:
     try:
-        globals()["_editor_scene"].tear_down()
+        _previous_scene.tear_down()
     except Exception:
         pass
     globals()["_editor_scene"] = None
@@ -2072,7 +2078,12 @@ from js import window
 _canvas_target = window.__manimCanvasElement
 if _canvas_target is None:
     raise RuntimeError("Open the canvas window with “Open Canvas” first.")
-_editor_scene = await run_scene_from_class(_scene_class, _canvas_target, size=(${canvasWidth}, ${canvasHeight}))
+_editor_scene = await run_scene_from_class(
+    _scene_class,
+    _canvas_target,
+    size=(${canvasWidth}, ${canvasHeight}),
+    window=_reusable_window,
+)
 _editor_scene_token = ${token}`;
     }
 
