@@ -1380,8 +1380,7 @@ class Scene(object):
         # Handle perspective changes
         if self.window.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
         if sys.platform == "emscripten":
-            return self.on_mouse_motion_async(point, d_point, "d_point", **event_data)
-        if propagate_event is not None and propagate_event is False)
+            return self.on_mouse_motion_async(point, d_point)
 
             ff_d_point = frame.to_fixed_frame_point(d_point, relative=True)
             ff_d_point *= self.pan_sensitivity
@@ -1433,8 +1432,7 @@ class Scene(object):
 
     def on_mouse_press(self, *args, **kwargs):
         if sys.platform == "emscripten":
-            return self.on_mouse_drag_async(point, d_point, buttons, modifiers, "d_point", "buttons", "modifiers", **event_data)
-        if propagate_event is not None and propagate_event is False, *args, **kwargs)
+            return self.on_mouse_drag_async(point, d_point, buttons, modifiers)
 
         return self.on_mouse_press_async(*args, **kwargs)
 
@@ -1466,8 +1464,7 @@ class Scene(object):
 
     def on_mouse_release(self, *args, **kwargs):
         if sys.platform == "emscripten":
-            return self.on_mouse_press_async(point, button, mods, "button", "mods", **event_data)
-        if propagate_event is not None and propagate_event is False, *args, **kwargs)
+            return self.on_mouse_press_async(point, button, mods)
 
         return self.on_mouse_release_async(*args, **kwargs)
 
@@ -1494,8 +1491,7 @@ None:
 
     def on_mouse_scroll(self, *args, **kwargs):
         if sys.platform == "emscripten":
-            return self.on_mouse_release_async(point, button, mods, "button", "mods", **event_data)
-        if propagate_event is not None and propagate_event is False, *args, **kwargs)
+            return self.on_mouse_release_async(point, button, mods)
 
         return self.on_mouse_scroll_async(*args, **kwargs)
 
@@ -1531,11 +1527,7 @@ float,
 
     def on_key_release(self, *args, **kwargs):
         if sys.platform == "emscripten":
-            return self.on_mouse_scroll_async(point, offset, x_pixel_offset, y_pixel_offset, "offset", **event_data)
-        if propagate_event is not None and propagate_event is False, about_point=point
-        )
-
-    def on_key_release(self, *args, **kwargs)
+            return self.on_mouse_scroll_async(point, offset, x_pixel_offset, y_pixel_offset)
 
         return self.on_key_release_async(*args, **kwargs)
 
@@ -1569,8 +1561,7 @@ vent_data = {"symbol": symbol, "modifiers": modifiers}
 
     def on_key_press(self, *args, **kwargs):
         if sys.platform == "emscripten":
-            return self.on_key_release_async(symbol, modifiers, "modifiers", **event_data)
-        if propagate_event is not None and propagate_event is False, *args, **kwargs)
+            return self.on_key_release_async(symbol, modifiers)
 
         return self.on_key_press_async(*args, **kwargs)
 
@@ -1604,9 +1595,7 @@ vent_data = {"symbol": symbol, "modifiers": modifiers}
                 task = getattr(self, "_browser_animation_task", None)
                 if task is not None and not task.done():
         if sys.platform == "emscripten":
-            return self.on_key_press_async(symbol, modifiers, "modifiers", **event_data)
-        if propagate_event is not None and propagate_event is False, "_browser_animation_task", None)
-                if task is not None and not task.done()
+            return self.on_key_press_async(symbol, modifiers, try)
 
                     task.cancel()
                 self._browser_animation_task = asyncio.create_task(
@@ -1680,7 +1669,7 @@ vent_data = {"symbol": symbol, "modifiers": modifiers}
 
     def on_close(self, *args, **kwargs):
         if sys.platform == "emscripten":
-            return self.on_resize_async(width, height, *args, **kwargs)
+            return self.on_resize_async()
 
         return self.on_close_async(*args, **kwargs)
 
@@ -1710,12 +1699,7 @@ vent_data = {"symbol": symbol, "modifiers": modifiers}
 
 class SceneState():
         if sys.platform == "emscripten":
-            return self.on_close_async(self) -> None, background_color, background_opacity=1) -> None, background_opacity
-        ))
-
-
-class SceneState()
-
+            return self.on_close_async()
 
 
     async def on_close_async(self) -> None:
