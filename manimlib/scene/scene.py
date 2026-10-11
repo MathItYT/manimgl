@@ -1395,7 +1395,10 @@ class Scene(object):
     def on_close_async(self):
         return self.on_close()
 
-    def on_mouse_motion(
+    def on_mouse_motion(self, *args, **kwargs):
+        return self.on_mouse_motion_async(*args, **kwargs)
+
+    def on_mouse_motion_async(
         self,
         point: Vect3,
         d_point: Vect3
@@ -1419,7 +1422,10 @@ class Scene(object):
         elif self.window.is_key_pressed(ord(manim_config.key_bindings.pan)):
             frame.shift(-d_point)
 
-    def on_mouse_drag(
+    def on_mouse_drag(self, *args, **kwargs):
+        return self.on_mouse_drag_async(*args, **kwargs)
+
+    def on_mouse_drag_async(
         self,
         point: Vect3,
         d_point: Vect3,
@@ -1435,7 +1441,10 @@ class Scene(object):
         if propagate_event is not None and propagate_event is False:
             return
 
-    def on_mouse_press(
+    def on_mouse_press(self, *args, **kwargs):
+        return self.on_mouse_press_async(*args, **kwargs)
+
+    def on_mouse_press_async(
         self,
         point: Vect3,
         button: int,
@@ -1447,7 +1456,10 @@ class Scene(object):
         if propagate_event is not None and propagate_event is False:
             return
 
-    def on_mouse_release(
+    def on_mouse_release(self, *args, **kwargs):
+        return self.on_mouse_release_async(*args, **kwargs)
+
+    def on_mouse_release_async(
         self,
         point: Vect3,
         button: int,
@@ -1458,7 +1470,10 @@ class Scene(object):
         if propagate_event is not None and propagate_event is False:
             return
 
-    def on_mouse_scroll(
+    def on_mouse_scroll(self, *args, **kwargs):
+        return self.on_mouse_scroll_async(*args, **kwargs)
+
+    def on_mouse_scroll_async(
         self,
         point: Vect3,
         offset: Vect3,
@@ -1478,7 +1493,10 @@ class Scene(object):
             about_point=point
         )
 
-    def on_key_release(
+    def on_key_release(self, *args, **kwargs):
+        return self.on_key_release_async(*args, **kwargs)
+
+    def on_key_release_async(
         self,
         symbol: int,
         modifiers: int
@@ -1488,7 +1506,10 @@ class Scene(object):
         if propagate_event is not None and propagate_event is False:
             return
 
-    def on_key_press(
+    def on_key_press(self, *args, **kwargs):
+        return self.on_key_press_async(*args, **kwargs)
+
+    def on_key_press_async(
         self,
         symbol: int,
         modifiers: int
@@ -1529,7 +1550,10 @@ class Scene(object):
         elif char == " " or symbol == Keys.RIGHT:
             self.hold_on_wait = False
 
-    def on_resize(self, width: int, height: int) -> None:
+    def on_resize(self, *args, **kwargs):
+        return self.on_resize_async(*args, **kwargs)
+
+    def on_resize_async(self, width: int, height: int) -> None:
         pass
 
     def on_show(self) -> None:
@@ -1538,7 +1562,10 @@ class Scene(object):
     def on_hide(self) -> None:
         pass
 
-    def on_close(self) -> None:
+    def on_close(self, *args, **kwargs):
+        return self.on_close_async(*args, **kwargs)
+
+    def on_close_async(self) -> None:
         pass
 
     def focus(self) -> None:
