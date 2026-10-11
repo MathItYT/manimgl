@@ -1363,38 +1363,6 @@ class Scene(object):
         else:
             raise Exception("Only `xz` and `xy` are valid floor planes")
 
-    # Browser event dispatch
-    # Keep the public/native event methods synchronous for compatibility. The
-    # *_async entry points return the callback result unchanged: in the browser,
-    # source-transformed user overrides may return coroutines, which Window
-    # schedules on the running asyncio loop.
-    def on_mouse_motion_async(self, point: Vect3, d_point: Vect3):
-        return self.on_mouse_motion(point, d_point)
-
-    def on_mouse_drag_async(self, point: Vect3, d_point: Vect3, buttons: int, modifiers: int):
-        return self.on_mouse_drag(point, d_point, buttons, modifiers)
-
-    def on_mouse_press_async(self, point: Vect3, button: int, mods: int):
-        return self.on_mouse_press(point, button, mods)
-
-    def on_mouse_release_async(self, point: Vect3, button: int, mods: int):
-        return self.on_mouse_release(point, button, mods)
-
-    def on_mouse_scroll_async(self, point: Vect3, offset: Vect3, x_pixel_offset: float, y_pixel_offset: float):
-        return self.on_mouse_scroll(point, offset, x_pixel_offset, y_pixel_offset)
-
-    def on_key_press_async(self, symbol: int, modifiers: int):
-        return self.on_key_press(symbol, modifiers)
-
-    def on_key_release_async(self, symbol: int, modifiers: int):
-        return self.on_key_release(symbol, modifiers)
-
-    def on_resize_async(self, width: int, height: int):
-        return self.on_resize(width, height)
-
-    def on_close_async(self):
-        return self.on_close()
-
     def on_mouse_motion(self, *args, **kwargs):
         return self.on_mouse_motion_async(*args, **kwargs)
 
