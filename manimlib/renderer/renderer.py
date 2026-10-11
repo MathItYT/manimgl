@@ -469,13 +469,11 @@ class Renderer(object):
                 self.drawings[mob] = drawing
                 drawn.append(drawing)
 
-        # Orden estable:
-        # 1) Por z_index
-        # 2) Objetos base (sin VFX) primero (0), capas de VFX después (1)
-        drawn.sort(key=lambda d: (
-            d.mobject.z_index,
-            1 if self.get_vfx_group(d.mobject) is not None else 0
-        ))
+        # Mantener el orden de pintado para z_index iguales.
+        # No promover los objetos con VFX por encima del resto: hacerlo
+        # altera la oclusion cuando hay objetos normales antes y despues
+        # de uno con Glow u otro efecto.
+        drawn.sort(key=lambda d: d.mobject.z_index)
         return drawn
 
     def material_for(self, mobject: Mobject, drawing_class: type) -> Material:
