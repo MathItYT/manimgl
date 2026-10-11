@@ -1370,25 +1370,25 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_mouse_motion_async(point, d_point)
-         assert self.window is not None
-         self.mouse_point.move_to(point)
- 
-         event_data = {"point": point, "d_point": d_point}
-         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseMotionEvent, **event_data)
-         if propagate_event is not None and propagate_event is False:
-             return
- 
-         frame = self.camera.frame
-         # Handle perspective changes
-         if self.window.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
-             ff_d_point = frame.to_fixed_frame_point(d_point, relative=True)
-             ff_d_point *= self.pan_sensitivity
-             frame.increment_theta(-ff_d_point[0])
-             frame.increment_phi(ff_d_point[1])
-         # Handle frame movements
-         elif self.window.is_key_pressed(ord(manim_config.key_bindings.pan)):
-             frame.shift(-d_point)
- 
+        assert self.window is not None
+        self.mouse_point.move_to(point)
+
+        event_data = {"point": point, "d_point": d_point}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseMotionEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        frame = self.camera.frame
+        # Handle perspective changes
+        if self.window.is_key_pressed(ord(manim_config.key_bindings.pan_3d)):
+            ff_d_point = frame.to_fixed_frame_point(d_point, relative=True)
+            ff_d_point *= self.pan_sensitivity
+            frame.increment_theta(-ff_d_point[0])
+            frame.increment_phi(ff_d_point[1])
+        # Handle frame movements
+        elif self.window.is_key_pressed(ord(manim_config.key_bindings.pan)):
+            frame.shift(-d_point)
+
 
     async def on_mouse_motion_async(
         self,
@@ -1424,15 +1424,15 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_mouse_drag_async(point, d_point, buttons, modifiers)
-         self.mouse_drag_point.move_to(point)
-         if self.drag_to_pan:
-             self.frame.shift(-d_point)
- 
-         event_data = {"point": point, "d_point": d_point, "buttons": buttons, "modifiers": modifiers}
-         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseDragEvent, **event_data)
-         if propagate_event is not None and propagate_event is False:
-             return
- 
+        self.mouse_drag_point.move_to(point)
+        if self.drag_to_pan:
+            self.frame.shift(-d_point)
+
+        event_data = {"point": point, "d_point": d_point, "buttons": buttons, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseDragEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
 
     async def on_mouse_drag_async(
         self,
@@ -1459,12 +1459,12 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_mouse_press_async(point, button, mods)
-         self.mouse_drag_point.move_to(point)
-         event_data = {"point": point, "button": button, "mods": mods}
-         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MousePressEvent, **event_data)
-         if propagate_event is not None and propagate_event is False:
-             return
- 
+        self.mouse_drag_point.move_to(point)
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MousePressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
 
     async def on_mouse_press_async(
         self,
@@ -1487,11 +1487,11 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_mouse_release_async(point, button, mods)
-         event_data = {"point": point, "button": button, "mods": mods}
-         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseReleaseEvent, **event_data)
-         if propagate_event is not None and propagate_event is False:
-             return
- 
+        event_data = {"point": point, "button": button, "mods": mods}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
 
     async def on_mouse_release_async(
         self,
@@ -1514,19 +1514,19 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_mouse_scroll_async(point, offset, x_pixel_offset, y_pixel_offset)
-         event_data = {"point": point, "offset": offset}
-         propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseScrollEvent, **event_data)
-         if propagate_event is not None and propagate_event is False:
-             return
- 
-         rel_offset = -y_pixel_offset / self.camera.get_pixel_height()
-         if self.invert_zoom_scroll:
-             rel_offset *= -1
-         self.frame.scale(
-             1 - self.scroll_sensitivity * rel_offset,
-             about_point=point
-         )
- 
+        event_data = {"point": point, "offset": offset}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.MouseScrollEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        rel_offset = -y_pixel_offset / self.camera.get_pixel_height()
+        if self.invert_zoom_scroll:
+            rel_offset *= -1
+        self.frame.scale(
+            1 - self.scroll_sensitivity * rel_offset,
+            about_point=point
+        )
+
 
     async def on_mouse_scroll_async(
         self,
@@ -1556,11 +1556,11 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_key_release_async(symbol, modifiers)
-         event_data = {"symbol": symbol, "modifiers": modifiers}
-         propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyReleaseEvent, **event_data)
-         if propagate_event is not None and propagate_event is False:
-             return
- 
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyReleaseEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
 
     async def on_key_release_async(
         self,
@@ -1580,42 +1580,42 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_key_press_async(symbol, modifiers)
-         try:
-             char = chr(symbol)
-         except OverflowError:
-             log.warning("The value of the pressed key is too large.")
-             return
- 
-         event_data = {"symbol": symbol, "modifiers": modifiers}
-         propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyPressEvent, **event_data)
-         if propagate_event is not None and propagate_event is False:
-             return
- 
-         if char == manim_config.key_bindings.reset:
-             if sys.platform == "emscripten":
-                 import asyncio
-                 task = getattr(self, "_browser_animation_task", None)
-                 if task is not None and not task.done():
-                     task.cancel()
-                 self._browser_animation_task = asyncio.create_task(
-                     self.play_async(
-                         self.camera.frame.animate.to_default_state(),
-                         register=False,
-                     )
-                 )
-             else:
-                 self.play(self.camera.frame.animate.to_default_state(), register=False)
-         elif char == "z" and (modifiers & Mods.CTRL_OR_CMD):
-             self.undo()
-         elif char == "z" and (modifiers & (Mods.CTRL_OR_CMD | Mods.SHIFT)):
-             self.redo()
-         # command + q
-         elif char == manim_config.key_bindings.quit and (modifiers & Mods.CTRL_OR_CMD):
-             self.quit_interaction = True
-         # Space or right arrow
-         elif char == " " or symbol == Keys.RIGHT:
-             self.hold_on_wait = False
- 
+        try:
+            char = chr(symbol)
+        except OverflowError:
+            log.warning("The value of the pressed key is too large.")
+            return
+
+        event_data = {"symbol": symbol, "modifiers": modifiers}
+        propagate_event = EVENT_DISPATCHER.dispatch(EventType.KeyPressEvent, **event_data)
+        if propagate_event is not None and propagate_event is False:
+            return
+
+        if char == manim_config.key_bindings.reset:
+            if sys.platform == "emscripten":
+                import asyncio
+                task = getattr(self, "_browser_animation_task", None)
+                if task is not None and not task.done():
+                    task.cancel()
+                self._browser_animation_task = asyncio.create_task(
+                    self.play_async(
+                        self.camera.frame.animate.to_default_state(),
+                        register=False,
+                    )
+                )
+            else:
+                self.play(self.camera.frame.animate.to_default_state(), register=False)
+        elif char == "z" and (modifiers & Mods.CTRL_OR_CMD):
+            self.undo()
+        elif char == "z" and (modifiers & (Mods.CTRL_OR_CMD | Mods.SHIFT)):
+            self.redo()
+        # command + q
+        elif char == manim_config.key_bindings.quit and (modifiers & Mods.CTRL_OR_CMD):
+            self.quit_interaction = True
+        # Space or right arrow
+        elif char == " " or symbol == Keys.RIGHT:
+            self.hold_on_wait = False
+
 
     async def on_key_press_async(
         self,
@@ -1661,9 +1661,9 @@ class Scene(object):
 
     def on_resize(self, width: int, height: int) -> None:
         if sys.platform == "emscripten":
-            return self.on_resize_async()
-         pass
- 
+            return self.on_resize_async(width, height)
+        pass
+
 
     async def on_resize_async(self, width: int, height: int) -> None:
         pass
@@ -1678,8 +1678,8 @@ class Scene(object):
     def on_close(self) -> None:
         if sys.platform == "emscripten":
             return self.on_close_async()
-         pass
- 
+        pass
+
 
     async def on_close_async(self) -> None:
         pass
