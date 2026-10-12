@@ -66,6 +66,13 @@ class PostProcessEffect:
         if allow_multiple is not None:
             self.allow_multiple = allow_multiple
         self.mobject: Mobject | None = None
+        self._last_uniform_data: np.ndarray | None = None
+
+    def upload_uniforms_if_changed(self, processor: Any, buffer: Any, data: np.ndarray) -> None:
+        """Evita transferencias costosas Wasm -> JS si los valores son idénticos."""
+        if self._last_uniform_data is None or not np.array_equal(self._last_uniform_data, data):
+            processor.queue.write_buffer(buffer, 0, data)
+            self._last_uniform_data = data.copy()
 
     def attach(self, mobject: Mobject) -> None:
         self.mobject = mobject
@@ -263,7 +270,7 @@ class GaussianBlur(PostProcessEffect):
             float(processor.width),
             float(processor.height),
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
         intermediate_view = processor.scratch_view
         bg_pass1_tex = processor.get_single_tex_bind_group(input_view)
@@ -420,7 +427,7 @@ class Grain(PostProcessEffect):
             1.0 if self.colored else 0.0,
             float(processor.width), float(processor.height), 0.0, 0.0,
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
         tex_bg = processor.get_single_tex_bind_group(input_view)
 
@@ -586,7 +593,7 @@ class Vignette(PostProcessEffect):
             1.0 if self.keep_circular else 0.0,
             cr, cg, cb, ca,
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
         tex_bg = processor.get_single_tex_bind_group(input_view)
 
@@ -754,7 +761,7 @@ class Mask(PostProcessEffect):
             mode_val,
             0.0,
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
         bg_mob = processor.get_single_tex_bind_group(input_view)
         bg_mask = processor.get_single_tex_bind_group(processor.mask_view)
@@ -1038,7 +1045,7 @@ class Glow(PostProcessEffect):
             tint_b,
             tint_a,
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
         # Usar la textura scratch compartida del engine (no una privada)
         intermediate_view = processor.scratch_view
@@ -1247,12 +1254,9 @@ class Glitch(PostProcessEffect):
             0.0,
             0.0,
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
-        tex_bg = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[{"binding": 0, "resource": input_view}, {"binding": 1, "resource": processor.sampler}],
-        )
+        tex_bg = processor.get_single_tex_bind_group(input_view)
 
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
@@ -2382,9 +2386,8 @@ class MotionBlur(PostProcessEffect):
         # UNIFORM
         # --------------------------------------------------------------
 
-        processor.queue.write_buffer(
+        self.upload_uniforms_if_changed(processor, 
             self.buf,
-            0,
             np.array(
                 [
                     dir_x,
@@ -2401,18 +2404,8 @@ class MotionBlur(PostProcessEffect):
         # --------------------------------------------------------------
 
         tex_bg = (
-            processor.device.create_bind_group(
-                layout=processor.single_tex_layout,
-                entries=[
-                    {
-                        "binding": 0,
-                        "resource": input_view,
-                    },
-                    {
-                        "binding": 1,
-                        "resource": processor.sampler,
-                    },
-                ],
+            processor.get_single_tex_bind_group(
+                input_view
             )
         )
 
@@ -2717,12 +2710,9 @@ class ZoomBlur(PostProcessEffect):
             t_start, t_end,
             0.0, 0.0,
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
-        tex_bg = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[{"binding": 0, "resource": input_view}, {"binding": 1, "resource": processor.sampler}],
-        )
+        tex_bg = processor.get_single_tex_bind_group(input_view)
 
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
@@ -2846,7 +2836,7 @@ class ChromaticAberration(PostProcessEffect):
         if not self._initialized:
             self._init_gpu(processor)
 
-        processor.queue.write_buffer(self.buf, 0, np.array([self.offset, 0.0, 0.0, 0.0], dtype=np.float32))
+        self.upload_uniforms_if_changed(processor, self.buf, np.array([self.offset, 0.0, 0.0, 0.0], dtype=np.float32))
         tex_bg = processor.get_single_tex_bind_group(input_view)
 
         p = encoder.begin_render_pass(color_attachments=[{
@@ -3352,7 +3342,7 @@ class LiquidGlass(PostProcessEffect):
         )
 
         self.buf_glass, self.bg_glass = make_uniform(64)
-        processor.queue.write_buffer(self.buf_zero, 0, np.zeros(4, dtype=np.float32))
+        self.upload_uniforms_if_changed(processor, self.buf_zero, np.zeros(4, dtype=np.float32))
 
         self.pipeline_blur = processor.create_fullscreen_pipeline(
             LG_BLUR_WGSL,
@@ -3421,13 +3411,7 @@ class LiquidGlass(PostProcessEffect):
         return self._blur_view_a, self._blur_view_b
 
     def _blur_pass(self, processor: Any, encoder: Any, src_view: Any, dst_view: Any, uniform_bg: Any) -> None:
-        src_bg = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": src_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        src_bg = processor.get_single_tex_bind_group(src_view)
         p = encoder.begin_render_pass(color_attachments=[{
             "view": dst_view,
             "load_op": wgpu.LoadOp.clear,
@@ -3779,7 +3763,7 @@ class DropShadow(PostProcessEffect):
             0.0,
             c_r, c_g, c_b, c_a,
         ], dtype=np.float32)
-        processor.queue.write_buffer(self.buf, 0, data)
+        self.upload_uniforms_if_changed(processor, self.buf, data)
 
         intermediate_view = processor.scratch_view
         bg_pass1_tex = processor.get_single_tex_bind_group(input_view)
