@@ -67,6 +67,85 @@ class Renderer(object):
             return mob
         return None
 
+    def optimize_leaders_dag(self, leaders: list[Drawing]) -> list[Drawing]:
+        """Reordena líderes mediante un DAG de oclusión para agrupar pases de VFX
+        sin alterar el orden visual (respetando solapamientos 2D y z_index).
+        """
+        n = len(leaders)
+        if n <= 1:
+            return leaders
+
+        # Solo aplicamos en 2D para no alterar la profundidad Back-to-Front en 3D
+        frame = getattr(self.camera, "frame", None)
+        if frame is not None:
+            phi = getattr(frame, "get_phi", lambda: 0.0)()
+            theta = getattr(frame, "get_theta", lambda: 0.0)()
+            if abs(phi) > 1e-3 or abs(theta) > 1e-3:
+                return leaders
+
+        groups = [self.get_vfx_group(ldr.mobject) for ldr in leaders]
+        unique_groups = {g for g in groups if g is not None}
+        if not unique_groups:
+            return leaders
+
+        bboxes: list[tuple[np.ndarray, np.ndarray] | None] = []
+        for ldr in leaders:
+            mob = ldr.mobject
+            if mob.has_points():
+                bb = mob.get_bounding_box()
+                r_extra = 0.0
+                grp = self.get_vfx_group(mob)
+                if grp is not None and hasattr(grp, "get_vfx_list"):
+                    for eff in grp.get_vfx_list():
+                        r_extra = max(r_extra, float(getattr(eff, "radius", 0.0)) * 0.015)
+                bboxes.append((bb[0][:2] - r_extra, bb[2][:2] + r_extra))
+            else:
+                bboxes.append(None)
+
+        in_degree = [0] * n
+        adj: list[list[int]] = [[] for _ in range(n)]
+
+        for i in range(n):
+            bi = bboxes[i]
+            zi = leaders[i].mobject.z_index
+            for j in range(i + 1, n):
+                zj = leaders[j].mobject.z_index
+                bj = bboxes[j]
+                overlaps = (
+                    bi is not None and bj is not None
+                    and not (bi[1][0] < bj[0][0] or bi[0][0] > bj[1][0]
+                             or bi[1][1] < bj[0][1] or bi[0][1] > bj[1][1])
+                )
+                if (zj > zi) or (zj == zi and overlaps):
+                    adj[i].append(j)
+                    in_degree[j] += 1
+
+        ready = [i for i in range(n) if in_degree[i] == 0]
+        ordered: list[Drawing] = []
+        current_group: Mobject | None = None
+
+        while ready:
+            candidate_idx: int | None = None
+            if current_group is not None:
+                for idx in ready:
+                    if groups[idx] is current_group:
+                        candidate_idx = idx
+                        break
+
+            if candidate_idx is None:
+                candidate_idx = ready[0]
+                current_group = groups[candidate_idx]
+
+            ready.remove(candidate_idx)
+            ordered.append(leaders[candidate_idx])
+
+            for succ in adj[candidate_idx]:
+                in_degree[succ] -= 1
+                if in_degree[succ] == 0:
+                    ready.append(succ)
+
+        return ordered
+
     def render_mobject_to_view(
         self,
         encoder: Any,
@@ -188,12 +267,13 @@ class Renderer(object):
         self.post_processor.time += 1.0 / max(float(fps), 1.0)
 
         # -------------------------------------------------------------
-        # 1. Agrupamiento contiguo por grupo de VFX
+        # 1. Agrupamiento contiguo por grupo de VFX optimizado por DAG
         # -------------------------------------------------------------
+        ordered_leaders = self.optimize_leaders_dag(self.leaders)
         batches: list[tuple[list[Drawing], Mobject | None]] = []
         curr_batch: list[Drawing] = []
         curr_group: Mobject | None = None
-        for leader in self.leaders:
+        for leader in ordered_leaders:
             grp = self.get_vfx_group(leader.mobject)
             if not batches:
                 curr_batch.append(leader)

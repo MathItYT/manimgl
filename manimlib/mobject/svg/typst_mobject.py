@@ -168,6 +168,24 @@ class SingleStringTypst(StringMobject):
         total_submobs = len(self.submobjects)
         submob_idx = 0
 
+        # 1. Determinar qué caracteres están en modo matemático
+        is_math = []
+        curr_math = self.math_mode
+        escaped = False
+        for ch in self.string:
+            if escaped:
+                is_math.append(curr_math)
+                escaped = False
+            elif ch == "\\":
+                is_math.append(curr_math)
+                escaped = True
+            elif ch == "$":
+                curr_math = not curr_math
+                is_math.append(False)
+            else:
+                is_math.append(curr_math)
+
+        # 2. Identificar paréntesis de funciones (sqrt, root)
         func_paren_indices = set()
         for func_pat in (r"sqrt\s*\(", r"root\s*\("):
             for m in re.finditer(func_pat, self.string):
@@ -182,6 +200,94 @@ class SingleStringTypst(StringMobject):
                         if depth == 0:
                             func_paren_indices.add(j)
                             break
+
+        # 3. Analizar fracciones: detectar paréntesis invisibles y el fin del denominador
+        # slash_info: {slash_idx: denom_end}
+        slash_info: dict[int, int] = {}
+
+        for slash_idx in range(len(self.string)):
+            if self.string[slash_idx] != "/" or not is_math[slash_idx]:
+                continue
+            # Ignorar comentarios '//'
+            if slash_idx + 1 < len(self.string) and self.string[slash_idx + 1] == "/":
+                continue
+            if slash_idx > 0 and self.string[slash_idx - 1] == "/":
+                continue
+
+            # --- Numerador a la izquierda: (...) / ---
+            left_idx = slash_idx - 1
+            while left_idx >= 0 and self.string[left_idx].isspace():
+                left_idx -= 1
+            if left_idx >= 0 and self.string[left_idx] == ")" and is_math[left_idx]:
+                close_paren = left_idx
+                depth = 1
+                open_paren = -1
+                for j in range(close_paren - 1, -1, -1):
+                    if self.string[j] == ")":
+                        depth += 1
+                    elif self.string[j] == "(":
+                        depth -= 1
+                        if depth == 0:
+                            open_paren = j
+                            break
+                if open_paren != -1 and is_math[open_paren]:
+                    # Si no es llamada a función como sin(x) o f(x), son paréntesis de agrupación
+                    prev_char_idx = open_paren - 1
+                    while prev_char_idx >= 0 and self.string[prev_char_idx].isspace():
+                        prev_char_idx -= 1
+                    is_func_call = prev_char_idx >= 0 and (
+                        self.string[prev_char_idx].isalnum() or self.string[prev_char_idx] == "_"
+                    )
+                    if not is_func_call:
+                        func_paren_indices.add(open_paren)
+                        func_paren_indices.add(close_paren)
+
+            # --- Denominador a la derecha: / (...) o / término ---
+            right_idx = slash_idx + 1
+            while right_idx < len(self.string) and self.string[right_idx].isspace():
+                right_idx += 1
+
+            if right_idx < len(self.string) and is_math[right_idx]:
+                if self.string[right_idx] == "(":
+                    open_paren = right_idx
+                    depth = 1
+                    close_paren = -1
+                    for j in range(open_paren + 1, len(self.string)):
+                        if self.string[j] == "(":
+                            depth += 1
+                        elif self.string[j] == ")":
+                            depth -= 1
+                            if depth == 0:
+                                close_paren = j
+                                break
+                    if close_paren != -1 and is_math[close_paren]:
+                        func_paren_indices.add(open_paren)
+                        func_paren_indices.add(close_paren)
+                        slash_info[slash_idx] = close_paren + 1
+                    else:
+                        slash_info[slash_idx] = len(self.string)
+                else:
+                    # Denominador simple (variable, número o identificador)
+                    m = re.match(r"[a-zA-Z0-9_.]+", self.string[right_idx:])
+                    if m:
+                        denom_end = right_idx + m.end()
+                        # Si es una función como sqrt(x) o sin(x), incluir sus argumentos
+                        next_k = denom_end
+                        while next_k < len(self.string) and self.string[next_k].isspace():
+                            next_k += 1
+                        if next_k < len(self.string) and self.string[next_k] == "(":
+                            depth = 1
+                            for j in range(next_k + 1, len(self.string)):
+                                if self.string[j] == "(":
+                                    depth += 1
+                                elif self.string[j] == ")":
+                                    depth -= 1
+                                    if depth == 0:
+                                        denom_end = j + 1
+                                        break
+                        slash_info[slash_idx] = denom_end
+                    else:
+                        slash_info[slash_idx] = right_idx + 1
 
         token_regex = re.compile(
             r"(?P<sqrt>sqrt)|"
@@ -210,6 +316,8 @@ class SingleStringTypst(StringMobject):
         )
 
         in_math = self.math_mode
+        # Pila de barras pospuestas: [(slash_start, slash_end, denom_end)]
+        pending_slashes: list[tuple[int, int, int]] = []
 
         for match in token_regex.finditer(self.string):
             start, end = match.span()
@@ -218,9 +326,8 @@ class SingleStringTypst(StringMobject):
                 in_math = not in_math
                 for k in range(start, end):
                     mapping[k] = []
-                continue
 
-            if match.group("sqrt") or match.group("root"):
+            elif match.group("sqrt") or match.group("root"):
                 assigned = []
                 for _ in range(2):
                     if submob_idx < total_submobs:
@@ -244,12 +351,36 @@ class SingleStringTypst(StringMobject):
             else:
                 if start in func_paren_indices:
                     mapping[start] = []
+                elif start in slash_info:
+                    # Se pospone la barra: se asignará cuando termine el denominador
+                    pending_slashes.append((start, end, slash_info[start]))
+                    mapping[start] = []
                 else:
                     assigned = []
                     if submob_idx < total_submobs:
                         assigned.append(submob_idx)
                         submob_idx += 1
                     mapping[start] = assigned
+
+            # Al finalizar el denominador, se asigna el submob a la barra pospuesta
+            while pending_slashes and end >= pending_slashes[-1][2]:
+                slash_start, slash_end, _ = pending_slashes.pop()
+                assigned = []
+                if submob_idx < total_submobs:
+                    assigned.append(submob_idx)
+                    submob_idx += 1
+                for k in range(slash_start, slash_end):
+                    mapping[k] = assigned
+
+        # Asegurar asignación si la expresión termina justo en el denominador
+        while pending_slashes:
+            slash_start, slash_end, _ = pending_slashes.pop()
+            assigned = []
+            if submob_idx < total_submobs:
+                assigned.append(submob_idx)
+                submob_idx += 1
+            for k in range(slash_start, slash_end):
+                mapping[k] = assigned
 
         return mapping
 
