@@ -46,11 +46,25 @@ STANDARD_ALPHA_BLEND = {
 
 
 class PostProcessEffect:
+    name: str = "PostProcessEffect"
     is_group_effect: bool = False
+    allow_multiple: bool = False
+    needs_bg: bool = False
 
-    def __init__(self, name: str = "PostProcessEffect", allow_multiple: bool = False):
-        self.name = name
-        self.allow_multiple = allow_multiple
+    STAGE_MASK: int = 10
+    STAGE_DISTORTION: int = 30
+    STAGE_FILTER: int = 50
+    STAGE_REFRACTION: int = 70
+    STAGE_SHADOW: int = 80
+    STAGE_BLOOM: int = 90
+
+    order: int = STAGE_FILTER
+
+    def __init__(self, name: str | None = None, allow_multiple: bool | None = None):
+        if name is not None:
+            self.name = name
+        if allow_multiple is not None:
+            self.allow_multiple = allow_multiple
         self.mobject: Mobject | None = None
 
     def attach(self, mobject: Mobject) -> None:
@@ -59,13 +73,21 @@ class PostProcessEffect:
     def is_active(self, processor: Any) -> bool:
         return True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
         raise NotImplementedError
 
     def copy(self) -> PostProcessEffect:
         import copy
         return copy.deepcopy(self)
-
 
 # =====================================================================
 # Preset: Fast Separable Gaussian Blur
@@ -165,7 +187,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class GaussianBlur(PostProcessEffect):
+    name = "GaussianBlur"
     is_group_effect = True
+    needs_bg = False
+    order = PostProcessEffect.STAGE_FILTER
+
+    def is_active(self, processor: Any) -> bool:
+        return self.radius > 0.1
 
     def __init__(self, radius: float = 12.0, downscale: float = 1.0):
         super().__init__(name="GaussianBlur", allow_multiple=False)
@@ -216,7 +244,16 @@ class GaussianBlur(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
@@ -228,41 +265,34 @@ class GaussianBlur(PostProcessEffect):
         ], dtype=np.float32)
         processor.queue.write_buffer(self.buf, 0, data)
 
-        intermediate_view = self._ensure_intermediate_texture(processor)
+        intermediate_view = processor.scratch_view
+        bg_pass1_tex = processor.get_single_tex_bind_group(input_view)
 
-        # Pase 1: Horizontal -> intermediate_view
-        bg_pass1_tex = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        # Pase 1: Horizontal -> scratch_view (escalado a media resolución)
         p1 = encoder.begin_render_pass(color_attachments=[{
             "view": intermediate_view,
             "load_op": wgpu.LoadOp.clear,
             "store_op": wgpu.StoreOp.store,
             "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p1.set_scissor_rect(*processor.get_scratch_scissor(scissor))
         p1.set_pipeline(self.pipeline_p1)
         p1.set_bind_group(0, bg_pass1_tex)
         p1.set_bind_group(1, self.bg_uniform)
         p1.draw(3)
         p1.end()
 
-        # Pase 2: Vertical -> target_view
-        bg_pass2_tex = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": intermediate_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        # Pase 2: Vertical -> target_view (resolución nativa)
+        bg_pass2_tex = processor.get_single_tex_bind_group(intermediate_view)
         p2 = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p2.set_scissor_rect(*scissor)
         p2.set_pipeline(self.pipeline_p2)
         p2.set_bind_group(0, bg_pass2_tex)
         p2.set_bind_group(1, self.bg_uniform)
@@ -338,7 +368,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class Grain(PostProcessEffect):
+    name = "Grain"
+    needs_bg = False
+    order = PostProcessEffect.STAGE_FILTER
     is_group_effect = False
+
+    def is_active(self, processor: Any) -> bool:
+        return self.intensity > 1e-4
 
     def __init__(self, intensity: float = 0.08, speed: float = 24.0, colored: bool = False):
         super().__init__(name="Grain", allow_multiple=False)
@@ -366,35 +402,36 @@ class Grain(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
         data = np.array([
-            self.intensity,
-            self.speed,
-            processor.time,
+            self.intensity, self.speed, processor.time,
             1.0 if self.colored else 0.0,
-            float(processor.width),
-            float(processor.height),
-            0.0,
-            0.0,
+            float(processor.width), float(processor.height), 0.0, 0.0,
         ], dtype=np.float32)
         processor.queue.write_buffer(self.buf, 0, data)
 
-        tex_bg = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        tex_bg = processor.get_single_tex_bind_group(input_view)
 
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
         p.set_pipeline(self.pipeline)
         p.set_bind_group(0, tex_bg)
         p.set_bind_group(1, self.bg_uniform)
@@ -462,6 +499,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class Vignette(PostProcessEffect):
+    name = "Vignette"
+    needs_bg = False
+    order = PostProcessEffect.STAGE_FILTER
     is_group_effect = True
 
     def __init__(
@@ -481,6 +521,9 @@ class Vignette(PostProcessEffect):
         self.color = color
         self.keep_circular = bool(keep_circular)
         self._initialized = False
+
+    def is_active(self, processor: Any) -> bool:
+        return self.intensity > 1e-4
 
     def _get_color(self) -> tuple[float, float, float, float]:
         if self.color is None:
@@ -522,40 +565,39 @@ class Vignette(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
         cr, cg, cb, ca = self._get_color()
         data = np.array([
-            self.center[0],
-            self.center[1],
-            float(processor.width),
-            float(processor.height),
-            self.radius,
-            self.softness,
-            self.intensity,
+            self.center[0], self.center[1],
+            float(processor.width), float(processor.height),
+            self.radius, self.softness, self.intensity,
             1.0 if self.keep_circular else 0.0,
-            cr,
-            cg,
-            cb,
-            ca,
+            cr, cg, cb, ca,
         ], dtype=np.float32)
         processor.queue.write_buffer(self.buf, 0, data)
 
-        tex_bg = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        tex_bg = processor.get_single_tex_bind_group(input_view)
 
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
         p.set_pipeline(self.pipeline)
         p.set_bind_group(0, tex_bg)
         p.set_bind_group(1, self.bg_uniform)
@@ -635,7 +677,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class Mask(PostProcessEffect):
+    name = "Mask"
     is_group_effect = True
+    allow_multiple = True
+    needs_bg = False
+    order = PostProcessEffect.STAGE_MASK  # Se evalúa primero para recortar la capa
 
     def __init__(
         self,
@@ -682,7 +728,16 @@ class Mask(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
@@ -701,26 +756,17 @@ class Mask(PostProcessEffect):
         ], dtype=np.float32)
         processor.queue.write_buffer(self.buf, 0, data)
 
-        bg_mob = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
-        bg_mask = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": processor.mask_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        bg_mob = processor.get_single_tex_bind_group(input_view)
+        bg_mask = processor.get_single_tex_bind_group(processor.mask_view)
 
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
         p.set_pipeline(self.pipeline)
         p.set_bind_group(0, bg_mob)
         p.set_bind_group(1, bg_mask)
@@ -881,7 +927,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class Glow(PostProcessEffect):
+    name = "Glow"
     is_group_effect = True
+    needs_bg = False
+    order = PostProcessEffect.STAGE_BLOOM
+
+    def is_active(self, processor: Any) -> bool:
+        return self.intensity > 1e-4 and self.radius > 0.1
 
     def __init__(
         self,
@@ -959,7 +1011,15 @@ class Glow(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+    ) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
@@ -980,48 +1040,37 @@ class Glow(PostProcessEffect):
         ], dtype=np.float32)
         processor.queue.write_buffer(self.buf, 0, data)
 
-        intermediate_view = self._ensure_intermediate_texture(processor)
+        # Usar la textura scratch compartida del engine (no una privada)
+        intermediate_view = processor.scratch_view
+        bg_pass1_tex = processor.get_single_tex_bind_group(input_view)
 
-        bg_pass1_tex = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
-
+        # Pase 1: Horizontal a la textura scratch
         p1 = encoder.begin_render_pass(color_attachments=[{
             "view": intermediate_view,
             "load_op": wgpu.LoadOp.clear,
             "store_op": wgpu.StoreOp.store,
             "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p1.set_scissor_rect(*processor.get_scratch_scissor(scissor))
         p1.set_pipeline(self.pipeline_p1)
         p1.set_bind_group(0, bg_pass1_tex)
         p1.set_bind_group(1, self.bg_uniform)
         p1.draw(3)
         p1.end()
 
-        bg_pass2_blur = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": intermediate_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
-        bg_pass2_orig = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        # Pase 2: Vertical al target_view final
+        bg_pass2_blur = processor.get_single_tex_bind_group(intermediate_view)
+        bg_pass2_orig = processor.get_single_tex_bind_group(input_view)
 
         p2 = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p2.set_scissor_rect(*scissor)
         p2.set_pipeline(self.pipeline_p2)
         p2.set_bind_group(0, bg_pass2_blur)
         p2.set_bind_group(1, self.bg_uniform)
@@ -1153,6 +1202,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class Glitch(PostProcessEffect):
+    name = "Glitch"
+    is_group_effect = False
+    needs_bg = False
+    order = PostProcessEffect.STAGE_DISTORTION
+
+    def is_active(self, processor: Any) -> bool:
+        return self.intensity > 1e-4
+
     def __init__(self, intensity: float = 0.6, speed: float = 8.0, slice_height: float = 16.0):
         super().__init__(name="Glitch", allow_multiple=False)
         self.intensity = float(intensity)
@@ -1176,7 +1233,7 @@ class Glitch(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any, load_op: Any = wgpu.LoadOp.load, scissor: Any = None, **kwargs) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
@@ -1199,12 +1256,18 @@ class Glitch(PostProcessEffect):
 
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
         p.set_pipeline(self.pipeline)
         p.set_bind_group(0, tex_bg)
-        p.set_bind_group(1, self.bg)
+        if hasattr(self, "bg"):
+            p.set_bind_group(1, self.bg)
+        elif hasattr(self, "bg_uniform"):
+            p.set_bind_group(1, self.bg_uniform)
         p.draw(3)
         p.end()
 
@@ -1288,31 +1351,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class MotionBlur(PostProcessEffect):
-    """
-    Motion blur direccional con tracking 3D.
+    name = "MotionBlur"
+    is_group_effect = False
+    needs_bg = False
+    order = PostProcessEffect.STAGE_DISTORTION
 
-    `direction` admite:
-
-        (x, y)
-        (x, y, z)
-
-    Cuando `auto_direction=True`, la posición 3D del Mobject se proyecta
-    mediante la cámara y se compara contra la posición proyectada del
-    frame anterior.
-
-    Por tanto funcionan:
-
-        RIGHT / LEFT
-        UP / DOWN
-        IN / OUT
-
-    y combinaciones arbitrarias de ellas.
-
-    IMPORTANTE:
-
-    Este efecto sigue siendo un motion blur uniforme de pantalla.
-    No es todavía un velocity buffer por píxel.
-    """
+    def is_active(self, processor: Any) -> bool:
+        return self.intensity > 1e-4
 
     def __init__(
         self,
@@ -2317,6 +2362,9 @@ class MotionBlur(PostProcessEffect):
         encoder: Any,
         input_view: Any,
         target_view: Any,
+        load_op: Any = wgpu.LoadOp.load,
+        scissor: Any = None,
+        **kwargs
     ) -> None:
 
         if not self._initialized:
@@ -2372,32 +2420,21 @@ class MotionBlur(PostProcessEffect):
         # FULLSCREEN PASS
         # --------------------------------------------------------------
 
-        p = encoder.begin_render_pass(
-            color_attachments=[
-                {
-                    "view": target_view,
-                    "load_op": wgpu.LoadOp.load,
-                    "store_op": wgpu.StoreOp.store,
-                },
-            ],
-        )
-
-        p.set_pipeline(
-            self.pipeline
-        )
-
-        p.set_bind_group(
-            0,
-            tex_bg,
-        )
-
-        p.set_bind_group(
-            1,
-            self.bg,
-        )
-
+        p = encoder.begin_render_pass(color_attachments=[{
+            "view": target_view,
+            "load_op": load_op,
+            "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
+        }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
+        p.set_pipeline(self.pipeline)
+        p.set_bind_group(0, tex_bg)
+        if hasattr(self, "bg"):
+            p.set_bind_group(1, self.bg)
+        elif hasattr(self, "bg_uniform"):
+            p.set_bind_group(1, self.bg_uniform)
         p.draw(3)
-
         p.end()
 
     # ==================================================================
@@ -2504,6 +2541,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class ZoomBlur(PostProcessEffect):
+    name = "ZoomBlur"
+    is_group_effect = False
+    needs_bg = False
+    order = PostProcessEffect.STAGE_DISTORTION
+
+    def is_active(self, processor: Any) -> bool:
+        return self.intensity > 1e-4
+
     def __init__(
         self,
         strength: float = 1.0,
@@ -2658,7 +2703,7 @@ class ZoomBlur(PostProcessEffect):
         strength, _ = self._update_scale_strength(processor)
         return strength > 1e-4
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any, load_op: Any = wgpu.LoadOp.load, scissor: Any = None, **kwargs) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
@@ -2681,12 +2726,18 @@ class ZoomBlur(PostProcessEffect):
 
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
         p.set_pipeline(self.pipeline)
         p.set_bind_group(0, tex_bg)
-        p.set_bind_group(1, self.bg)
+        if hasattr(self, "bg"):
+            p.set_bind_group(1, self.bg)
+        elif hasattr(self, "bg_uniform"):
+            p.set_bind_group(1, self.bg_uniform)
         p.draw(3)
         p.end()
 
@@ -2753,6 +2804,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class ChromaticAberration(PostProcessEffect):
+    name = "ChromaticAberration"
+    is_group_effect = False
+    needs_bg = False
+    order = PostProcessEffect.STAGE_DISTORTION
+
+    def is_active(self, processor: Any) -> bool:
+        return abs(self.offset) > 1e-4
+
     def __init__(self, offset: float = 0.02):
         super().__init__(name="ChromaticAberration", allow_multiple=False)
         self.offset = float(offset)
@@ -2774,20 +2833,30 @@ class ChromaticAberration(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
         processor.queue.write_buffer(self.buf, 0, np.array([self.offset, 0.0, 0.0, 0.0], dtype=np.float32))
-        tex_bg = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[{"binding": 0, "resource": input_view}, {"binding": 1, "resource": processor.sampler}],
-        )
+        tex_bg = processor.get_single_tex_bind_group(input_view)
+
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
         p.set_pipeline(self.pipeline)
         p.set_bind_group(0, tex_bg)
         p.set_bind_group(1, self.bg)
@@ -2803,73 +2872,7 @@ class ChromaticAberration(PostProcessEffect):
         return self.copy()
 
 
-# =====================================================================
-# Preset: Custom User-Defined WGSL Effect
-# =====================================================================
-
-CUSTOM_POST_WGSL_TEMPLATE = """
-@group(0) @binding(0) var in_tex: texture_2d<f32>;
-@group(0) @binding(1) var in_smp: sampler;
-
-struct VertexOutput {
-    @builtin(position) position: vec4f,
-    @location(0) uv: vec2f,
-};
-
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    var color = textureSample(in_tex, in_smp, in.uv);
-    if (color.a <= 1e-4) {
-        discard;
-    }
-    {USER_CODE}
-    return color;
-}
-"""
-
-
-class CustomVFX(PostProcessEffect):
-    def __init__(self, fragment_code: str, name: str = "CustomVFX", allow_multiple: bool = False):
-        super().__init__(name=name, allow_multiple=allow_multiple)
-        self.fragment_code = fragment_code
-        self._initialized = False
-
-    def _init_gpu(self, processor: Any) -> None:
-        shader = CUSTOM_POST_WGSL_TEMPLATE.replace("{USER_CODE}", self.fragment_code)
-        self.pipeline = processor.create_fullscreen_pipeline(
-            shader, [processor.single_tex_layout], blend=PREMULTIPLIED_ADDITIVE_BLEND
-        )
-        self._initialized = True
-
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
-        if not self._initialized:
-            self._init_gpu(processor)
-
-        tex_bg = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[{"binding": 0, "resource": input_view}, {"binding": 1, "resource": processor.sampler}],
-        )
-        p = encoder.begin_render_pass(color_attachments=[{
-            "view": target_view,
-            "load_op": wgpu.LoadOp.load,
-            "store_op": wgpu.StoreOp.store,
-        }])
-        p.set_pipeline(self.pipeline)
-        p.set_bind_group(0, tex_bg)
-        p.draw(3)
-        p.end()
-
-    def copy(self) -> CustomVFX:
-        new_obj = CustomVFX(fragment_code=self.fragment_code, name=self.name, allow_multiple=self.allow_multiple)
-        new_obj.mobject = self.mobject
-        return new_obj
-
-    def __deepcopy__(self, memo: dict) -> CustomVFX:
-        return self.copy()
-
-
 VFX = PostProcessEffect
-CustomPostProcess = CustomVFX
 GlowEffect = Glow
 RadialBlur = ZoomBlur
 RadialBlurEffect = ZoomBlur
@@ -3104,16 +3107,13 @@ class VFXAnimation(Animation):
 
 
 class LiquidGlass(PostProcessEffect):
-    """
-    Liquid glass equivalente al port visual de OverShifted/LiquidGlass.
+    name = "LiquidGlass"
+    is_group_effect = False
+    needs_bg = True                       # Requiere el snapshot de fondo (bg_view)
+    order = PostProcessEffect.STAGE_REFRACTION
 
-    La superficie se trata como un panel 3D: sus cuatro esquinas viven en
-    coordenadas de escena, pasan por project_point.wgsl y solo después se
-    rasterizan. Así una rotación 3D de la cámara cambia realmente la forma
-    proyectada del vidrio, en vez de mover un rectángulo 2D de UV. El mobject
-    original aporta geometría/máscara, pero su fill/stroke no se compone salvo
-    que show_mobject=True.
-    """
+    def is_active(self, processor: Any) -> bool:
+        return self.opacity > 1e-4
 
     def __init__(
         self,
@@ -3440,13 +3440,22 @@ class LiquidGlass(PostProcessEffect):
         p.draw(3)
         p.end()
 
-    # ------------------------------------------------------------------
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
         if processor.bg_view is None or self.mobject is None:
             return
         if not self._initialized:
             self._init_gpu(processor)
 
+        # Pases de blur sobre la textura del fondo acumulado
         view_a, view_b = self._ensure_blur_textures(processor)
         full_w = max(float(processor.width), 1.0)
         full_h = max(float(processor.height), 1.0)
@@ -3464,68 +3473,36 @@ class LiquidGlass(PostProcessEffect):
         else:
             for i in range(self.blur_iterations):
                 src = processor.bg_view if i == 0 else view_b
-                self._blur_pass(
-                    processor,
-                    encoder,
-                    src,
-                    view_a,
-                    self.bg_h0 if i == 0 else self.bg_h,
-                )
+                self._blur_pass(processor, encoder, src, view_a, self.bg_h0 if i == 0 else self.bg_h)
                 self._blur_pass(processor, encoder, view_a, view_b, self.bg_v)
 
+        # Preparación del quad 3D en espacio de mundo
         quad = self._get_quad_world().astype(np.float32)
         geom_data = np.zeros(36, dtype=np.float32)
-        geom_data[:16] = np.concatenate(
-            [quad, np.zeros((4, 1), dtype=np.float32)],
-            axis=1,
-        ).reshape(-1)
+        geom_data[:16] = np.concatenate([quad, np.zeros((4, 1), dtype=np.float32)], axis=1).reshape(-1)
         geom_data[16] = self._get_fixed_in_frame(self.mobject)
-        # Clip planes are intentionally disabled for the synthetic glass quad.
-        # project_point() still receives the fields it expects; all-zero planes
-        # evaluate to "keep everything".
         q.write_buffer(self.buf_geometry, 0, geom_data)
 
         glass_data = np.array([
-            self.power,
-            self.refraction_power,
-            self.a,
-            self.b,
-            self.c,
-            self.d,
-            self.noise,
-            self.glow_weight,
-            self.glow_bias,
-            self.glow_edge0,
-            self.glow_edge1,
-            self.opacity,
-            1.0 if self.show_mobject else 0.0,
-            1.0 if self.clip_to_layer else 0.0,
-            float(processor.width),
-            float(processor.height),
+            self.power, self.refraction_power, self.a, self.b, self.c, self.d, self.noise,
+            self.glow_weight, self.glow_bias, self.glow_edge0, self.glow_edge1,
+            self.opacity, 1.0 if self.show_mobject else 0.0, 1.0 if self.clip_to_layer else 0.0,
+            float(processor.width), float(processor.height),
         ], dtype=np.float32)
         q.write_buffer(self.buf_glass, 0, glass_data)
 
-        bg_mob = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
-        bg_blur = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": view_b},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        bg_mob = processor.get_single_tex_bind_group(input_view)
+        bg_blur = processor.get_single_tex_bind_group(view_b)
 
         gpu = processor.gpu
         p = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
         p.set_pipeline(self.pipeline_glass)
         p.set_bind_group(0, gpu.frame_bind_group)
         p.set_bind_group(1, self.bg_geometry)
@@ -3689,7 +3666,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 
 
 class DropShadow(PostProcessEffect):
+    name = "DropShadow"
     is_group_effect = True
+    needs_bg = False
+    order = PostProcessEffect.STAGE_SHADOW
+
+    def is_active(self, processor: Any) -> bool:
+        return self.opacity > 1e-4 and self.radius > 0.1
 
     def __init__(
         self,
@@ -3772,7 +3755,15 @@ class DropShadow(PostProcessEffect):
         )
         self._initialized = True
 
-    def apply(self, processor: Any, encoder: Any, input_view: Any, target_view: Any) -> None:
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+    ) -> None:
         if not self._initialized:
             self._init_gpu(processor)
 
@@ -3786,22 +3777,12 @@ class DropShadow(PostProcessEffect):
             self.opacity,
             1.0 if self.shadow_only else 0.0,
             0.0,
-            c_r,
-            c_g,
-            c_b,
-            c_a,
+            c_r, c_g, c_b, c_a,
         ], dtype=np.float32)
         processor.queue.write_buffer(self.buf, 0, data)
 
-        intermediate_view = self._ensure_intermediate_texture(processor)
-
-        bg_pass1_tex = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        intermediate_view = processor.scratch_view
+        bg_pass1_tex = processor.get_single_tex_bind_group(input_view)
 
         p1 = encoder.begin_render_pass(color_attachments=[{
             "view": intermediate_view,
@@ -3809,32 +3790,25 @@ class DropShadow(PostProcessEffect):
             "store_op": wgpu.StoreOp.store,
             "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p1.set_scissor_rect(*processor.get_scratch_scissor(scissor))
         p1.set_pipeline(self.pipeline_p1)
         p1.set_bind_group(0, bg_pass1_tex)
         p1.set_bind_group(1, self.bg_uniform)
         p1.draw(3)
         p1.end()
 
-        bg_pass2_blur = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": intermediate_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
-        bg_pass2_orig = processor.device.create_bind_group(
-            layout=processor.single_tex_layout,
-            entries=[
-                {"binding": 0, "resource": input_view},
-                {"binding": 1, "resource": processor.sampler},
-            ],
-        )
+        bg_pass2_blur = processor.get_single_tex_bind_group(intermediate_view)
+        bg_pass2_orig = processor.get_single_tex_bind_group(input_view)
 
         p2 = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
-            "load_op": wgpu.LoadOp.load,
+            "load_op": load_op,
             "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
+        if scissor is not None:
+            p2.set_scissor_rect(*scissor)
         p2.set_pipeline(self.pipeline_p2)
         p2.set_bind_group(0, bg_pass2_blur)
         p2.set_bind_group(1, self.bg_uniform)

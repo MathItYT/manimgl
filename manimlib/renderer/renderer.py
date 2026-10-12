@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import wgpu
+import numpy as np
+
 from manimlib.renderer.gpu import Gpu, RenderPass
 from manimlib.renderer.material import Material
 from manimlib.renderer.post_process import MobjectPostProcessor
@@ -185,10 +187,12 @@ class Renderer(object):
         fps = getattr(self.camera, "fps", 30.0) if self.camera else 30.0
         self.post_processor.time += 1.0 / max(float(fps), 1.0)
 
+        # -------------------------------------------------------------
+        # 1. Agrupamiento contiguo por grupo de VFX
+        # -------------------------------------------------------------
         batches: list[tuple[list[Drawing], Mobject | None]] = []
         curr_batch: list[Drawing] = []
         curr_group: Mobject | None = None
-
         for leader in self.leaders:
             grp = self.get_vfx_group(leader.mobject)
             if not batches:
@@ -202,7 +206,10 @@ class Renderer(object):
                 curr_group = grp
                 batches.append((curr_batch, curr_group))
 
-        command_buffers = []
+        # -------------------------------------------------------------
+        # 2. UN SOLO COMMAND ENCODER PARA TODO EL FRAME
+        # -------------------------------------------------------------
+        encoder = gpu.device.create_command_encoder()
         first_draw = True
         clear_color = tuple(attachments["color_attachments"][0]["clear_value"])
         accum_view = self.post_processor.scene_view if self.samples > 1 else target_view
@@ -210,9 +217,8 @@ class Renderer(object):
 
         for batch_leaders, group in batches:
             if group is None:
-                encoder = gpu.device.create_command_encoder()
+                # Lotes convencionales sin efectos de post-proceso
                 if first_draw:
-                    # Pase base de la escena inicial
                     if self.samples > 1:
                         pass_att = {
                             "color_attachments": [{
@@ -254,12 +260,9 @@ class Renderer(object):
                     for ldr in batch_leaders:
                         ldr.draw(rp)
                     rp.encoder.end()
-                    command_buffers.append(encoder.finish())
                     first_draw = False
                 else:
-                    # Lote sin VFX posterior a un pase de VFX (ej. objetos de primer plano)
                     if self.samples > 1:
-                        # Renderiza en la capa aislada respetando el depth de la escena y compone con blit
                         layer_att = self.post_processor.get_layer_attachments(
                             depth_view=scene_depth_view,
                             clear_color=True,
@@ -270,7 +273,6 @@ class Renderer(object):
                             ldr.draw(rp)
                         rp.encoder.end()
                         self.post_processor.blit(encoder, self.post_processor.layer_view, accum_view)
-                        command_buffers.append(encoder.finish())
                     else:
                         pass_att = {
                             "color_attachments": [{
@@ -293,13 +295,11 @@ class Renderer(object):
                         for ldr in batch_leaders:
                             ldr.draw(rp)
                         rp.encoder.end()
-                        command_buffers.append(encoder.finish())
             else:
+                # Lotes que poseen efectos visuales
                 if first_draw:
-                    clear_encoder = gpu.device.create_command_encoder()
                     if self.samples > 1:
-                        # Limpia target_view y scene_depth_view (ambos sample_count = samples)
-                        clear_pass_msaa = clear_encoder.begin_render_pass(
+                        clear_pass_msaa = encoder.begin_render_pass(
                             color_attachments=[{
                                 "view": target_view,
                                 "load_op": wgpu.LoadOp.clear,
@@ -317,9 +317,7 @@ class Renderer(object):
                             }
                         )
                         clear_pass_msaa.end()
-
-                        # Limpia accum_view (sample_count = 1)
-                        clear_pass_accum = clear_encoder.begin_render_pass(
+                        clear_pass_accum = encoder.begin_render_pass(
                             color_attachments=[{
                                 "view": accum_view,
                                 "load_op": wgpu.LoadOp.clear,
@@ -329,7 +327,7 @@ class Renderer(object):
                         )
                         clear_pass_accum.end()
                     else:
-                        clear_pass = clear_encoder.begin_render_pass(
+                        clear_pass = encoder.begin_render_pass(
                             color_attachments=[{
                                 "view": target_view,
                                 "load_op": wgpu.LoadOp.clear,
@@ -347,13 +345,11 @@ class Renderer(object):
                             }
                         )
                         clear_pass.end()
-
-                    command_buffers.append(clear_encoder.finish())
                     first_draw = False
 
+                # Separar estáticos de mobjects locales dinámicos
                 static_leaders: list[Drawing] = []
                 moving_local_map: dict[Mobject, list[Drawing]] = dict()
-
                 for ldr in batch_leaders:
                     local_mob = getattr(ldr.mobject, "_vfx_local", None)
                     if local_mob is not None and local_mob is not group and getattr(local_mob, "has_vfx", lambda: False)():
@@ -368,20 +364,19 @@ class Renderer(object):
                             continue
                     static_leaders.append(ldr)
 
-                vfx_encoder = gpu.device.create_command_encoder()
+                # Renderizar la capa base del grupo
                 layer_att = self.post_processor.get_layer_attachments(
                     depth_view=scene_depth_view,
                     clear_color=True,
                     depth_load_op=wgpu.LoadOp.load,
                 )
-
                 if static_leaders:
-                    layer_rp = RenderPass(vfx_encoder.begin_render_pass(**layer_att), gpu.frame_bind_group)
+                    layer_rp = RenderPass(encoder.begin_render_pass(**layer_att), gpu.frame_bind_group)
                     for ldr in static_leaders:
                         ldr.draw(layer_rp)
                     layer_rp.encoder.end()
                 else:
-                    clear_pass = vfx_encoder.begin_render_pass(color_attachments=[{
+                    clear_pass = encoder.begin_render_pass(color_attachments=[{
                         "view": self.post_processor.layer_view,
                         "load_op": wgpu.LoadOp.clear,
                         "store_op": wgpu.StoreOp.store,
@@ -389,35 +384,50 @@ class Renderer(object):
                     }])
                     clear_pass.end()
 
+                # Renderizar locales dinámicos en el buffer scratch
                 for local_mob, local_ldrs in moving_local_map.items():
                     scratch_att = self.post_processor.get_scratch_attachments(
                         depth_view=scene_depth_view,
                         clear_color=True,
                         depth_load_op=wgpu.LoadOp.load,
                     )
-                    scratch_rp = RenderPass(vfx_encoder.begin_render_pass(**scratch_att), gpu.frame_bind_group)
+                    scratch_rp = RenderPass(encoder.begin_render_pass(**scratch_att), gpu.frame_bind_group)
                     for ldr in local_ldrs:
                         ldr.draw(scratch_rp)
                     scratch_rp.encoder.end()
 
-                    for eff in local_mob.get_vfx_list():
-                        if getattr(eff, "is_active", lambda p: True)(self.post_processor):
-                            eff.apply(self.post_processor, vfx_encoder, self.post_processor.layer_view_b, self.post_processor.layer_view)
+                    local_active_effects = sorted(
+                        [eff for eff in local_mob.get_vfx_list() if getattr(eff, "is_active", lambda p: True)(self.post_processor)],
+                        key=lambda e: getattr(e, "order", 50)
+                    )
+                    for eff in local_active_effects:
+                        eff.apply(self.post_processor, encoder, self.post_processor.layer_view_b, self.post_processor.layer_view)
 
-                # Snapshot de la escena de fondo para la refracción del cristal
-                self.post_processor.copy_target_to_bg(vfx_encoder, accum_view)
+                # Snapshot de fondo condicional mediante `needs_bg`
+                all_candidate_effects = list(getattr(group, "get_vfx_list", lambda: [])())
+                for local_mob in moving_local_map:
+                    all_candidate_effects.extend(getattr(local_mob, "get_vfx_list", lambda: [])())
 
-                self.post_processor.process_mobject(vfx_encoder, accum_view, group)
-                command_buffers.append(vfx_encoder.finish())
+                needs_bg_snapshot = any(
+                    getattr(eff, "needs_bg", False)
+                    and getattr(eff, "is_active", lambda p: True)(self.post_processor)
+                    for eff in all_candidate_effects
+                )
+                if needs_bg_snapshot:
+                    self.post_processor.copy_target_to_bg(encoder, accum_view)
 
-        # Vuelca la imagen acumulada al target final de la ventana o del grabador
+                # Procesar la cadena de efectos del grupo y componer sobre accum_view
+                self.post_processor.process_mobject(encoder, accum_view, group)
+
+        # -------------------------------------------------------------
+        # 3. Resolución final y envío a GPU
+        # -------------------------------------------------------------
         if self.samples > 1:
             final_target = attachments["color_attachments"][0].get("resolve_target") or target_view
-            final_encoder = gpu.device.create_command_encoder()
-            self.post_processor.blit_fullscreen(final_encoder, accum_view, final_target)
-            command_buffers.append(final_encoder.finish())
+            self.post_processor.blit_fullscreen(encoder, accum_view, final_target)
 
-        gpu.queue.submit(command_buffers)
+        # Un solo buffer de comandos enviado a la cola del dispositivo
+        gpu.queue.submit([encoder.finish()])
 
     def make_draws(self, render_pass: RenderPass) -> None:
         for leader in self.leaders:
@@ -469,11 +479,23 @@ class Renderer(object):
                 self.drawings[mob] = drawing
                 drawn.append(drawing)
 
-        # Mantener el orden de pintado para z_index iguales.
-        # No promover los objetos con VFX por encima del resto: hacerlo
-        # altera la oclusion cuando hay objetos normales antes y despues
-        # de uno con Glow u otro efecto.
-        drawn.sort(key=lambda d: d.mobject.z_index)
+        # Si la cámara tiene rotación 3D activa, ordenamos según profundidad de cámara
+        # para que la composición de capas no pinte objetos traseros sobre los delanteros
+        frame = getattr(self.camera, "frame", None)
+        phi = getattr(frame, "get_phi", lambda: 0.0)() if frame else 0.0
+        theta = getattr(frame, "get_theta", lambda: 0.0)() if frame else 0.0
+
+        if abs(phi) > 1e-3 or abs(theta) > 1e-3:
+            cam_pos = frame.get_implied_camera_location() if frame else np.array([0, 0, 10])
+            # Ordenar de más lejano a más cercano a la cámara (Back-to-Front)
+            drawn.sort(key=lambda d: (
+                d.mobject.z_index,
+                -np.linalg.norm(d.mobject.get_center() - cam_pos)
+            ))
+        else:
+            # En 2D se respeta estrictamente el z_index
+            drawn.sort(key=lambda d: d.mobject.z_index)
+
         return drawn
 
     def material_for(self, mobject: Mobject, drawing_class: type) -> Material:

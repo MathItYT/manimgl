@@ -695,7 +695,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import mediapipe as mp
+# import mediapipe as mp
 
 from manimlib import *
 
@@ -704,8 +704,8 @@ from manimlib import *
 # MediaPipe
 # ============================================================
 
-from mediapipe.tasks import python as mp_python
-from mediapipe.tasks.python import vision as mp_vision
+# from mediapipe.tasks import python as mp_python
+# from mediapipe.tasks.python import vision as mp_vision
 
 
 # ============================================================
@@ -1817,31 +1817,31 @@ class IntroProbability(Scene):
         if self.window:
             glfw.set_window_monitor(self.window.glfw_window, glfw.get_primary_monitor(), 0, 0, 1920, 1080, glfw.DONT_CARE)
         self.camera.background_rgba = color_to_rgba("#101010", 1.0)
-        video1 = VideoMobject("videos/Probability.mp4", height=FRAME_HEIGHT)
-        video2 = VideoMobject("patient.mp4", height=FRAME_HEIGHT)
-        video3 = VideoMobject("call_center.mp4", height=FRAME_HEIGHT)
-        video4 = VideoMobject("rain.mp4", height=FRAME_HEIGHT)
-        self.add(video1)
-        self.add_sound("intro.wav")
-        video1.play_from()
-        self.wait(2)
-        video1.clear_updaters()
-        self.remove(video1)
-        self.add(video2)
-        video2.play_from()
-        self.wait(2.5)
-        self.remove(video2)
-        video2.clear_updaters()
-        self.add(video3)
-        video3.play_from()
-        self.wait(3.5)
-        self.remove(video3)
-        video3.clear_updaters()
-        self.add(video4)
-        video4.play_from()
-        self.wait(3)
-        self.remove(video4)
-        video4.clear_updaters()
+        # video1 = VideoMobject("videos/Probability.mp4", height=FRAME_HEIGHT)
+        # video2 = VideoMobject("patient.mp4", height=FRAME_HEIGHT)
+        # video3 = VideoMobject("call_center.mp4", height=FRAME_HEIGHT)
+        # video4 = VideoMobject("rain.mp4", height=FRAME_HEIGHT)
+        # self.add(video1)
+        # self.add_sound("intro.wav")
+        # video1.play_from()
+        # self.wait(2)
+        # video1.clear_updaters()
+        # self.remove(video1)
+        # self.add(video2)
+        # video2.play_from()
+        # self.wait(2.5)
+        # self.remove(video2)
+        # video2.clear_updaters()
+        # self.add(video3)
+        # video3.play_from()
+        # self.wait(3.5)
+        # self.remove(video3)
+        # video3.clear_updaters()
+        # self.add(video4)
+        # video4.play_from()
+        # self.wait(3)
+        # self.remove(video4)
+        # video4.clear_updaters()
         experimentos_aleatorios = TypstText("Experimentos aleatorios", font="New Computer Modern", font_size=96)
         experimentos_aleatorios.add_vfx(Glow(radius=18.75, intensity=1.125))
         words = ["Experimentos", "aleatorios"]
@@ -1852,7 +1852,7 @@ class IntroProbability(Scene):
             word_mobs.add(word_mob)
         self.play(LaggedStart(*(FadeIn(word, shift=2 * UP, rate_func=ease_out_cubic) for word in word_mobs), group=word_mobs, run_time=2.0, lag_ratio=0.5))
         self.play(Indicate(experimentos_aleatorios, scale_factor=1, run_time=1))
-        self.play(FadeOut(experimentos_aleatorios, run_time=1.0, rate_func=ease_out_cubic))
+        # self.play(FadeOut(experimentos_aleatorios, run_time=1.0, rate_func=ease_out_cubic))
 
 
 class EspacioMuestral(Scene):

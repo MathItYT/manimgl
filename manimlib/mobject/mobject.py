@@ -2106,9 +2106,6 @@ class Mobject(object):
         return getattr(self, "hidden", False)
 
     def add_vfx(self, effect: Any, recurse: bool = False) -> Self:
-        from manimlib.utils.vfx_presets import CustomVFX
-        if isinstance(effect, str):
-            effect = CustomVFX(fragment_code=effect)
         if not hasattr(self, "_vfx_effects"):
             self._vfx_effects = []
         eff = effect.copy()
