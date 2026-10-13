@@ -825,14 +825,13 @@ class VMobject(Mobject):
         alpha: float,
         path_func=straight_path,
     ) -> Self:
-        # Textures are external resources rather than uniforms/data fields, so the
-        # ordinary Manim interpolation path cannot blend their presence. During a
-        # texture <-> color/gradient Transform, keep the available texture bound and
-        # continuously blend its contribution with the underlying fill color.
-        self._interpolate_texture_state(mobject1, mobject2, alpha)
-
         # Point data, stroke style, and ordinary uniforms use the normal Manim path.
         super().interpolate(mobject1, mobject2, alpha, path_func)
+
+        # Textures are external resources rather than uniforms/data fields, so the
+        # ordinary Manim interpolation path cannot blend their presence. Apply this
+        # after the ordinary uniform interpolation so it owns texture_mix for this frame.
+        self._interpolate_texture_state(mobject1, mobject2, alpha)
 
         # At the ends, preserve the exact source/target style and API state. For an
         # interior frame, represent solids as constant-color gradients and resample
