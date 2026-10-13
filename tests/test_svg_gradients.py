@@ -125,3 +125,23 @@ def test_svg_gradient_honors_color_interpolation() -> None:
     shape = mob.submobjects[0]
     assert shape.uniforms["gradient_mode"] == 2.0
     assert shape.uniforms["gradient_interpolation"] == 1.0
+
+
+
+def test_svg_gradient_accepts_its_own_color_interpolation_attribute() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"
+         viewBox="0 0 80 80">
+      <defs>
+        <linearGradient id="gradient" color-interpolation="linearRGB">
+          <stop offset="0%" stop-color="#000000"/>
+          <stop offset="100%" stop-color="#ffffff"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="80" height="80" fill="url(#gradient)"/>
+    </svg>
+    """
+    mob = SVGMobject(svg_string=svg, should_center=False, height=1.0)
+
+    assert len(mob.submobjects) == 1
+    assert mob.submobjects[0].uniforms["gradient_interpolation"] == 1.0
