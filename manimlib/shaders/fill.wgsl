@@ -95,6 +95,11 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    // Calculate derivatives before any discard, like the stroke fragment shader.
+    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
+    let aaw = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-8);
+    let signed_dist_to_region = -curve_distance / aaw;
+
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     /*
@@ -105,9 +110,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     */
     // Signed implicit distance to the visible fill region. Normalize by the
     // screen-space derivative and AA width, then use the exact stroke coverage curve.
-    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
-    let aaw = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-8);
-    let signed_dist_to_region = -curve_distance / aaw;
     if (in.fill_all == 0.0 && signed_dist_to_region > 0.5) { discard; }
 
     var color = in.color;
