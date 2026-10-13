@@ -424,20 +424,36 @@ class SVGMobject(VMobject):
         lower, upper = bbox[0], bbox[2]
         size = upper - lower
 
+        number_pattern = re.compile(r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?")
+
+        def root_extent(value: str | None, fallback: float) -> float:
+            if not value or value.strip().endswith("%"):
+                return fallback
+            match = number_pattern.search(value.strip())
+            if match is None:
+                return fallback
+            try:
+                extent = float(match.group(0))
+            except ValueError:
+                return fallback
+            return extent if extent > 0 else fallback
+
         view_box = self._svg_root_attributes.get("viewBox", "").replace(",", " ").split()
         if len(view_box) == 4:
             try:
                 view_min_x, view_min_y, view_width, view_height = map(float, view_box)
             except ValueError:
-                view_min_x, view_min_y, view_width, view_height = 0.0, 0.0, size[0], size[1]
+                view_min_x, view_min_y = 0.0, 0.0
+                view_width = root_extent(self._svg_root_attributes.get("width"), size[0])
+                view_height = root_extent(self._svg_root_attributes.get("height"), size[1])
         else:
-            view_min_x, view_min_y, view_width, view_height = 0.0, 0.0, size[0], size[1]
+            view_min_x, view_min_y = 0.0, 0.0
+            view_width = root_extent(self._svg_root_attributes.get("width"), size[0])
+            view_height = root_extent(self._svg_root_attributes.get("height"), size[1])
         if view_width <= 0:
             view_width = size[0]
         if view_height <= 0:
             view_height = size[1]
-
-        number_pattern = re.compile(r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?")
 
         def parse_number(value: str | None, default: float = 0.0) -> float:
             if value is None:
