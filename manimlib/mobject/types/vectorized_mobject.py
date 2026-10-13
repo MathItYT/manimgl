@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
 
 MAX_FILL_GRADIENT_STOPS = 16
-GRADIENT_POINT_KEYS = ['gradient_start', 'gradient_end', 'gradient_axis_y']
+GRADIENT_POINT_KEYS = ['gradient_start', 'gradient_end', 'gradient_axis_y', 'gradient_focus']
 
 
 class VMobject(Mobject):
@@ -90,6 +90,7 @@ class VMobject(Mobject):
         ("gradient_start", 3),
         ("gradient_end", 3),
         ("gradient_axis_y", 3),
+        ("gradient_focus", 3),
         ("gradient_colors", 4, MAX_FILL_GRADIENT_STOPS),
         ("gradient_stops", 4, MAX_FILL_GRADIENT_STOPS),
         ("gradient_count", 1),
@@ -366,6 +367,7 @@ class VMobject(Mobject):
         start: Vect3 | None = None,
         end: Vect3 | None = None,
         center: Vect3 | None = None,
+        focus: Vect3 | None = None,
         radius: float | None = None,
         radius_y: float | None = None,
         radial_axis_x: Vect3 | None = None,
@@ -457,6 +459,7 @@ class VMobject(Mobject):
                 if gradient_start.shape != (3,) or gradient_end.shape != (3,):
                     raise ValueError("start and end must be 3D points")
             gradient_axis_y = gradient_start.copy()
+            gradient_focus = gradient_start.copy()
             gradient_mode = 1.0
         else:
             if center is None:
@@ -464,6 +467,9 @@ class VMobject(Mobject):
             gradient_start = np.asarray(center, dtype=float)
             if gradient_start.shape != (3,) or not np.all(np.isfinite(gradient_start)):
                 raise ValueError("center must be a finite 3D point")
+            gradient_focus = np.asarray(focus if focus is not None else gradient_start, dtype=float)
+            if gradient_focus.shape != (3,) or not np.all(np.isfinite(gradient_focus)):
+                raise ValueError("focus must be a finite 3D point")
             radius_x = float(radius) if radius is not None else 0.5 * max(size[0], size[1])
             radius_y_value = float(radius_y) if radius_y is not None else radius_x
             if not np.isfinite(radius_x) or not np.isfinite(radius_y_value) or radius_x < 0 or radius_y_value < 0:
@@ -499,6 +505,7 @@ class VMobject(Mobject):
             mob.uniforms["gradient_start"] = gradient_start
             mob.uniforms["gradient_end"] = gradient_end
             mob.uniforms["gradient_axis_y"] = gradient_axis_y
+            mob.uniforms["gradient_focus"] = gradient_focus
             mob.pointlike_uniform_keys = list(GRADIENT_POINT_KEYS)
         return self
 
@@ -593,6 +600,7 @@ class VMobject(Mobject):
         gradient_start: Vect3 | None = None,
         gradient_end: Vect3 | None = None,
         gradient_axis_y: Vect3 | None = None,
+        gradient_focus: Vect3 | None = None,
         recurse: bool = True
     ) -> Self:
         for mob in self.get_family(recurse):
@@ -625,7 +633,9 @@ class VMobject(Mobject):
                 mob.uniforms["gradient_end"] = np.asarray(gradient_end, dtype=float)
             if gradient_axis_y is not None:
                 mob.uniforms["gradient_axis_y"] = np.asarray(gradient_axis_y, dtype=float)
-            if any(value is not None for value in (gradient_start, gradient_end, gradient_axis_y)) or (
+            if gradient_focus is not None:
+                mob.uniforms["gradient_focus"] = np.asarray(gradient_focus, dtype=float)
+            if any(value is not None for value in (gradient_start, gradient_end, gradient_axis_y, gradient_focus)) or (
                 gradient_mode is not None and gradient_mode > 0.5
             ):
                 mob.pointlike_uniform_keys = list(GRADIENT_POINT_KEYS)
@@ -668,6 +678,7 @@ class VMobject(Mobject):
             "gradient_start": self.uniforms["gradient_start"].copy(),
             "gradient_end": self.uniforms["gradient_end"].copy(),
             "gradient_axis_y": self.uniforms["gradient_axis_y"].copy(),
+            "gradient_focus": self.uniforms["gradient_focus"].copy(),
             "stroke_rgba": data['stroke_rgba'].copy(),
             "stroke_width": data['stroke_width'].copy(),
             "stroke_behind": self.stroke_behind,
