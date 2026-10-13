@@ -1880,6 +1880,7 @@ class Mobject(object):
             self.bounding_box[:] = path_func(
                 mobject1.bounding_box, mobject2.bounding_box, alpha,
             )
+        self._interpolate_vfx(mobject1, mobject2, alpha)
         return self
 
     def pointwise_become_partial(self, mobject, a, b) -> Self:
@@ -2134,6 +2135,252 @@ class Mobject(object):
 
     # Visual effects (implementations live in utils.vfx_presets; imports are lazy
     # to avoid a circular dependency between Mobject and the effect classes).
+    @staticmethod
+    def _key_vfx_effects(mobject: Mobject) -> dict[tuple[str, str, int], Any]:
+        """Index effects by type, name, and occurrence (Mask can occur more than once)."""
+        result = {}
+        counts = {}
+        for effect in mobject.get_vfx_list():
+            effect_type = type(effect).__name__
+            name = str(getattr(effect, "name", effect_type))
+            base = (effect_type, name)
+            occurrence = counts.get(base, 0)
+            counts[base] = occurrence + 1
+            result[(effect_type, name, occurrence)] = effect
+        return result
+
+    @staticmethod
+    def _vfx_strength_attribute(effect: Any) -> str | None:
+        """The parameter which takes an effect to its neutral, disabled state."""
+        return {
+            "GaussianBlur": "radius",
+            "Grain": "intensity",
+            "Vignette": "intensity",
+            "Glow": "intensity",
+            "Glitch": "intensity",
+            "MotionBlur": "strength",
+            "ZoomBlur": "strength",
+            "ChromaticAberration": "offset",
+            "LiquidGlass": "opacity",
+            "DropShadow": "opacity",
+        }.get(type(effect).__name__)
+
+    def _attach_vfx_copy(self, template: Any) -> Any:
+        before = {id(effect) for effect in self.get_vfx_list()}
+        # add_vfx establishes the renderer's group/local ownership bookkeeping too.
+        self.add_vfx(template.copy())
+        added = [
+            effect for effect in self.get_vfx_list()
+            if id(effect) not in before
+        ]
+        if not added:
+            # A same-name, non-multiple effect may have replaced an existing entry.
+            keyed = self._key_vfx_effects(self)
+            key = next((
+                key for key in keyed
+                if key[0] == type(template).__name__ and key[1] == str(template.name)
+            ), None)
+            return keyed.get(key) if key is not None else None
+        return added[-1]
+
+    def _remove_vfx_instance(self, effect: Any) -> None:
+        """Remove exactly one attached effect without disturbing same-name siblings."""
+        effects = getattr(self, "_vfx_effects", [])
+        if not any(item is effect for item in effects):
+            return
+        mask = getattr(effect, "mask", None)
+        if getattr(effect, "name", "") == "Mask" and isinstance(mask, Mobject):
+            mask.set_hidden(False)
+        effects[:] = [item for item in effects if item is not effect]
+
+        remaining = list(effects)
+        has_group_effect = any(
+            getattr(item, "is_group_effect", False)
+            or getattr(item, "name", "") in (
+                "Glow", "Mask", "LiquidGlass", "DropShadow",
+                "GaussianBlur", "Vignette",
+            )
+            for item in remaining
+        )
+        has_local_effect = any(
+            not (
+                getattr(item, "is_group_effect", False)
+                or getattr(item, "name", "") in (
+                    "Glow", "Mask", "LiquidGlass", "DropShadow",
+                    "GaussianBlur", "Vignette",
+                )
+            )
+            for item in remaining
+        )
+        for mob in self.get_family():
+            old_group = getattr(mob, "_vfx_group", None)
+            old_local = getattr(mob, "_vfx_local", None)
+            if old_group is self:
+                delattr(mob, "_vfx_group")
+            if old_local is self:
+                delattr(mob, "_vfx_local")
+            if has_group_effect or has_local_effect:
+                if old_group is None or old_group is self:
+                    mob._vfx_group = self
+                if has_local_effect and (old_local is None or old_local is self):
+                    mob._vfx_local = self
+        if not effects and hasattr(self, "_vfx_effects"):
+            delattr(self, "_vfx_effects")
+
+    @staticmethod
+    def _blend_vfx_value(key: str, start: Any, end: Any, alpha: float) -> Any:
+        """Blend numeric effect parameters, vectors, and colors; switch categorical values midway."""
+        if isinstance(start, (bool, np.bool_)) or isinstance(end, (bool, np.bool_)):
+            return start if alpha < 0.5 else end
+        if isinstance(start, numbers.Real) and isinstance(end, numbers.Real):
+            value = float(start) * (1.0 - alpha) + float(end) * alpha
+            if isinstance(start, numbers.Integral) and isinstance(end, numbers.Integral):
+                return int(round(value))
+            return value
+
+        if key == "color" and start is not None and end is not None:
+            try:
+                from colour import Color
+                def rgba(value):
+                    if isinstance(value, str):
+                        rgb = np.array(Color(value).get_rgb(), dtype=float)
+                        return np.array([*rgb, 1.0])
+                    arr = np.asarray(value, dtype=float).reshape(-1)
+                    if len(arr) == 3:
+                        return np.array([*arr, 1.0])
+                    if len(arr) >= 4:
+                        return arr[:4]
+                    raise ValueError("Invalid color")
+                a = rgba(start)
+                b = rgba(end)
+                return tuple(a * (1.0 - alpha) + b * alpha)
+            except (ImportError, TypeError, ValueError):
+                pass
+
+        if isinstance(start, (tuple, list, np.ndarray)) and isinstance(end, (tuple, list, np.ndarray)):
+            try:
+                a = np.asarray(start, dtype=float)
+                b = np.asarray(end, dtype=float)
+                if a.shape == b.shape:
+                    value = a * (1.0 - alpha) + b * alpha
+                    if isinstance(start, tuple):
+                        return tuple(value.tolist())
+                    if isinstance(start, list):
+                        return value.tolist()
+                    return value
+            except (TypeError, ValueError):
+                pass
+        return start if alpha < 0.5 else end
+
+    @classmethod
+    def _interpolate_vfx_parameters(
+        cls,
+        current: Any,
+        start_effect: Any | None,
+        target_effect: Any | None,
+        alpha: float,
+        strength_attribute: str | None,
+    ) -> None:
+        start_attrs = getattr(start_effect, "__dict__", {}) if start_effect is not None else {}
+        target_attrs = getattr(target_effect, "__dict__", {}) if target_effect is not None else {}
+        ignored = {"name", "allow_multiple", "mobject", "mask"}
+        keys = set(start_attrs) | set(target_attrs)
+        for key in keys:
+            if key.startswith("_") or key in ignored:
+                continue
+            a = start_attrs.get(key, None)
+            b = target_attrs.get(key, None)
+            if key == strength_attribute:
+                if start_effect is None:
+                    value = float(b or 0.0) * alpha
+                elif target_effect is None:
+                    value = float(a or 0.0) * (1.0 - alpha)
+                elif isinstance(a, numbers.Real) and isinstance(b, numbers.Real):
+                    value = float(a) * (1.0 - alpha) + float(b) * alpha
+                else:
+                    value = a if alpha < 0.5 else b
+            elif start_effect is None:
+                value = b
+            elif target_effect is None:
+                value = a
+            elif key not in start_attrs:
+                value = b if alpha >= 0.5 else getattr(current, key, b)
+            elif key not in target_attrs:
+                value = a if alpha < 0.5 else getattr(current, key, a)
+            else:
+                value = cls._blend_vfx_value(key, a, b, alpha)
+            if key in current.__dict__ or hasattr(current, key):
+                try:
+                    setattr(current, key, value)
+                except (AttributeError, TypeError, ValueError):
+                    pass
+
+    def _interpolate_vfx(self, starting_mobject: Mobject, target_mobject: Mobject, alpha: float) -> None:
+        """Interpolate matching effects and fade unmatched effects in or out."""
+        signature = (id(starting_mobject), id(target_mobject))
+        state = getattr(self, "_vfx_interpolation_state", None)
+        if state is None or state["signature"] != signature:
+            starts = self._key_vfx_effects(starting_mobject)
+            targets = self._key_vfx_effects(target_mobject)
+            current = self._key_vfx_effects(self)
+            keys = list(dict.fromkeys([*starts.keys(), *targets.keys()]))
+            transitions = []
+            for key in keys:
+                source_effect = starts.get(key)
+                target_effect = targets.get(key)
+                current_effect = current.get(key)
+                template = source_effect if source_effect is not None else target_effect
+                strength_attribute = self._vfx_strength_attribute(template)
+                transitions.append({
+                    "key": key,
+                    "source": source_effect,
+                    "target": target_effect,
+                    "current": current_effect,
+                    "strength_attribute": strength_attribute,
+                })
+            state = {"signature": signature, "transitions": transitions}
+            self._vfx_interpolation_state = state
+
+        alpha = float(np.clip(alpha, 0.0, 1.0))
+        for transition in state["transitions"]:
+            source_effect = transition["source"]
+            target_effect = transition["target"]
+            strength_attribute = transition["strength_attribute"]
+            current = transition["current"]
+            continuous = strength_attribute is not None
+
+            if source_effect is not None and target_effect is not None:
+                should_exist = True
+                template = source_effect
+            elif source_effect is not None:
+                # Effects which expose a strength-like parameter fade to their neutral
+                # state; structural effects such as Mask switch at the midpoint.
+                should_exist = alpha < (1.0 if continuous else 0.5)
+                template = source_effect
+            else:
+                should_exist = alpha > (0.0 if continuous else 0.5)
+                template = target_effect
+
+            if not should_exist:
+                if current is not None:
+                    self._remove_vfx_instance(current)
+                    transition["current"] = None
+                continue
+
+            if current is None or not any(item is current for item in self.get_vfx_list()):
+                current = self._attach_vfx_copy(template)
+                transition["current"] = current
+                if current is None:
+                    continue
+
+            self._interpolate_vfx_parameters(
+                current,
+                source_effect,
+                target_effect,
+                alpha,
+                strength_attribute if continuous else None,
+            )
+
     hidden = False
 
     def set_hidden(self, hidden: bool = True, recurse: bool = True) -> Self:
