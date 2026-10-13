@@ -353,7 +353,12 @@ class SVGMobject(VMobject):
         image_type = getattr(se, "Image", getattr(se, "SVGImage", None))
 
         for shape in svg.elements():
-            shape_id = getattr(shape, "id", None)
+            shape_id = (
+                getattr(shape, "id", None)
+                or getattr(shape, "values", {}).get("id")
+            )
+            if shape_id is not None:
+                shape_id = str(shape_id)
             if apply_clip_paths and shape_id and shape_id in self._svg_clip_shape_ids:
                 # Clip geometry is used as a mask, not as a visible SVG object.
                 continue
@@ -396,13 +401,16 @@ class SVGMobject(VMobject):
                 mobjects_by_id[shape_id] = mob
 
         if apply_clip_paths and self._svg_clip_assignments:
-            clip_mobjects: list[VMobject] = []
             for shape_id, clip_id in self._svg_clip_assignments.items():
                 target = mobjects_by_id.get(shape_id)
                 if target is None or clip_id not in self._svg_clip_paths:
                     continue
                 mask = self._clip_path_to_mobject(clip_id)
                 if mask is None or not mask.has_points():
+                    log.warning(
+                        "Could not build SVG clipPath %r for element %r",
+                        clip_id, shape_id,
+                    )
                     continue
                 clip_path = self._svg_clip_paths[clip_id]
                 if clip_path.attrib.get("clipPathUnits", "userSpaceOnUse") == "objectBoundingBox":
@@ -413,11 +421,11 @@ class SVGMobject(VMobject):
                     mask.shift(lower)
                 mask.set_fill(color="#FFFFFF", opacity=1.0)
                 mask.set_stroke(width=0.0, opacity=0.0)
+                # Keep the mask inside the clipped mobject's family, not as a sibling
+                # of the image. This makes every parent transform follow the target's
+                # mask and prevents it from being resolved as an independent scene layer.
+                target.add(mask)
                 target.add_mask(mask)
-                # Keep masks in the SVG family (hidden) so parent flips, shifts and scales
-                # also transform them; Mask's postprocessor renders them separately.
-                clip_mobjects.append(mask)
-            result.extend(clip_mobjects)
         return result
 
     def image_to_mobject(self, image) -> Rectangle:
