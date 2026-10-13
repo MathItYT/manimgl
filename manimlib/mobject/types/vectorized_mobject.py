@@ -444,8 +444,17 @@ class VMobject(Mobject):
                     left = right - 1
                     span = stop_offsets[right] - stop_offsets[left]
                     mix_value = 0.0 if span <= 1e-8 else (position - stop_offsets[left]) / span
-                    sampled_rgba[sample_index] = (
-                        rgba[left] * (1.0 - mix_value) + rgba[right] * mix_value
+                    # Keep CPU-side stop reduction consistent with the shader's
+                    # ManimGL color interpolation for gradients with more GPU stops
+                    # than the fixed uniform block can hold.
+                    sampled_rgba[sample_index, :3] = np.sqrt(np.maximum(
+                        rgba[left, :3] ** 2 * (1.0 - mix_value)
+                        + rgba[right, :3] ** 2 * mix_value,
+                        0.0,
+                    ))
+                    sampled_rgba[sample_index, 3] = (
+                        rgba[left, 3] * (1.0 - mix_value)
+                        + rgba[right, 3] * mix_value
                     )
             rgba = sampled_rgba
             stop_offsets = sampled_offsets
