@@ -701,11 +701,24 @@ class VDrawing(Drawing):
             else nothing
         )
 
+        fill_file = cls.fill_file
+        fill_replacements = for_fill
+        texture_names = tuple(mobject.textures)
+        if texture_names:
+            # Textured VMobjects keep the same Bezier/winding geometry, but their fill
+            # shader samples the first declared 2D texture using per-control-point UVs.
+            fill_file = "fill_texture.wgsl"
+            if texture_names[0] != "Texture":
+                fill_replacements = {
+                    **for_fill,
+                    r"\bTexture\b": texture_names[0],
+                }
+
         return [
             (
                 "fill",
-                cls.fill_file,
-                for_fill,
+                fill_file,
+                fill_replacements,
             ),
 
             (
