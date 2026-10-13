@@ -914,6 +914,11 @@ class VDrawing(Drawing):
         self,
         render_pass: RenderPass,
     ) -> None:
+        # Zero-width fill borders used to supply a one-sided fringe around an otherwise
+        # hard fill edge. Fill coverage is now anti-aliased in fill.wgsl itself, on both
+        # sides of the boundary, so keep this separate pass only for an explicit border.
+        if self.mobject.fill_border_width == 0.0:
+            return
         self.draw_pass(
             render_pass,
             "border",
