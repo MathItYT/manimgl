@@ -14,7 +14,6 @@ projected, see VShaderWrapper.render_fill.
 #INSERT fill_color.wgsl
 #INSERT finalize_color.wgsl
 #INSERT clip_test.wgsl
-#INSERT antialias_coverage.wgsl
 // TEXTURES
 
 const VERTS_PER_CURVE: u32 = 6u;
@@ -116,14 +115,6 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    // Signed distance in pixels to the Bezier boundary. The filled side is
-    // curve_distance < 0, so its signed distance is negative, just like stroke.wgsl.
-    // Evaluate derivatives before any discard.
-    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
-    let curve_gradient = vec2f(dpdx(curve_distance), dpdy(curve_distance));
-    let aaw = max(length(curve_gradient) * mob.anti_alias_width, 1e-8);
-    let signed_dist_to_region = curve_distance / aaw;
-
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     let texel = textureSample(Texture, image_sampler, in.texture_uv);
@@ -135,14 +126,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    // Keep the auxiliary curve triangle's winding clip exact.
-    if (in.fill_all == 0.0 && curve_distance < 0.0) { discard; }
-
-    var final_color = color;
-    if (in.fill_all != 0.0) {
-        // Same coverage function as stroke.wgsl on the filled side; the stroke-based
-        // zero-width border pass contributes the matching outside half.
-        final_color.a *= stroke_aa_coverage(signed_dist_to_region);
-    }
-    return final_color;
+    if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
+    return color;
 }
