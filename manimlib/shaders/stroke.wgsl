@@ -2,12 +2,10 @@
 A stroke along a path, drawn as a strip of quads following each bezier, with a fan of
 triangles rounding off the joint at each end.
 
-The border around a fill is a stroke like any other, except that it takes its color and
-width from the fill's fields rather than the stroke's. Zero-width Bezier edges are
-anti-aliased by the fill shader itself; this shader keeps the closing chord of open filled
-subpaths smooth, and renders the full border when fill_border_width is positive. The choice
-between stroke and fill border is settled when the shader is compiled rather than asked per
-draw, so the two are two modules from this one source.
+The border around a fill is a stroke like any other, except that it takes its color
+and width from the fill's fields rather than the stroke's, and that a width of zero still draws
+a band just wide enough to anti-alias the fill's edge. That is settled when the shader is
+compiled rather than asked per draw, so the two are two modules from this one source.
 */
 const IS_FILL_BORDER: bool = false;
 
@@ -587,12 +585,6 @@ fn vs_main(
                 mob.fill_rgba_end.a,
             ) == 0.0;
 
-        // The fill shader covers Bezier edges with two-sided alpha coverage. At zero
-        // border width, retain only the subpath-closing chord, which is not a Bezier
-        // boundary and therefore is not covered by fill.wgsl's implicit curve test.
-        if (mob.fill_border_width == 0.0) {
-            nothing_to_draw = nothing_to_draw || subpath.y != 0.0;
-        }
     } else {
         nothing_to_draw = nothing_to_draw
             || all(
