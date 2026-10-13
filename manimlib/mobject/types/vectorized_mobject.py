@@ -780,6 +780,14 @@ class VMobject(Mobject):
             result[out_index] = (*rgb, alpha)
         return result
 
+    def _copy_texture_uvs(self, source: VMobject) -> None:
+        """Use the textured endpoint's UV map instead of interpolating from undefined UVs."""
+        uv = source.data["texture_uv"]
+        if len(uv) != len(self.data):
+            uv = resize_with_interpolation(uv, len(self.data))
+        with self.data.being_written() as data:
+            data["texture_uv"] = uv
+
     def _copy_texture_paint_style(self, source: VMobject) -> None:
         """
         Keep one endpoint's paint definition while its geometry continues to interpolate.
@@ -828,12 +836,15 @@ class VMobject(Mobject):
                 self.textures = {}
                 return
             self.textures = dict(start_textures)
+            self._copy_texture_uvs(start)
             self.uniforms["texture_mode"] = 2.0
             self.uniforms["texture_mix"] = alpha
             if isinstance(target, VMobject):
                 self._copy_texture_paint_style(target)
         elif target_has_texture and not start_has_texture:
             self.textures = dict(target_textures)
+            if isinstance(target, VMobject):
+                self._copy_texture_uvs(target)
             if alpha >= 1.0:
                 return
             self.uniforms["texture_mode"] = 1.0
@@ -854,12 +865,15 @@ class VMobject(Mobject):
                 # Return to the target's ordinary single-texture binding at the endpoint.
                 self.textures = dict(target_textures)
             else:
-                # Keep both endpoint images bound for one shader draw. The second
-                # binding's stable name makes the layout independent of image contents.
+                # Keep both endpoint images bound for one shader draw. SVG <image>
+                # elements use normalized rectangle UVs; hold the source mapping while
+                # the target has the same normalized mapping on the aligned rectangle.
                 self.textures = {
                     "Texture": next(iter(start_textures.values())),
                     "TransformTargetTexture": next(iter(target_textures.values())),
                 }
+                if isinstance(start, VMobject):
+                    self._copy_texture_uvs(start)
                 self.uniforms["texture_mode"] = 3.0
                 self.uniforms["texture_mix"] = alpha
         else:

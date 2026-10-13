@@ -298,6 +298,9 @@ def test_gradient_to_svg_image_interpolates_texture_contribution() -> None:
     assert "Texture" in animated.textures
     assert animated.textures["Texture"] is image.textures["Texture"]
     assert abs(animated.uniforms["texture_mix"] - 0.25) < 1e-6
+    np.testing.assert_allclose(
+        animated.data["texture_uv"], image.data["texture_uv"], atol=1e-6,
+    )
 
     interpolate_at(animated, gradient, image, 1.0)
     assert "Texture" in animated.textures
@@ -319,6 +322,9 @@ def test_svg_image_to_gradient_interpolates_texture_contribution() -> None:
     assert animated.textures["Texture"] is image.textures["Texture"]
     assert animated.uniforms["texture_mode"] == 2.0
     assert abs(animated.uniforms["texture_mix"] - 0.25) < 1e-6
+    np.testing.assert_allclose(
+        animated.data["texture_uv"], image.data["texture_uv"], atol=1e-6,
+    )
 
     interpolate_at(animated, image, gradient, 1.0)
     assert not animated.textures
@@ -419,6 +425,11 @@ def test_svg_image_to_image_transform_blends_sampled_pixels() -> None:
     assert image.textures["TransformTargetTexture"] is target.submobjects[0].textures["Texture"]
     assert image.uniforms["texture_mode"] == 3.0
     assert abs(image.uniforms["texture_mix"] - 0.5) < 1e-6
+    np.testing.assert_allclose(
+        image.data["texture_uv"],
+        source.submobjects[0].data["texture_uv"],
+        atol=1e-6,
+    )
 
     interpolate_family_at(animated, source, target, 1.0)
     image = animated.submobjects[0]
