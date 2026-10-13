@@ -286,15 +286,35 @@ class SVGMobject(VMobject):
         """Collect SVG gradient definitions and the shapes which reference them."""
         self._svg_gradients = {}
         self._svg_gradient_assignments = {}
+        self._svg_gradient_interpolations = {}
 
         def local_name(element: ET.Element) -> str:
             return element.tag.rsplit("}", 1)[-1]
+
+        # color-interpolation is inherited from the gradient's actual ancestors.
+        # It does not come from the shape using the gradient or from an href template.
+        parents = {
+            child: parent
+            for parent in root.iter()
+            for child in list(parent)
+        }
 
         for element in root.iter():
             if local_name(element) in ("linearGradient", "radialGradient"):
                 gradient_id = element.attrib.get("id")
                 if gradient_id:
                     self._svg_gradients[gradient_id] = deepcopy(element)
+                    interpolation = "sRGB"
+                    node = element
+                    while node is not None:
+                        node_attrs = self._svg_style_attributes(node)
+                        value = node_attrs.get("color-interpolation", "").strip()
+                        if value and value.lower() != "inherit":
+                            if value.lower() in ("srgb", "linearrgb", "auto"):
+                                interpolation = value
+                            break
+                        node = parents.get(node)
+                    self._svg_gradient_interpolations[gradient_id] = interpolation
 
         if not self._svg_gradients:
             return
@@ -541,6 +561,10 @@ class SVGMobject(VMobject):
         spread_method = attrs.get("spreadMethod", "pad").lower()
         if spread_method not in ("pad", "repeat", "reflect"):
             spread_method = "pad"
+        color_interpolation = self._svg_gradient_interpolations.get(
+            gradient_id,
+            attrs.get("color-interpolation", "sRGB"),
+        )
 
         if not is_radial:
             x1 = coordinate(attrs.get("x1"), 0, "0%")
@@ -555,6 +579,7 @@ class SVGMobject(VMobject):
                 start=to_point(x1, y1),
                 end=to_point(x2, y2),
                 spread_method=spread_method,
+                color_interpolation=color_interpolation,
                 recurse=False,
             )
             return
@@ -588,6 +613,7 @@ class SVGMobject(VMobject):
             radial_axis_x=radial_x,
             radial_axis_y=radial_y,
             spread_method=spread_method,
+            color_interpolation=color_interpolation,
             recurse=False,
         )
 
