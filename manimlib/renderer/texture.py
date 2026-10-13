@@ -75,7 +75,7 @@ class PixelArray(TextureSource):
         pixels = np.asarray(pixels, dtype=np.uint8)
         if pixels.ndim != 3 or pixels.shape[2] != 4:
             raise ValueError("PixelArray expects an HxWx4 RGBA array")
-        self.pixels = np.ascontiguousarray(pixels)
+        self.pixels = np.array(pixels, dtype=np.uint8, copy=True, order="C")
         digest = hashlib.sha256()
         digest.update(np.asarray(self.pixels.shape, dtype=np.int64).tobytes())
         digest.update(self.pixels.tobytes())
