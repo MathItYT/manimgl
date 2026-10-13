@@ -96,6 +96,7 @@ class VMobject(Mobject):
         ("gradient_count", 1),
         ("gradient_mode", 1),
         ("gradient_spread", 1),
+        ("gradient_interpolation", 1),
         ("fill_border_width", 1),
     )
     pre_function_handle_to_anchor_scale_factor: float = 0.01
@@ -247,6 +248,7 @@ class VMobject(Mobject):
             # A second color, equal to the first unless a gradient was asked for,
             # along with the two points it runs between, see inserts/fill_color.wgsl
             fill_rgba_end=np.zeros(4),
+            gradient_interpolation=0.0,
             gradient_start=np.zeros(3),
             gradient_end=np.zeros(3),
             fill_border_width=float(self.fill_border_width),
@@ -375,6 +377,7 @@ class VMobject(Mobject):
         gradient_type: str = "linear",
         opacities: Iterable[float] | None = None,
         spread_method: str = "pad",
+        color_interpolation: str = "sRGB",
         recurse: bool = True,
     ) -> Self:
         """
@@ -424,6 +427,41 @@ class VMobject(Mobject):
         if spread_method not in spread_values:
             raise ValueError("spread_method must be 'pad', 'repeat', or 'reflect'")
 
+        color_interpolation = color_interpolation.strip().lower()
+        # SVG 2 permits the UA to choose for "auto"; use the defined sRGB default.
+        if color_interpolation == "auto":
+            color_interpolation = "srgb"
+        if color_interpolation not in ("srgb", "linearrgb"):
+            raise ValueError("color_interpolation must be 'sRGB', 'linearRGB', or 'auto'")
+        interpolation_mode = 1.0 if color_interpolation == "linearrgb" else 0.0
+
+        def srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
+            return np.where(
+                rgb <= 0.04045,
+                rgb / 12.92,
+                ((rgb + 0.055) / 1.055) ** 2.4,
+            )
+
+        def linear_to_srgb(rgb: np.ndarray) -> np.ndarray:
+            rgb = np.maximum(rgb, 0.0)
+            return np.where(
+                rgb <= 0.0031308,
+                12.92 * rgb,
+                1.055 * rgb ** (1.0 / 2.4) - 0.055,
+            )
+
+        def interpolate_stops(first: np.ndarray, second: np.ndarray, amount: float) -> np.ndarray:
+            first_rgb = first[:3]
+            second_rgb = second[:3]
+            if interpolation_mode > 0.5:
+                first_rgb = srgb_to_linear(first_rgb)
+                second_rgb = srgb_to_linear(second_rgb)
+            rgb = first_rgb * (1.0 - amount) + second_rgb * amount
+            if interpolation_mode > 0.5:
+                rgb = linear_to_srgb(rgb)
+            alpha = first[3] * (1.0 - amount) + second[3] * amount
+            return np.array([*rgb, alpha])
+
         rgba = np.zeros((stop_count, 4), dtype=float)
         for index, color in enumerate(color_list):
             rgba[index, :3] = color_to_rgb(color)
@@ -444,17 +482,10 @@ class VMobject(Mobject):
                     left = right - 1
                     span = stop_offsets[right] - stop_offsets[left]
                     mix_value = 0.0 if span <= 1e-8 else (position - stop_offsets[left]) / span
-                    # Keep CPU-side stop reduction consistent with the shader's
-                    # ManimGL color interpolation for gradients with more GPU stops
-                    # than the fixed uniform block can hold.
-                    sampled_rgba[sample_index, :3] = np.sqrt(np.maximum(
-                        rgba[left, :3] ** 2 * (1.0 - mix_value)
-                        + rgba[right, :3] ** 2 * mix_value,
-                        0.0,
-                    ))
-                    sampled_rgba[sample_index, 3] = (
-                        rgba[left, 3] * (1.0 - mix_value)
-                        + rgba[right, 3] * mix_value
+                    # Keep CPU-side stop reduction consistent with the selected
+                    # SVG color-interpolation mode used by the GPU shader.
+                    sampled_rgba[sample_index] = interpolate_stops(
+                        rgba[left], rgba[right], mix_value
                     )
             rgba = sampled_rgba
             stop_offsets = sampled_offsets
@@ -535,6 +566,7 @@ class VMobject(Mobject):
             mob.uniforms["gradient_count"] = float(stop_count)
             mob.uniforms["gradient_mode"] = gradient_mode
             mob.uniforms["gradient_spread"] = spread_values[spread_method]
+            mob.uniforms["gradient_interpolation"] = interpolation_mode
             # Keep legacy color accessors and fill visibility checks meaningful.
             mob.uniforms["fill_rgba"] = rgba[0]
             mob.uniforms["fill_rgba_end"] = rgba[-1]
@@ -633,6 +665,7 @@ class VMobject(Mobject):
         gradient_count: float | None = None,
         gradient_mode: float | None = None,
         gradient_spread: float | None = None,
+        gradient_interpolation: float | None = None,
         gradient_start: Vect3 | None = None,
         gradient_end: Vect3 | None = None,
         gradient_axis_y: Vect3 | None = None,
@@ -663,6 +696,8 @@ class VMobject(Mobject):
                 mob.uniforms["gradient_mode"] = float(gradient_mode)
             if gradient_spread is not None:
                 mob.uniforms["gradient_spread"] = float(gradient_spread)
+            if gradient_interpolation is not None:
+                mob.uniforms["gradient_interpolation"] = float(gradient_interpolation)
             if gradient_start is not None:
                 mob.uniforms["gradient_start"] = np.asarray(gradient_start, dtype=float)
             if gradient_end is not None:
@@ -715,6 +750,7 @@ class VMobject(Mobject):
             "gradient_count": float(self.uniforms["gradient_count"]),
             "gradient_mode": float(self.uniforms["gradient_mode"]),
             "gradient_spread": float(self.uniforms["gradient_spread"]),
+            "gradient_interpolation": float(self.uniforms["gradient_interpolation"]),
             "gradient_start": self.uniforms["gradient_start"].copy(),
             "gradient_end": self.uniforms["gradient_end"].copy(),
             "gradient_axis_y": self.uniforms["gradient_axis_y"].copy(),
