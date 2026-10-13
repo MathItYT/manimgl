@@ -92,6 +92,7 @@ class VMobject(Mobject):
         ("unit_normal", 3),
         ("fill_rgba", 4),
         ("fill_rgba_end", 4),
+        ("texture_mix", 1),
         ("gradient_start", 3),
         ("gradient_end", 3),
         ("gradient_axis_y", 3),
@@ -257,6 +258,8 @@ class VMobject(Mobject):
             # A second color, equal to the first unless a gradient was asked for,
             # along with the two points it runs between, see inserts/fill_color.wgsl
             fill_rgba_end=np.zeros(4),
+            # 1 = fully textured fill, 0 = underlying solid/gradient fill.
+            texture_mix=1.0,
             gradient_interpolation=0.0,
             gradient_start=np.zeros(3),
             gradient_end=np.zeros(3),
@@ -768,6 +771,53 @@ class VMobject(Mobject):
             result[out_index] = (*rgb, alpha)
         return result
 
+    def _interpolate_texture_state(
+        self,
+        start: Mobject,
+        target: Mobject,
+        alpha: float,
+    ) -> None:
+        """
+        Transition between one textured endpoint and one ordinary/gradient endpoint.
+
+        A Drawing chooses a shader variant from mobject.textures, which is not part of
+        StructuredArray interpolation. Keep the textured endpoint's source bound during
+        the transition and use texture_mix to fade between the sampled image and the
+        fill produced by fill_color_at(). Texture UVs themselves are already part of
+        VMobject.data and therefore interpolate with the geometry.
+        """
+        alpha = float(np.clip(alpha, 0.0, 1.0))
+        start_textures = getattr(start, "textures", {})
+        target_textures = getattr(target, "textures", {})
+        start_has_texture = bool(start_textures)
+        target_has_texture = bool(target_textures)
+
+        if start_has_texture and not target_has_texture:
+            # At the last frame, switch to the ordinary fill shader. Up to then the
+            # bound texture fades out to reveal the interpolated fill/gradient.
+            self.textures = dict(start_textures) if alpha < 1.0 else {}
+            self.uniforms["texture_mix"] = 1.0 - alpha
+        elif target_has_texture and not start_has_texture:
+            # Bind the target texture from the first frame so renderer shader selection
+            # is stable; at alpha=0 its contribution is exactly zero.
+            self.textures = dict(target_textures)
+            self.uniforms["texture_mix"] = alpha
+        elif start_has_texture and target_has_texture:
+            # A single texture slot cannot cross-dissolve two distinct images. Keep the
+            # source binding until the exact endpoint; same-source texture transforms
+            # remain stable without re-uploading the texture every frame.
+            same_textures = (
+                start_textures.keys() == target_textures.keys()
+                and all(start_textures[key] is target_textures[key] for key in start_textures)
+            )
+            self.textures = dict(start_textures if same_textures or alpha < 1.0 else target_textures)
+            self.uniforms["texture_mix"] = 1.0
+        else:
+            # Neither endpoint is textured. Clear a stale binding left by a previous
+            # interpolation and leave the default texture mix neutral.
+            self.textures = {}
+            self.uniforms["texture_mix"] = 1.0
+
     def interpolate(
         self,
         mobject1: Mobject,
@@ -775,6 +825,12 @@ class VMobject(Mobject):
         alpha: float,
         path_func=straight_path,
     ) -> Self:
+        # Textures are external resources rather than uniforms/data fields, so the
+        # ordinary Manim interpolation path cannot blend their presence. During a
+        # texture <-> color/gradient Transform, keep the available texture bound and
+        # continuously blend its contribution with the underlying fill color.
+        self._interpolate_texture_state(mobject1, mobject2, alpha)
+
         # Point data, stroke style, and ordinary uniforms use the normal Manim path.
         super().interpolate(mobject1, mobject2, alpha, path_func)
 
