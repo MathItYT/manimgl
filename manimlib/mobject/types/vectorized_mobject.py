@@ -756,12 +756,14 @@ class VMobject(Mobject):
             ))
             rgb_a = colors[left, :3]
             rgb_b = colors[right, :3]
-            if style["interpolation"] > 0.5:
-                rgb_a = srgb_to_linear(rgb_a)
-                rgb_b = srgb_to_linear(rgb_b)
-            rgb = rgb_a * (1.0 - amount) + rgb_b * amount
-            if style["interpolation"] > 0.5:
-                rgb = linear_to_srgb(rgb)
+            # Match the shader's continuously blended color-interpolation mode.
+            srgb_rgb = rgb_a * (1.0 - amount) + rgb_b * amount
+            linear_rgb = linear_to_srgb(
+                srgb_to_linear(rgb_a) * (1.0 - amount)
+                + srgb_to_linear(rgb_b) * amount
+            )
+            interpolation = float(np.clip(style["interpolation"], 0.0, 1.0))
+            rgb = srgb_rgb * (1.0 - interpolation) + linear_rgb * interpolation
             alpha = colors[left, 3] * (1.0 - amount) + colors[right, 3] * amount
             result[out_index] = (*rgb, alpha)
         return result
