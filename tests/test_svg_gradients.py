@@ -38,6 +38,7 @@ def test_vmobject_accepts_radial_gradient_and_focus() -> None:
     )
 
     assert mob.uniforms["gradient_mode"] == 2.0
+    assert mob.uniforms["gradient_interpolation"] == 0.0  # SVG's initial value is sRGB.
     np.testing.assert_allclose(
         mob.uniforms["gradient_focus"],
         [0.25, 0.0, 0.0],
@@ -91,3 +92,36 @@ def test_svg_radial_gradient_uses_its_focal_point() -> None:
         shape.uniforms["gradient_start"],
         shape.uniforms["gradient_focus"],
     )
+
+
+
+def test_vmobject_supports_linear_rgb_interpolation() -> None:
+    mob = Rectangle(width=2, height=1)
+    mob.set_fill_gradient(
+        ["#000000", "#ffffff"],
+        gradient_type="radial",
+        color_interpolation="linearRGB",
+    )
+
+    assert mob.uniforms["gradient_interpolation"] == 1.0
+
+
+def test_svg_gradient_honors_color_interpolation() -> None:
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"
+         viewBox="0 0 80 80" color-interpolation="linearRGB">
+      <defs>
+        <radialGradient id="gradient" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="100%" stop-color="#101820"/>
+        </radialGradient>
+      </defs>
+      <circle cx="40" cy="40" r="35" fill="url(#gradient)"/>
+    </svg>
+    """
+    mob = SVGMobject(svg_string=svg, should_center=False, height=1.0)
+
+    assert len(mob.submobjects) == 1
+    shape = mob.submobjects[0]
+    assert shape.uniforms["gradient_mode"] == 2.0
+    assert shape.uniforms["gradient_interpolation"] == 1.0
