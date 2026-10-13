@@ -60,7 +60,8 @@ if TYPE_CHECKING:
     from manimlib.typing import ManimColor, Vect3, Vect4, Vect3Array, Self
 
 
-GRADIENT_POINT_KEYS = ['gradient_start', 'gradient_end']
+MAX_FILL_GRADIENT_STOPS = 16
+GRADIENT_POINT_KEYS = ['gradient_start', 'gradient_end', 'gradient_axis_y']
 
 
 class VMobject(Mobject):
@@ -88,6 +89,12 @@ class VMobject(Mobject):
         ("fill_rgba_end", 4),
         ("gradient_start", 3),
         ("gradient_end", 3),
+        ("gradient_axis_y", 3),
+        ("gradient_colors", 4, MAX_FILL_GRADIENT_STOPS),
+        ("gradient_stops", 4, MAX_FILL_GRADIENT_STOPS),
+        ("gradient_count", 1),
+        ("gradient_mode", 1),
+        ("gradient_spread", 1),
         ("fill_border_width", 1),
     )
     pre_function_handle_to_anchor_scale_factor: float = 0.01
@@ -343,10 +350,144 @@ class VMobject(Mobject):
                     ends[:, 3] = ops if len(ops) == 2 else ops[0]
                 mob.uniforms["fill_rgba"] = ends[0]
                 mob.uniforms["fill_rgba_end"] = ends[1]
+                # Calls to the ordinary two-color API intentionally leave extended-gradient mode.
+                mob.uniforms["gradient_mode"] = 0.0
             if border_width is not None:
                 mob.uniforms["fill_border_width"] = float(border_width)
         if gradient_direction is not None or (set_colors and self.has_fill_gradient()):
             self.set_fill_gradient_points(gradient_direction, recurse)
+        return self
+
+    def set_fill_gradient(
+        self,
+        colors: Iterable[ManimColor],
+        offsets: Iterable[float] | None = None,
+        direction: Vect3 | None = None,
+        start: Vect3 | None = None,
+        end: Vect3 | None = None,
+        center: Vect3 | None = None,
+        radius: float | None = None,
+        radius_y: float | None = None,
+        gradient_type: str = "linear",
+        opacities: Iterable[float] | None = None,
+        spread_method: str = "pad",
+        recurse: bool = True,
+    ) -> Self:
+        """
+        Set a multi-stop fill gradient on this VMobject.
+
+        `gradient_type` is "linear" or "radial". For a linear gradient, pass
+        `start` and `end`, or use `direction` to span this mobject's bounding box.
+        For a radial gradient, `center`, `radius`, and optionally `radius_y`
+        describe the center and its two ellipse axes. The geometry is stored as
+        points, so it follows subsequent transforms just like the mobject.
+
+        Up to MAX_FILL_GRADIENT_STOPS stops are supported by the GPU uniform block.
+        Offsets are normalized to [0, 1] and kept in nondecreasing order.
+        """
+        gradient_type = gradient_type.lower()
+        if gradient_type not in ("linear", "radial"):
+            raise ValueError("gradient_type must be 'linear' or 'radial'")
+
+        color_list = listify(colors)
+        if len(color_list) < 2:
+            raise ValueError("A fill gradient needs at least two color stops")
+        if len(color_list) > MAX_FILL_GRADIENT_STOPS:
+            raise ValueError(
+                f"A fill gradient supports at most {MAX_FILL_GRADIENT_STOPS} stops"
+            )
+
+        stop_count = len(color_list)
+        if offsets is None:
+            stop_offsets = np.linspace(0.0, 1.0, stop_count)
+        else:
+            stop_offsets = np.asarray(listify(offsets), dtype=float).reshape(-1)
+            if len(stop_offsets) != stop_count:
+                raise ValueError("offsets must have the same length as colors")
+            if not np.all(np.isfinite(stop_offsets)):
+                raise ValueError("gradient offsets must be finite")
+            stop_offsets = np.maximum.accumulate(np.clip(stop_offsets, 0.0, 1.0))
+
+        if opacities is None:
+            stop_opacities = np.ones(stop_count)
+        else:
+            stop_opacities = np.asarray(listify(opacities), dtype=float).reshape(-1)
+            if len(stop_opacities) == 1:
+                stop_opacities = np.repeat(stop_opacities, stop_count)
+            if len(stop_opacities) != stop_count:
+                raise ValueError("opacities must have length one or match colors")
+            if not np.all(np.isfinite(stop_opacities)):
+                raise ValueError("gradient opacities must be finite")
+            stop_opacities = np.clip(stop_opacities, 0.0, 1.0)
+
+        spread_values = {"pad": 0.0, "repeat": 1.0, "reflect": 2.0}
+        spread_method = spread_method.lower()
+        if spread_method not in spread_values:
+            raise ValueError("spread_method must be 'pad', 'repeat', or 'reflect'")
+
+        rgba = np.zeros((stop_count, 4), dtype=float)
+        for index, color in enumerate(color_list):
+            rgba[index, :3] = color_to_rgb(color)
+            rgba[index, 3] = stop_opacities[index]
+
+        bbox = self.get_bounding_box()
+        lower, upper = bbox[0], bbox[2]
+        size = upper - lower
+
+        if gradient_type == "linear":
+            if (start is None) != (end is None):
+                raise ValueError("Pass both start and end, or neither")
+            if start is None:
+                if direction is None:
+                    direction = RIGHT
+                direction = np.asarray(direction, dtype=float)
+                if direction.shape != (3,) or not np.all(np.isfinite(direction)):
+                    raise ValueError("direction must be a finite 3D vector")
+                if not np.any(direction):
+                    direction = np.asarray(RIGHT, dtype=float)
+                direction = normalize(direction)
+                reach = np.dot(np.abs(direction), 0.5 * size)
+                gradient_start = bbox[1] - reach * direction
+                gradient_end = bbox[1] + reach * direction
+            else:
+                gradient_start = np.asarray(start, dtype=float)
+                gradient_end = np.asarray(end, dtype=float)
+                if gradient_start.shape != (3,) or gradient_end.shape != (3,):
+                    raise ValueError("start and end must be 3D points")
+            gradient_axis_y = gradient_start.copy()
+            gradient_mode = 1.0
+        else:
+            if center is None:
+                center = bbox[1]
+            gradient_start = np.asarray(center, dtype=float)
+            if gradient_start.shape != (3,) or not np.all(np.isfinite(gradient_start)):
+                raise ValueError("center must be a finite 3D point")
+            radius_x = float(radius) if radius is not None else 0.5 * max(size[0], size[1])
+            radius_y_value = float(radius_y) if radius_y is not None else radius_x
+            if not np.isfinite(radius_x) or not np.isfinite(radius_y_value) or radius_x < 0 or radius_y_value < 0:
+                raise ValueError("radial gradient radii must be finite and nonnegative")
+            gradient_end = gradient_start + np.array([radius_x, 0.0, 0.0])
+            gradient_axis_y = gradient_start + np.array([0.0, radius_y_value, 0.0])
+            gradient_mode = 2.0
+
+        gradient_colors = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
+        gradient_colors[:stop_count] = rgba
+        gradient_stops = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
+        gradient_stops[:stop_count, 0] = stop_offsets
+
+        for mob in self.get_family(recurse):
+            mob.uniforms["gradient_colors"] = gradient_colors
+            mob.uniforms["gradient_stops"] = gradient_stops
+            mob.uniforms["gradient_count"] = float(stop_count)
+            mob.uniforms["gradient_mode"] = gradient_mode
+            mob.uniforms["gradient_spread"] = spread_values[spread_method]
+            # Keep legacy color accessors and fill visibility checks meaningful.
+            mob.uniforms["fill_rgba"] = rgba[0]
+            mob.uniforms["fill_rgba_end"] = rgba[-1]
+            mob.uniforms["gradient_start"] = gradient_start
+            mob.uniforms["gradient_end"] = gradient_end
+            mob.uniforms["gradient_axis_y"] = gradient_axis_y
+            mob.pointlike_uniform_keys = list(GRADIENT_POINT_KEYS)
         return self
 
     def set_fill_gradient_points(
@@ -374,6 +515,7 @@ class VMobject(Mobject):
         for mob in self.get_family(recurse):
             mob.uniforms["gradient_start"] = bbox[1] - reach * direction
             mob.uniforms["gradient_end"] = bbox[1] + reach * direction
+            mob.uniforms["gradient_axis_y"] = bbox[1]
             # Only now that these mean something do they need carrying along with the
             # points. Left out otherwise, so that moving a plain fill touches nothing.
             mob.pointlike_uniform_keys = GRADIENT_POINT_KEYS
@@ -431,6 +573,14 @@ class VMobject(Mobject):
         stroke_behind: bool | None = None,
         flat_stroke: Optional[bool] = None,
         shading: Tuple[float, float, float] | None = None,
+        gradient_colors: np.ndarray | None = None,
+        gradient_stops: np.ndarray | None = None,
+        gradient_count: float | None = None,
+        gradient_mode: float | None = None,
+        gradient_spread: float | None = None,
+        gradient_start: Vect3 | None = None,
+        gradient_end: Vect3 | None = None,
+        gradient_axis_y: Vect3 | None = None,
         recurse: bool = True
     ) -> Self:
         for mob in self.get_family(recurse):
@@ -438,6 +588,8 @@ class VMobject(Mobject):
                 mob.uniforms["fill_rgba"] = np.array(fill_rgba, dtype=float)
                 end = fill_rgba if fill_rgba_end is None else fill_rgba_end
                 mob.uniforms["fill_rgba_end"] = np.array(end, dtype=float)
+                if gradient_mode is None:
+                    mob.uniforms["gradient_mode"] = 0.0
             else:
                 mob.set_fill(
                     color=fill_color,
@@ -445,6 +597,26 @@ class VMobject(Mobject):
                     recurse=False
                 )
             # Applied either way, since passing in fill_rgba skips the branch above
+            if gradient_colors is not None:
+                mob.uniforms["gradient_colors"] = np.asarray(gradient_colors, dtype=float)
+            if gradient_stops is not None:
+                mob.uniforms["gradient_stops"] = np.asarray(gradient_stops, dtype=float)
+            if gradient_count is not None:
+                mob.uniforms["gradient_count"] = float(gradient_count)
+            if gradient_mode is not None:
+                mob.uniforms["gradient_mode"] = float(gradient_mode)
+            if gradient_spread is not None:
+                mob.uniforms["gradient_spread"] = float(gradient_spread)
+            if gradient_start is not None:
+                mob.uniforms["gradient_start"] = np.asarray(gradient_start, dtype=float)
+            if gradient_end is not None:
+                mob.uniforms["gradient_end"] = np.asarray(gradient_end, dtype=float)
+            if gradient_axis_y is not None:
+                mob.uniforms["gradient_axis_y"] = np.asarray(gradient_axis_y, dtype=float)
+            if any(value is not None for value in (gradient_start, gradient_end, gradient_axis_y)) or (
+                gradient_mode is not None and gradient_mode > 0.5
+            ):
+                mob.pointlike_uniform_keys = list(GRADIENT_POINT_KEYS)
             if fill_border_width is not None:
                 mob.set_fill(border_width=fill_border_width, recurse=False)
 
@@ -476,6 +648,14 @@ class VMobject(Mobject):
             "fill_rgba": self.uniforms["fill_rgba"].copy(),
             "fill_rgba_end": self.uniforms["fill_rgba_end"].copy(),
             "fill_border_width": self.uniforms["fill_border_width"],
+            "gradient_colors": self.uniforms["gradient_colors"].copy(),
+            "gradient_stops": self.uniforms["gradient_stops"].copy(),
+            "gradient_count": float(self.uniforms["gradient_count"]),
+            "gradient_mode": float(self.uniforms["gradient_mode"]),
+            "gradient_spread": float(self.uniforms["gradient_spread"]),
+            "gradient_start": self.uniforms["gradient_start"].copy(),
+            "gradient_end": self.uniforms["gradient_end"].copy(),
+            "gradient_axis_y": self.uniforms["gradient_axis_y"].copy(),
             "stroke_rgba": data['stroke_rgba'].copy(),
             "stroke_width": data['stroke_width'].copy(),
             "stroke_behind": self.stroke_behind,
@@ -613,9 +793,15 @@ class VMobject(Mobject):
         return any(data['stroke_width']) and any(data['stroke_rgba'][:, 3])
 
     def has_fill_gradient(self) -> bool:
-        return bool((self.uniforms["fill_rgba"] != self.uniforms["fill_rgba_end"]).any())
+        return bool(
+            self.uniforms["gradient_mode"] > 0.5
+            or (self.uniforms["fill_rgba"] != self.uniforms["fill_rgba_end"]).any()
+        )
 
     def has_fill(self) -> bool:
+        if self.uniforms["gradient_mode"] > 0.5:
+            count = int(self.uniforms["gradient_count"])
+            return bool(np.any(self.uniforms["gradient_colors"][:count, 3] > 0.0))
         return bool(max(self.uniforms["fill_rgba"][3], self.uniforms["fill_rgba_end"][3]))
 
     def get_opacity(self) -> float:
