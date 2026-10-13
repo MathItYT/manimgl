@@ -638,9 +638,57 @@ class Mobject(object):
         self.become(pickle.loads(data))
         return self
 
+    def _copy_vfx_state_to(self, result: Mobject) -> None:
+        """
+        Rebuild VFX for a copied mobject family.
+
+        VFX instances contain renderer state and back-pointers to their owner and
+        source template. A shallow copy of __dict__ must not share either the effect
+        list or its instances with the original. Re-attaching independent templates
+        also rebuilds _vfx_group/_vfx_local for the copied family.
+        """
+        source_family = self.get_family()
+        target_family = result.get_family()
+        family_map = {
+            id(source): target
+            for source, target in zip(source_family, target_family)
+        }
+
+        # Do not call clear_vfx here: in a shallow copy its list may still be shared
+        # with the original, so mutating it would clear effects on both objects.
+        for target in target_family:
+            target.__dict__.pop("_vfx_effects", None)
+            target.__dict__.pop("_vfx_group", None)
+            target.__dict__.pop("_vfx_local", None)
+            target.__dict__.pop("_vfx_interpolation_state", None)
+
+        for source, target in zip(source_family, target_family):
+            for source_effect in source.get_vfx_list():
+                # Custom copy() implementations deliberately reset GPU caches, but
+                # some keep their old mobject pointer. add_vfx will make the final
+                # renderable instance and attach it to the copied owner.
+                template = source_effect.copy()
+                if hasattr(template, "mobject"):
+                    template.mobject = None
+
+                # Masks inside this family must follow the copied family. External
+                # masks remain external references, matching ordinary Mobject.copy.
+                mask = getattr(template, "mask", None)
+                if isinstance(mask, Mobject) and id(mask) in family_map:
+                    template.mask = family_map[id(mask)]
+
+                # A copied effect needs fresh relationship metadata; never retain
+                # links to an effect attached to the original mobject.
+                for attr in ("_source_effect", "_target_effect", "_attached_effects"):
+                    template.__dict__.pop(attr, None)
+
+                target.add_vfx(template)
+
     @stash_mobject_pointers
     def deepcopy(self) -> Self:
-        return copy.deepcopy(self)
+        result = copy.deepcopy(self)
+        self._copy_vfx_state_to(result)
+        return result
 
     def copy(self, deep: bool = False) -> Self:
         if deep:
@@ -678,6 +726,8 @@ class Mobject(object):
                     setattr(result, attr, result.family[family.index(value)])
             elif isinstance(value, np.ndarray):
                 setattr(result, attr, value.copy())
+
+        self._copy_vfx_state_to(result)
         return result
 
     def generate_target(self, use_deepcopy: bool = False) -> Self:
