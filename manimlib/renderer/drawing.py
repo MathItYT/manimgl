@@ -730,16 +730,45 @@ class VDrawing(Drawing):
         fill_depth_replacements = for_fill
         texture_names = tuple(mobject.textures)
         if texture_names:
-            # Textured VMobjects keep the same Bezier/winding geometry, but their fill
-            # shader samples the first declared 2D texture using per-control-point UVs.
+            # A Transform can bind both endpoint images. The second sample is inserted
+            # only for double-texture materials; single-texture shaders remain valid.
             fill_file = "fill_texture.wgsl"
             fill_depth_file = "fill_depth_texture.wgsl"
+            if len(texture_names) > 1:
+                target_texture_blend = (
+                    f"let target_texel = textureSample({texture_names[1]}, image_sampler, in.texture_uv);\n"
+                    "        color = mix(texel, target_texel, clamp(mob.texture_mix, 0.0, 1.0));"
+                )
+            else:
+                target_texture_blend = "color = texel;"
+            fill_replacements = {
+                **for_fill,
+                "// TARGET_TEXTURE_BLEND": target_texture_blend,
+            }
+            fill_depth_replacements = {
+                **for_fill,
+                "// TARGET_TEXTURE_BLEND": target_texture_blend.replace("color", "pixel_color"),
+            }
 
-            # Both stroke-program fill-edge passes sample the same texture at the Bezier UV.
+            # Border antialiasing must use the exact same endpoint pixel blend as the fill.
+            if len(texture_names) > 1:
+                target_edge_blend = (
+                    f"let target_texel = textureSample({texture_names[1]}, image_sampler, in.texture_uv);\n"
+                    "        color = mix(texel, target_texel, clamp(mob.texture_mix, 0.0, 1.0));"
+                )
+            else:
+                target_edge_blend = "color = texel;"
             texture_sample = (
                 "let texel = textureSample(Texture, image_sampler, in.texture_uv);\n"
-                "    let textured_color = vec4f(color.rgb * texel.rgb, color.a * texel.a);\n"
-                "    color = mix(color, textured_color, clamp(mob.texture_mix, 0.0, 1.0));"
+                "    if (mob.texture_mode < 0.5) {\n"
+                "        color = vec4f(color.rgb * texel.rgb, color.a * texel.a);\n"
+                "    } else if (mob.texture_mode < 1.5) {\n"
+                "        color = mix(color, texel, clamp(mob.texture_mix, 0.0, 1.0));\n"
+                "    } else if (mob.texture_mode < 2.5) {\n"
+                "        color = mix(texel, color, clamp(mob.texture_mix, 0.0, 1.0));\n"
+                "    } else {\n"
+                f"        {target_edge_blend}\n"
+                "    }"
             )
             border_replacements = {
                 **border_replacements,
@@ -752,8 +781,8 @@ class VDrawing(Drawing):
 
             if texture_names[0] != "Texture":
                 texture_name_replacement = {r"\bTexture\b": texture_names[0]}
-                fill_replacements = {**for_fill, **texture_name_replacement}
-                fill_depth_replacements = {**for_fill, **texture_name_replacement}
+                fill_replacements = {**fill_replacements, **texture_name_replacement}
+                fill_depth_replacements = {**fill_depth_replacements, **texture_name_replacement}
                 border_replacements = {**border_replacements, **texture_name_replacement}
                 border_inside_replacements = {**border_inside_replacements, **texture_name_replacement}
 

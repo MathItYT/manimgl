@@ -1874,6 +1874,132 @@ class Mobject(object):
             sm1.align_family(sm2)
         return self
 
+    def align_svg_submobjects(self, mobject: Mobject) -> Self:
+        """
+        Align SVG graphic elements by identity and geometry before Transform aligns point
+        arrays. SVG parsers commonly flatten <g> trees into a list, so child index alone is
+        not a reliable identity when two SVGs list corresponding shapes differently.
+
+        Shared element IDs win. Remaining elements are paired by shape type, bounds, and
+        center proximity. Extra elements are paired with invisible copies, avoiding a shift
+        in every later correspondence.
+        """
+        source_children = list(self.submobjects)
+        target_children = list(mobject.submobjects)
+        has_svg_children = any(
+            getattr(child, "_svg_element_type", None) is not None
+            or getattr(child, "_is_svg_root", False)
+            for child in source_children + target_children
+        )
+
+        if has_svg_children and source_children and target_children:
+            def bounds(child):
+                try:
+                    box = np.asarray(child.get_bounding_box(), dtype=float)
+                    lower, upper = box[0], box[2]
+                    if not (np.isfinite(lower).all() and np.isfinite(upper).all()):
+                        raise ValueError
+                    return 0.5 * (lower + upper), np.maximum(upper - lower, 1e-5)
+                except (ValueError, IndexError, TypeError):
+                    return np.zeros(self.dim), np.ones(self.dim)
+
+            source_metrics = [bounds(child) for child in source_children]
+            target_metrics = [bounds(child) for child in target_children]
+            all_centers = np.array([item[0] for item in source_metrics + target_metrics])
+            scene_scale = max(float(np.ptp(all_centers, axis=0).max()), 1.0)
+
+            def match_cost(i, j):
+                source, target = source_children[i], target_children[j]
+                source_center, source_size = source_metrics[i]
+                target_center, target_size = target_metrics[j]
+                distance = float(np.linalg.norm(source_center - target_center)) / scene_scale
+                size_delta = float(np.linalg.norm(
+                    np.log(np.maximum(source_size, 1e-5) / np.maximum(target_size, 1e-5))
+                ))
+                source_type = getattr(source, "_svg_element_type", None)
+                target_type = getattr(target, "_svg_element_type", None)
+                type_penalty = (
+                    0.0 if source_type == target_type
+                    else 0.6 if source_type is not None and target_type is not None
+                    else 0.2
+                )
+                source_id = getattr(source, "_svg_element_id", None)
+                target_id = getattr(target, "_svg_element_id", None)
+                id_penalty = 0.3 if source_id and target_id and source_id != target_id else 0.0
+                order_penalty = 0.01 * abs(
+                    (i + 0.5) / len(source_children)
+                    - (j + 0.5) / len(target_children)
+                )
+                return distance + 0.15 * size_delta + type_penalty + id_penalty + order_penalty
+
+            matches = {}
+            available_targets = set(range(len(target_children)))
+
+            # Shared SVG IDs are the strongest correspondence, including duplicate IDs.
+            for i, source in enumerate(source_children):
+                source_id = getattr(source, "_svg_element_id", None)
+                if not source_id:
+                    continue
+                candidates = [
+                    j for j in available_targets
+                    if getattr(target_children[j], "_svg_element_id", None) == source_id
+                ]
+                if candidates:
+                    j = min(candidates, key=lambda candidate: match_cost(i, candidate))
+                    matches[i] = j
+                    available_targets.remove(j)
+
+            unmatched_sources = [i for i in range(len(source_children)) if i not in matches]
+            candidate_pairs = sorted(
+                (match_cost(i, j), i, j)
+                for i in unmatched_sources
+                for j in available_targets
+            )
+            for _, i, j in candidate_pairs:
+                if i not in matches and j in available_targets:
+                    matches[i] = j
+                    available_targets.remove(j)
+
+            ordered_source = []
+            ordered_target = []
+            for i, source in enumerate(source_children):
+                ordered_source.append(source)
+                if i in matches:
+                    ordered_target.append(target_children[matches[i]])
+                else:
+                    nearest = min(
+                        range(len(target_children)),
+                        key=lambda j: match_cost(i, j),
+                    )
+                    ordered_target.append(target_children[nearest].invisible_copy())
+
+            used_targets = set(matches.values())
+            for j, target_child in enumerate(target_children):
+                if j in used_targets:
+                    continue
+                nearest = min(
+                    range(len(source_children)),
+                    key=lambda i: match_cost(i, j),
+                )
+                ordered_source.append(source_children[nearest].invisible_copy())
+                ordered_target.append(target_child)
+
+            if (
+                len(ordered_source) != len(source_children)
+                or any(a is not b for a, b in zip(ordered_source, source_children))
+            ):
+                self.set_submobjects(ordered_source)
+            if (
+                len(ordered_target) != len(target_children)
+                or any(a is not b for a, b in zip(ordered_target, target_children))
+            ):
+                mobject.set_submobjects(ordered_target)
+
+        # Continue through aligned containers so SVG elements nested inside Groups also match.
+        for source_child, target_child in zip(self.submobjects, mobject.submobjects):
+            source_child.align_svg_submobjects(target_child)
+        return self
+
     def push_self_into_submobjects(self) -> Self:
         copy = self.copy()
         copy.set_submobjects([])

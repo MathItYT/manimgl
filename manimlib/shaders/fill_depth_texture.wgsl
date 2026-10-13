@@ -184,24 +184,19 @@ fn vs_main(
 fn fs_main(
     in: VertexOutput,
 ) -> @location(0) vec4f {
-    clip_test(
-        in.clip_distances
-    );
+    clip_test(in.clip_distances);
 
-    /*
-    Invisible fill must not reserve depth. Evaluate the same gradient as the visible
-    pass, then combine it with the texture's alpha.
-    */
-    let color = finalize_color(fill_color_at(in.point), in.point, mob.unit_normal);
-    if (color.a == 0.0) {
-        discard;
-    }
-
+    let fill_color = finalize_color(fill_color_at(in.point), in.point, mob.unit_normal);
     let texel = textureSample(Texture, image_sampler, in.texture_uv);
-    // Match visible fill alpha during texture <-> gradient transitions. As the
-    // texture fades out, transparent texels stop punching holes into the depth buffer.
-    let texture_alpha = mix(1.0, texel.a, clamp(mob.texture_mix, 0.0, 1.0));
-    if (color.a * texture_alpha <= 1e-5) {
+    var pixel_color = vec4f(texel.rgb * fill_color.rgb, texel.a * fill_color.a);
+    if (mob.texture_mode >= 0.5 && mob.texture_mode < 1.5) {
+        pixel_color = mix(fill_color, texel, clamp(mob.texture_mix, 0.0, 1.0));
+    } else if (mob.texture_mode >= 1.5 && mob.texture_mode < 2.5) {
+        pixel_color = mix(texel, fill_color, clamp(mob.texture_mix, 0.0, 1.0));
+    } else if (mob.texture_mode >= 2.5) {
+        // TARGET_TEXTURE_BLEND
+    }
+    if (pixel_color.a <= 1e-5) {
         discard;
     }
 

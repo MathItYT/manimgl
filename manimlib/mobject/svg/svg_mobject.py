@@ -108,6 +108,7 @@ class SVGMobject(VMobject):
         path_string_config: dict = dict(),
         **kwargs
     ):
+        self._is_svg_root = True
         self._svg_source_path: Path | None = None
         self._svg_root_attributes: dict[str, str] = {}
         self._svg_clip_paths: dict[str, ET.Element] = {}
@@ -766,6 +767,10 @@ class SVGMobject(VMobject):
 
             if not mob.has_points():
                 continue
+            # Transform needs a persistent correspondence if another SVG lists these
+            # same graphic elements in a different document order.
+            mob._svg_element_id = shape_id
+            mob._svg_element_type = "image" if is_image else type(shape).__name__
             if isinstance(shape, se.GraphicObject) and not is_image:
                 self.apply_style_to_mobject(mob, shape)
             # Set gradient coordinates before applying the element transform. The gradient's
@@ -806,6 +811,8 @@ class SVGMobject(VMobject):
                 # objects under the same parent transforms while the mask stays a sibling.
                 target.add_mask(mask)
                 wrapper = VGroup(target, mask)
+                wrapper._svg_element_id = shape_id
+                wrapper._svg_element_type = getattr(target, "_svg_element_type", "group")
                 for index, mob in enumerate(result):
                     if mob is target:
                         result[index] = wrapper

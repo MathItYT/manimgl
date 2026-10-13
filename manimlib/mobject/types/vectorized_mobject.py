@@ -93,6 +93,9 @@ class VMobject(Mobject):
         ("fill_rgba", 4),
         ("fill_rgba_end", 4),
         ("texture_mix", 1),
+        # 0 = ordinary texture tint; 1 = fill -> texture; 2 = texture -> fill;
+        # 3 = texture -> texture. The shader blends sampled RGBA values per pixel.
+        ("texture_mode", 1),
         ("gradient_start", 3),
         ("gradient_end", 3),
         ("gradient_axis_y", 3),
@@ -260,6 +263,7 @@ class VMobject(Mobject):
             fill_rgba_end=np.zeros(4),
             # 1 = fully textured fill, 0 = underlying solid/gradient fill.
             texture_mix=1.0,
+            texture_mode=0.0,
             gradient_interpolation=0.0,
             gradient_start=np.zeros(3),
             gradient_end=np.zeros(3),
@@ -325,6 +329,11 @@ class VMobject(Mobject):
             # explicitly selected fill color as a tint, otherwise use white for source color.
             if mob.get_fill_opacity() <= 0:
                 mob.set_fill(color="#FFFFFF", opacity=1.0, recurse=False)
+            # Give textured fills a stable local gradient basis too. During a
+            # gradient <-> image Transform, the paint endpoints remain distinct,
+            # while this basis follows the interpolating geometry.
+            if not mob.has_fill_gradient():
+                mob.set_fill_gradient_points(direction=RIGHT, recurse=False)
         return self
 
     # Colors
@@ -771,6 +780,25 @@ class VMobject(Mobject):
             result[out_index] = (*rgb, alpha)
         return result
 
+    def _copy_texture_paint_style(self, source: VMobject) -> None:
+        """
+        Keep one endpoint's paint definition while its geometry continues to interpolate.
+
+        Gradient positions/axes deliberately remain the ordinary interpolated uniforms;
+        the color stops and paint type do not. The shader can then blend the evaluated
+        endpoint pixel with an image pixel instead of blending gradient parameters and
+        subsequently applying a second, visually incorrect fade.
+        """
+        paint_keys = (
+            "fill_rgba", "fill_rgba_end",
+            "gradient_colors", "gradient_stops", "gradient_count",
+            "gradient_mode", "gradient_spread", "gradient_interpolation",
+            "fill_border_width",
+        )
+        for key in paint_keys:
+            value = source.uniforms[key]
+            self.uniforms[key] = value.copy() if isinstance(value, np.ndarray) else value
+
     def _interpolate_texture_state(
         self,
         start: Mobject,
@@ -778,13 +806,13 @@ class VMobject(Mobject):
         alpha: float,
     ) -> None:
         """
-        Transition between one textured endpoint and one ordinary/gradient endpoint.
+        Prepare texture bindings and pixel blending for this interpolation frame.
 
-        A Drawing chooses a shader variant from mobject.textures, which is not part of
-        StructuredArray interpolation. Keep the textured endpoint's source bound during
-        the transition and use texture_mix to fade between the sampled image and the
-        fill produced by fill_color_at(). Texture UVs themselves are already part of
-        VMobject.data and therefore interpolate with the geometry.
+        texture_mode selects the two pixel colors to blend in the shader:
+          0: ordinary textured fill (image multiplied by its tint)
+          1: source solid/gradient pixel -> target image pixel
+          2: source image pixel -> target solid/gradient pixel
+          3: source image pixel -> target image pixel
         """
         alpha = float(np.clip(alpha, 0.0, 1.0))
         start_textures = getattr(start, "textures", {})
@@ -792,31 +820,51 @@ class VMobject(Mobject):
         start_has_texture = bool(start_textures)
         target_has_texture = bool(target_textures)
 
+        self.uniforms["texture_mode"] = 0.0
+        self.uniforms["texture_mix"] = 1.0
+
         if start_has_texture and not target_has_texture:
-            # At the last frame, switch to the ordinary fill shader. Up to then the
-            # bound texture fades out to reveal the interpolated fill/gradient.
-            self.textures = dict(start_textures) if alpha < 1.0 else {}
-            self.uniforms["texture_mix"] = 1.0 - alpha
-        elif target_has_texture and not start_has_texture:
-            # Bind the target texture from the first frame so renderer shader selection
-            # is stable; at alpha=0 its contribution is exactly zero.
-            self.textures = dict(target_textures)
+            if alpha >= 1.0:
+                self.textures = {}
+                return
+            self.textures = dict(start_textures)
+            self.uniforms["texture_mode"] = 2.0
             self.uniforms["texture_mix"] = alpha
+            if isinstance(target, VMobject):
+                self._copy_texture_paint_style(target)
+        elif target_has_texture and not start_has_texture:
+            self.textures = dict(target_textures)
+            if alpha >= 1.0:
+                return
+            self.uniforms["texture_mode"] = 1.0
+            self.uniforms["texture_mix"] = alpha
+            if isinstance(start, VMobject):
+                self._copy_texture_paint_style(start)
         elif start_has_texture and target_has_texture:
-            # A single texture slot cannot cross-dissolve two distinct images. Keep the
-            # source binding until the exact endpoint; same-source texture transforms
-            # remain stable without re-uploading the texture every frame.
             same_textures = (
                 start_textures.keys() == target_textures.keys()
-                and all(start_textures[key] is target_textures[key] for key in start_textures)
+                and all(
+                    start_textures[key] is target_textures[key]
+                    for key in start_textures
+                )
             )
-            self.textures = dict(start_textures if same_textures or alpha < 1.0 else target_textures)
-            self.uniforms["texture_mix"] = 1.0
+            if same_textures:
+                self.textures = dict(start_textures if alpha < 1.0 else target_textures)
+            elif alpha >= 1.0:
+                # Return to the target's ordinary single-texture binding at the endpoint.
+                self.textures = dict(target_textures)
+            else:
+                # Keep both endpoint images bound for one shader draw. The second
+                # binding's stable name makes the layout independent of image contents.
+                self.textures = {
+                    "Texture": next(iter(start_textures.values())),
+                    "TransformTargetTexture": next(iter(target_textures.values())),
+                }
+                self.uniforms["texture_mode"] = 3.0
+                self.uniforms["texture_mix"] = alpha
         else:
-            # Neither endpoint is textured. Clear a stale binding left by a previous
-            # interpolation and leave the default texture mix neutral.
+            # Clear stale bindings left by an earlier texture transition.
             self.textures = {}
-            self.uniforms["texture_mix"] = 1.0
 
     def interpolate(
         self,
@@ -832,6 +880,11 @@ class VMobject(Mobject):
         # ordinary Manim interpolation path cannot blend their presence. Apply this
         # after the ordinary uniform interpolation so it owns texture_mix for this frame.
         self._interpolate_texture_state(mobject1, mobject2, alpha)
+
+        # Texture transitions blend evaluated endpoint pixels. Do not also blend the
+        # gradient stops themselves, or the same colors would be interpolated twice.
+        if float(self.uniforms["texture_mode"]) > 0.5:
+            return self
 
         # At the ends, preserve the exact source/target style and API state. For an
         # interior frame, represent solids as constant-color gradients and resample

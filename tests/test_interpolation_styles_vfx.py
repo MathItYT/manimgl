@@ -5,6 +5,7 @@ from io import BytesIO
 
 import numpy as np
 
+from manimlib.animation.transform import Transform
 from manimlib.mobject.geometry import Rectangle
 from manimlib.mobject.svg.svg_mobject import SVGMobject
 from manimlib.renderer.texture import PixelArray
@@ -333,11 +334,11 @@ def interpolate_family_at(mobject, start, target, alpha: float):
     return mobject
 
 
-def make_png_data_uri() -> str:
+def make_png_data_uri(color: tuple[int, int, int, int] = (40, 120, 255, 255)) -> str:
     from PIL import Image
 
     with BytesIO() as stream:
-        Image.new("RGBA", (2, 2), (40, 120, 255, 255)).save(stream, format="PNG")
+        Image.new("RGBA", (2, 2), color).save(stream, format="PNG")
         encoded = base64.b64encode(stream.getvalue()).decode("ascii")
     return f"data:image/png;base64,{encoded}"
 
@@ -387,3 +388,95 @@ def test_svg_gradient_and_svg_image_transform_blends_texture_both_ways() -> None
     interpolate_family_at(animated, image, gradient, 1.0)
     assert not animated.submobjects[0].textures
     assert abs(animated.submobjects[0].uniforms["texture_mix"]) < 1e-6
+
+
+
+def test_svg_image_to_image_transform_blends_sampled_pixels() -> None:
+    source_svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"
+         viewBox="0 0 100 50">
+      <image x="0" y="0" width="100" height="50"
+             href="{make_png_data_uri((255, 0, 0, 255))}"/>
+    </svg>
+    """
+    target_svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"
+         viewBox="0 0 100 50">
+      <image x="0" y="0" width="100" height="50"
+             href="{make_png_data_uri((0, 0, 255, 255))}"/>
+    </svg>
+    """
+    source = SVGMobject(svg_string=source_svg, should_center=False, height=1.0)
+    target = SVGMobject(svg_string=target_svg, should_center=False, height=1.0)
+    animated = source.copy()
+
+    interpolate_family_at(animated, source, target, 0.5)
+    image = animated.submobjects[0]
+    assert tuple(image.textures) == ("Texture", "TransformTargetTexture")
+    assert image.textures["Texture"] is source.submobjects[0].textures["Texture"]
+    assert image.textures["TransformTargetTexture"] is target.submobjects[0].textures["Texture"]
+    assert image.uniforms["texture_mode"] == 3.0
+    assert abs(image.uniforms["texture_mix"] - 0.5) < 1e-6
+
+    interpolate_family_at(animated, source, target, 1.0)
+    image = animated.submobjects[0]
+    assert tuple(image.textures) == ("Texture",)
+    assert image.textures["Texture"] is target.submobjects[0].textures["Texture"]
+    assert image.uniforms["texture_mode"] == 0.0
+
+
+def test_gradient_image_pixel_blend_keeps_endpoint_paint_colors() -> None:
+    gradient = Rectangle(width=3, height=2)
+    gradient.set_fill_gradient(["#ff0000", "#0000ff"], direction=[1, 0, 0])
+    image = Rectangle(width=3, height=2)
+    image.set_fill("#ffffff", opacity=1)
+    image.set_texture(make_test_texture(), flip_y=False)
+
+    animated = gradient.copy()
+    interpolate_at(animated, gradient, image, 0.4)
+
+    assert animated.uniforms["texture_mode"] == 1.0
+    assert animated.uniforms["gradient_mode"] == 1.0
+    np.testing.assert_allclose(
+        animated.uniforms["gradient_colors"][:2, :3],
+        [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
+        atol=1e-5,
+    )
+
+    animated = image.copy()
+    interpolate_at(animated, image, gradient, 0.4)
+    assert animated.uniforms["texture_mode"] == 2.0
+    assert animated.uniforms["gradient_mode"] == 1.0
+
+
+def test_transform_aligns_svg_submobjects_by_id_not_document_order() -> None:
+    source_svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"
+         viewBox="0 0 100 50">
+      <rect id="left-shape" x="0" y="0" width="20" height="30" fill="#ff0000"/>
+      <rect id="right-shape" x="75" y="0" width="20" height="30" fill="#00ff00"/>
+    </svg>
+    """
+    target_svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"
+         viewBox="0 0 100 50">
+      <rect id="right-shape" x="65" y="0" width="20" height="30" fill="#00ff00"/>
+      <rect id="left-shape" x="10" y="0" width="20" height="30" fill="#ff0000"/>
+    </svg>
+    """
+    source = SVGMobject(svg_string=source_svg, should_center=False, height=1.0)
+    target = SVGMobject(svg_string=target_svg, should_center=False, height=1.0)
+    original_target_order = [mob._svg_element_id for mob in target.submobjects]
+
+    animation = Transform(source, target)
+    animation.begin()
+
+    assert original_target_order == ["right-shape", "left-shape"]
+    assert [mob._svg_element_id for mob in animation.target_copy.submobjects] == [
+        "left-shape", "right-shape",
+    ]
+    np.testing.assert_allclose(
+        animation.target_copy.submobjects[0].get_center(),
+        target.submobjects[1].get_center(),
+        atol=1e-6,
+    )

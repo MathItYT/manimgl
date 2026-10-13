@@ -55,15 +55,21 @@ class Transform(Animation):
         self.target_mobject = self.create_target()
         self.check_target_mobject_validity()
 
-        if self.mobject.is_aligned_with(self.target_mobject):
-            # Nothing to align, so nothing is done to the target and it can stand as it is
+        has_svg_structure = any(
+            getattr(member, "_is_svg_root", False)
+            or getattr(member, "_svg_element_type", None) is not None
+            for root in (self.mobject, self.target_mobject)
+            for member in root.get_family()
+        )
+        if self.mobject.is_aligned_with(self.target_mobject) and not has_svg_structure:
+            # Ordinary mobjects already match, and their target can stand as it is.
             self.target_copy = self.target_mobject
         else:
-            # Use a copy of target_mobject for the align_data_and_family
-            # call so that the actual target_mobject stays
-            # preserved, since calling align_data will potentially
-            # change the structure of both arguments
+            # Keep the user's target untouched; SVG families are reordered by stable IDs
+            # and geometry on this copy before point arrays are aligned.
             self.target_copy = self.target_mobject.copy()
+            if has_svg_structure:
+                self.mobject.align_svg_submobjects(self.target_copy)
             self.mobject.align_data_and_family(self.target_copy)
         super().begin()
 
