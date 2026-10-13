@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import base64
+from io import BytesIO
+
 import numpy as np
+from PIL import Image
 
 from manimlib.mobject.geometry import Rectangle
+from manimlib.mobject.svg.svg_mobject import SVGMobject
 from manimlib.renderer.texture import PixelArray
 from manimlib.utils.vfx_presets import Grain
 
@@ -317,3 +322,67 @@ def test_svg_image_to_gradient_interpolates_texture_contribution() -> None:
     interpolate_at(animated, image, gradient, 1.0)
     assert not animated.textures
     assert abs(animated.uniforms["texture_mix"] - 0.0) < 1e-6
+
+def interpolate_family_at(mobject, start, target, alpha: float):
+    mobject.prepare_interpolation(start, target)
+    for current_member, start_member, target_member in zip(
+        mobject.get_family(),
+        start.get_family(),
+        target.get_family(),
+    ):
+        current_member.interpolate(start_member, target_member, alpha)
+    return mobject
+
+
+def make_png_data_uri() -> str:
+    with BytesIO() as stream:
+        Image.new("RGBA", (2, 2), (40, 120, 255, 255)).save(stream, format="PNG")
+        encoded = base64.b64encode(stream.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def test_svg_gradient_and_svg_image_transform_blends_texture_both_ways() -> None:
+    gradient_svg = """
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"
+         viewBox="0 0 100 50">
+      <defs>
+        <linearGradient id="gradient">
+          <stop offset="0%" stop-color="#ff0000"/>
+          <stop offset="100%" stop-color="#0000ff"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="100" height="50" fill="url(#gradient)"/>
+    </svg>
+    """
+    image_svg = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"
+         viewBox="0 0 100 50">
+      <image x="0" y="0" width="100" height="50"
+             href="{make_png_data_uri()}"/>
+    </svg>
+    """
+    gradient = SVGMobject(svg_string=gradient_svg, should_center=False, height=1.0)
+    image = SVGMobject(svg_string=image_svg, should_center=False, height=1.0)
+    assert len(gradient.submobjects) == len(image.submobjects) == 1
+
+    # Gradient -> image: the target texture is bound from frame zero, but its
+    # contribution starts at zero and grows continuously.
+    animated = gradient.copy()
+    interpolate_family_at(animated, gradient, image, 0.25)
+    animated_shape = animated.submobjects[0]
+    image_shape = image.submobjects[0]
+    assert "Texture" in animated_shape.textures
+    assert animated_shape.textures["Texture"] is image_shape.textures["Texture"]
+    assert abs(animated_shape.uniforms["texture_mix"] - 0.25) < 1e-6
+
+    # Image -> gradient: keep the original texture until the final frame while
+    # fading it out to reveal the gradient fill underneath.
+    animated = image.copy()
+    interpolate_family_at(animated, image, gradient, 0.25)
+    animated_shape = animated.submobjects[0]
+    assert "Texture" in animated_shape.textures
+    assert abs(animated_shape.uniforms["texture_mix"] - 0.75) < 1e-6
+
+    interpolate_family_at(animated, image, gradient, 1.0)
+    assert not animated.submobjects[0].textures
+    assert abs(animated.submobjects[0].uniforms["texture_mix"]) < 1e-6
