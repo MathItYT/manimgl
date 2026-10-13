@@ -914,8 +914,8 @@ class VDrawing(Drawing):
         self,
         render_pass: RenderPass,
     ) -> None:
-        # The border shader handles explicit borders, and preserves a zero-width closing
-        # chord for open filled subpaths. Bezier edges are anti-aliased by fill.wgsl.
+        # This zero-width border is the fill's anti-aliasing fringe, not a visible stroke.
+        # It must be rendered for every filled contour, including the inner contours of holes.
         self.draw_pass(
             render_pass,
             "border",
