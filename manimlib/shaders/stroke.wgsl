@@ -585,12 +585,7 @@ fn vs_main(
                 mob.fill_rgba.a,
                 mob.fill_rgba_end.a,
             ) == 0.0;
-        if (mob.fill_border_width == 0.0) {
-            // Bezier edges use the shared coverage function in fill.wgsl.
-            // Keep only the implicit closing chord of an open filled subpath here.
-            nothing_to_draw = nothing_to_draw || subpath.y != 0.0;
-        }
-    } else {
+            } else {
         nothing_to_draw = nothing_to_draw
             || all(
                 vec3f(
