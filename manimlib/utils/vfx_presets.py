@@ -654,19 +654,10 @@ struct VertexOutput {
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let color = textureSample(mob_tex, mob_smp, in.uv);
 
-    // Supersample the mask over a pixel-sized footprint. The mask is rendered into
-    // a single-sample offscreen texture, so sampling only its center leaves hard,
-    // jagged edges even when the source VMobject uses its normal antialiasing shader.
-    // Four diagonal subpixel taps approximate pixel coverage without blurring the
-    // masked image itself.
-    let mask_texel = 1.0 / vec2f(textureDimensions(mask_tex));
-    let sample_offset = mask_texel * 0.5;
-    let mask_val = (
-        textureSample(mask_tex, mask_smp, in.uv + vec2f(-sample_offset.x, -sample_offset.y)) +
-        textureSample(mask_tex, mask_smp, in.uv + vec2f( sample_offset.x, -sample_offset.y)) +
-        textureSample(mask_tex, mask_smp, in.uv + vec2f(-sample_offset.x,  sample_offset.y)) +
-        textureSample(mask_tex, mask_smp, in.uv + vec2f( sample_offset.x,  sample_offset.y))
-    ) * 0.25;
+    // Sample the mask once at the corresponding pixel center. The mask texture's
+    // linear sampler provides edge coverage; offset multi-tap averaging blurs the
+    // entire silhouette and must not be used here.
+    let mask_val = textureSample(mask_tex, mask_smp, in.uv);
 
     var m: f32;
     if (params.use_luminance > 0.5) {
