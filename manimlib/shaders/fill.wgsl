@@ -95,9 +95,12 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    // Calculate derivatives before any discard, like the stroke fragment shader.
+    // Signed implicit distance to the Bezier boundary. The gradient magnitude makes
+    // this a Euclidean screen-space distance (fwidth would widen diagonal edges).
+    // Evaluate derivatives before any discard, like the stroke fragment shader.
     let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
-    let aaw = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-8);
+    let curve_gradient = vec2f(dpdx(curve_distance), dpdy(curve_distance));
+    let aaw = max(length(curve_gradient) * mob.anti_alias_width, 1e-8);
     let signed_dist_to_region = -curve_distance / aaw;
 
     clip_test(in.clip_distances);
