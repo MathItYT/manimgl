@@ -583,6 +583,31 @@ class SVGMobject(VMobject):
                     remove_clip_path_definitions(child)
         remove_clip_path_definitions(parse_root)
 
+        # svgelements does not represent SVG paint servers as ordinary solid paints.
+        # Replace gradient references only in the parser's private copy: the original XML
+        # above still carries the actual gradient ID, stops, opacity and coordinate metadata.
+        # VMobject receives the real gradient immediately after the shape's base style.
+        gradient_paint = re.compile(r"url\(\s*['\"]?#([^)'\"]+)['\"]?\s*\)", re.IGNORECASE)
+
+        def neutralize_gradient_paints(parent: ET.Element) -> None:
+            fill = parent.attrib.get("fill")
+            if fill and gradient_paint.search(fill):
+                parent.set("fill", "#000000")
+            style = parent.attrib.get("style")
+            if style:
+                parent.set(
+                    "style",
+                    re.sub(
+                        r"((?:^|;)\s*fill\s*:\s*)url\([^)]*\)",
+                        r"\1#000000",
+                        style,
+                        flags=re.IGNORECASE,
+                    ),
+                )
+            for child in parent:
+                neutralize_gradient_paints(child)
+
+        neutralize_gradient_paints(parse_root)
         element_tree = ET.ElementTree(parse_root)
         new_tree = self.modify_xml_tree(element_tree)
 
