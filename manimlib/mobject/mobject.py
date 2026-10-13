@@ -2315,7 +2315,26 @@ class Mobject(object):
                 else:
                     value = a if alpha < 0.5 else b
             elif start_effect is None:
-                value = b
+                # A newly introduced effect must grow into its target parameters,
+                # not appear at full radius/offset/blur size on its first frame.
+                if isinstance(b, numbers.Real) and not isinstance(b, (bool, np.bool_)):
+                    value = float(b) * alpha
+                elif isinstance(b, (tuple, list, np.ndarray)) and key not in (
+                    "center", "uv_center", "direction", "manual_direction", "color",
+                ):
+                    try:
+                        array = np.asarray(b, dtype=float)
+                        faded = array * alpha
+                        if isinstance(b, tuple):
+                            value = tuple(faded.tolist())
+                        elif isinstance(b, list):
+                            value = faded.tolist()
+                        else:
+                            value = faded
+                    except (TypeError, ValueError):
+                        value = b
+                else:
+                    value = b
             elif target_effect is None:
                 value = a
             elif key not in start_attrs:
