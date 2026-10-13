@@ -585,6 +585,13 @@ fn vs_main(
                 mob.fill_rgba.a,
                 mob.fill_rgba_end.a,
             ) == 0.0;
+
+        // The fill shader covers Bezier edges with two-sided alpha coverage. At zero
+        // border width, retain only the subpath-closing chord, which is not a Bezier
+        // boundary and therefore is not covered by fill.wgsl's implicit curve test.
+        if (mob.fill_border_width == 0.0) {
+            nothing_to_draw = nothing_to_draw || subpath.y != 0.0;
+        }
     } else {
         nothing_to_draw = nothing_to_draw
             || all(
