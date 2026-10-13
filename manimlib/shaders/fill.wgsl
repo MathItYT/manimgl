@@ -94,10 +94,6 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    // Work out the curve's screen-space edge width before any discard, as WGSL
-    // derivatives must be evaluated in uniform control flow.
-    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
-    let aa_width = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-5);
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     /*
@@ -106,13 +102,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    // Keep the winding boundary exact. The outside half of the fringe is rendered
-    // by FILL_BORDER; fade the fill side across half the same pixel-width band.
-    if (in.fill_all == 0.0 && curve_distance < 0.0) { discard; }
-
-    var color = in.color;
-    if (in.fill_all == 0.0) {
-        color.a *= smoothstep(0.0, 0.5 * aa_width, curve_distance);
-    }
-    return color;
+    if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
+    return in.color;
 }
