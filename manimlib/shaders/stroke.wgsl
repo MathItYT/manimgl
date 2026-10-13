@@ -3,10 +3,10 @@ A stroke along a path, drawn as a strip of quads following each bezier, with a f
 triangles rounding off the joint at each end.
 
 The border around a fill is a stroke like any other, except that it takes its color and
-width from the fill's fields rather than the stroke's, and that a width of zero still draws
-a band just wide enough to anti-alias the fill's edge. That is settled when the shader is
-compiled rather than asked per draw, so the two are two modules from this one source, see
-VShaderWrapper.init_program.
+width from the fill's fields rather than the stroke's. Zero-width fill edges are anti-aliased
+by the fill shader itself; this separate border shader is used only for explicit positive
+fill_border_width values. That distinction is settled when the shader is compiled rather
+than asked per draw, so the two are two modules from this one source.
 */
 const IS_FILL_BORDER: bool = false;
 
