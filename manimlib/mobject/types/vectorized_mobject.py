@@ -368,6 +368,8 @@ class VMobject(Mobject):
         center: Vect3 | None = None,
         radius: float | None = None,
         radius_y: float | None = None,
+        radial_axis_x: Vect3 | None = None,
+        radial_axis_y: Vect3 | None = None,
         gradient_type: str = "linear",
         opacities: Iterable[float] | None = None,
         spread_method: str = "pad",
@@ -466,8 +468,18 @@ class VMobject(Mobject):
             radius_y_value = float(radius_y) if radius_y is not None else radius_x
             if not np.isfinite(radius_x) or not np.isfinite(radius_y_value) or radius_x < 0 or radius_y_value < 0:
                 raise ValueError("radial gradient radii must be finite and nonnegative")
-            gradient_end = gradient_start + np.array([radius_x, 0.0, 0.0])
-            gradient_axis_y = gradient_start + np.array([0.0, radius_y_value, 0.0])
+            gradient_end = (
+                np.asarray(radial_axis_x, dtype=float)
+                if radial_axis_x is not None
+                else gradient_start + np.array([radius_x, 0.0, 0.0])
+            )
+            gradient_axis_y = (
+                np.asarray(radial_axis_y, dtype=float)
+                if radial_axis_y is not None
+                else gradient_start + np.array([0.0, radius_y_value, 0.0])
+            )
+            if gradient_end.shape != (3,) or gradient_axis_y.shape != (3,):
+                raise ValueError("radial_axis_x and radial_axis_y must be 3D points")
             gradient_mode = 2.0
 
         gradient_colors = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
