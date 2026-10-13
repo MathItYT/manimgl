@@ -126,6 +126,15 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
-    return color;
+    // Match the hard edge used for winding with a conservative pixel-width edge.
+    // The alpha ramp itself is applied below in the color pass.
+    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
+    let aa_width = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-5);
+    if (in.fill_all == 0.0 && curve_distance < -0.5 * aa_width) { discard; }
+
+    var final_color = color;
+    if (in.fill_all == 0.0) {
+        final_color.a *= smoothstep(-0.5 * aa_width, 0.5 * aa_width, curve_distance);
+    }
+    return final_color;
 }
