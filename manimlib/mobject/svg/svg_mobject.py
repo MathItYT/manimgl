@@ -113,6 +113,8 @@ class SVGMobject(VMobject):
         self._svg_clip_paths: dict[str, ET.Element] = {}
         self._svg_clip_assignments: dict[str, str] = {}
         self._svg_clip_shape_ids: set[str] = set()
+        self._svg_gradients: dict[str, ET.Element] = {}
+        self._svg_gradient_assignments: dict[str, tuple[str, float]] = {}
 
         if svg_string != "":
             self.svg_string = svg_string
@@ -168,6 +170,7 @@ class SVGMobject(VMobject):
         # are parsed afresh instead of using the geometry cache.
         svg_root = ET.fromstring(self.svg_string)
         self._collect_svg_clip_metadata(svg_root)
+        self._collect_svg_gradient_metadata(svg_root)
         hash_val = hash_obj(self.hash_seed)
         contains_images = any(
             element.tag.rsplit("}", 1)[-1] == "image"
@@ -269,16 +272,308 @@ class SVGMobject(VMobject):
 
         visit(root)
 
+    @staticmethod
+    def _svg_style_attributes(element: ET.Element) -> dict[str, str]:
+        """Return presentation attributes with inline style declarations applied last."""
+        attrs = dict(element.attrib)
+        for declaration in attrs.get("style", "").split(";"):
+            name, separator, value = declaration.partition(":")
+            if separator and name.strip():
+                attrs[name.strip()] = value.replace("!important", "").strip()
+        return attrs
+
+    def _collect_svg_gradient_metadata(self, root: ET.Element) -> None:
+        """Collect SVG gradient definitions and the shapes which reference them."""
+        self._svg_gradients = {}
+        self._svg_gradient_assignments = {}
+
+        def local_name(element: ET.Element) -> str:
+            return element.tag.rsplit("}", 1)[-1]
+
+        for element in root.iter():
+            if local_name(element) in ("linearGradient", "radialGradient"):
+                gradient_id = element.attrib.get("id")
+                if gradient_id:
+                    self._svg_gradients[gradient_id] = deepcopy(element)
+
+        if not self._svg_gradients:
+            return
+
+        graphic_tags = {
+            "path", "rect", "image", "circle", "ellipse", "line",
+            "polyline", "polygon", "use",
+        }
+        generated_id = 0
+
+        def opacity_value(value: str | None, default: float = 1.0) -> float:
+            if value is None:
+                return default
+            try:
+                value = value.strip()
+                result = float(value[:-1]) / 100.0 if value.endswith("%") else float(value)
+                return float(np.clip(result, 0.0, 1.0))
+            except (TypeError, ValueError):
+                return default
+
+        def gradient_ref(value: str | None) -> str | None:
+            if not value:
+                return None
+            match = re.search(r"url\(\s*['\"]?#([^)'\"\s]+)['\"]?\s*\)", value)
+            return match.group(1) if match else None
+
+        def visit(
+            element: ET.Element,
+            inherited_gradient: str | None = None,
+            inherited_fill_opacity: float = 1.0,
+            inherited_opacity: float = 1.0,
+        ) -> None:
+            nonlocal generated_id
+            name = local_name(element)
+            # Definitions never paint by themselves.
+            if name in ("defs", "clipPath", "linearGradient", "radialGradient", "mask", "pattern"):
+                return
+
+            attrs = self._svg_style_attributes(element)
+            active_gradient = inherited_gradient
+            if "fill" in attrs:
+                active_gradient = gradient_ref(attrs.get("fill"))
+                if active_gradient not in self._svg_gradients:
+                    active_gradient = None
+
+            current_fill_opacity = opacity_value(
+                attrs.get("fill-opacity"),
+                inherited_fill_opacity,
+            )
+            current_opacity = inherited_opacity * opacity_value(attrs.get("opacity"), 1.0)
+
+            if name in graphic_tags and active_gradient is not None:
+                element_id = attrs.get("id")
+                if not element_id:
+                    generated_id += 1
+                    element_id = f"__manim_gradient_target_{generated_id:06d}"
+                    element.set("id", element_id)
+                self._svg_gradient_assignments[element_id] = (
+                    active_gradient,
+                    current_fill_opacity * current_opacity,
+                )
+
+            for child in element:
+                visit(child, active_gradient, current_fill_opacity, current_opacity)
+
+        visit(root)
+
+    def _resolve_svg_gradient(
+        self,
+        gradient_id: str,
+        visited: set[str] | None = None,
+    ) -> dict | None:
+        """Resolve href inheritance without depending on svgelements' paint parser."""
+        if visited is None:
+            visited = set()
+        if gradient_id in visited:
+            log.warning("Circular SVG gradient reference: %s", gradient_id)
+            return None
+        element = self._svg_gradients.get(gradient_id)
+        if element is None:
+            return None
+        visited = {*visited, gradient_id}
+        href = element.attrib.get("href") or element.attrib.get(
+            "{http://www.w3.org/1999/xlink}href"
+        )
+        base_id = href[1:] if href and href.startswith("#") else None
+        base = self._resolve_svg_gradient(base_id, visited) if base_id else None
+
+        attrs = {} if base is None else dict(base["attrs"])
+        attrs.update({
+            key: value
+            for key, value in element.attrib.items()
+            if key not in ("id", "href", "{http://www.w3.org/1999/xlink}href")
+        })
+        own_stops = [
+            deepcopy(child)
+            for child in list(element)
+            if child.tag.rsplit("}", 1)[-1] == "stop"
+        ]
+        stops = own_stops if own_stops else ([] if base is None else base["stops"])
+        return {
+            "type": element.tag.rsplit("}", 1)[-1],
+            "attrs": attrs,
+            "stops": stops,
+        }
+
+    def _apply_svg_gradient(
+        self,
+        mob: VMobject,
+        shape_id: str,
+        shape: se.GraphicObject,
+    ) -> None:
+        assignment = self._svg_gradient_assignments.get(shape_id)
+        if assignment is None:
+            return
+        gradient_id, inherited_opacity = assignment
+        gradient = self._resolve_svg_gradient(gradient_id)
+        if not gradient or not gradient["stops"]:
+            log.warning("SVG gradient %r has no usable color stops", gradient_id)
+            return
+
+        attrs = gradient["attrs"]
+        is_radial = gradient["type"] == "radialGradient"
+        units = attrs.get("gradientUnits", "objectBoundingBox")
+        object_bbox = units != "userSpaceOnUse"
+        bbox = mob.get_bounding_box()
+        lower, upper = bbox[0], bbox[2]
+        size = upper - lower
+
+        view_box = self._svg_root_attributes.get("viewBox", "").replace(",", " ").split()
+        if len(view_box) == 4:
+            try:
+                view_min_x, view_min_y, view_width, view_height = map(float, view_box)
+            except ValueError:
+                view_min_x, view_min_y, view_width, view_height = 0.0, 0.0, size[0], size[1]
+        else:
+            view_min_x, view_min_y, view_width, view_height = 0.0, 0.0, size[0], size[1]
+        if view_width <= 0:
+            view_width = size[0]
+        if view_height <= 0:
+            view_height = size[1]
+
+        number_pattern = re.compile(r"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?")
+
+        def parse_number(value: str | None, default: float = 0.0) -> float:
+            if value is None:
+                return default
+            match = number_pattern.search(value.strip())
+            if not match:
+                return default
+            try:
+                return float(match.group(0))
+            except ValueError:
+                return default
+
+        def coordinate(value: str | None, axis: int, default: str) -> float:
+            value = default if value is None else value.strip()
+            fraction = value.endswith("%")
+            number = parse_number(value, 0.0)
+            if object_bbox:
+                return number / 100.0 if fraction else number
+            if fraction:
+                origin = view_min_x if axis == 0 else view_min_y
+                extent = view_width if axis == 0 else view_height
+                return origin + extent * number / 100.0
+            return number
+
+        def opacity(value: str | None, default: float = 1.0) -> float:
+            if value is None:
+                return default
+            result = parse_number(value, default)
+            if value.strip().endswith("%"):
+                result /= 100.0
+            return float(np.clip(result, 0.0, 1.0))
+
+        gradient_matrix = None
+        transform_text = attrs.get("gradientTransform")
+        if transform_text:
+            try:
+                gradient_matrix = se.Matrix(transform_text)
+            except Exception as error:
+                log.warning("Ignoring unsupported gradientTransform %r: %s", transform_text, error)
+
+        def apply_matrix(x: float, y: float, matrix) -> tuple[float, float]:
+            if matrix is None:
+                return x, y
+            return (
+                matrix.a * x + matrix.c * y + matrix.e,
+                matrix.b * x + matrix.d * y + matrix.f,
+            )
+
+        def to_point(x: float, y: float) -> np.ndarray:
+            # gradientTransform acts in the gradient's coordinate system. objectBoundingBox
+            # coordinates are then expanded into the target's local bounding box.
+            x, y = apply_matrix(x, y, gradient_matrix)
+            if object_bbox:
+                x = lower[0] + x * size[0]
+                y = lower[1] + y * size[1]
+            return np.array([x, y, 0.0], dtype=float)
+
+        colors: list[str] = []
+        offsets: list[float] = []
+        opacities: list[float] = []
+        for index, stop in enumerate(gradient["stops"]):
+            stop_attrs = self._svg_style_attributes(stop)
+            offset_value = stop_attrs.get("offset", "0")
+            offset = parse_number(offset_value, 0.0)
+            if offset_value.strip().endswith("%"):
+                offset /= 100.0
+            color = stop_attrs.get("stop-color", "black").strip()
+            if color.lower() == "currentcolor":
+                color = "black"
+            colors.append(color)
+            offsets.append(float(np.clip(offset, 0.0, 1.0)))
+            opacities.append(
+                opacity(stop_attrs.get("stop-opacity"), 1.0) * inherited_opacity
+            )
+        offsets = np.maximum.accumulate(np.asarray(offsets, dtype=float)).tolist()
+
+        spread_method = attrs.get("spreadMethod", "pad").lower()
+        if spread_method not in ("pad", "repeat", "reflect"):
+            spread_method = "pad"
+
+        if not is_radial:
+            x1 = coordinate(attrs.get("x1"), 0, "0%")
+            y1 = coordinate(attrs.get("y1"), 1, "0%")
+            x2 = coordinate(attrs.get("x2"), 0, "100%")
+            y2 = coordinate(attrs.get("y2"), 1, "0%")
+            mob.set_fill_gradient(
+                colors,
+                offsets=offsets,
+                opacities=opacities,
+                gradient_type="linear",
+                start=to_point(x1, y1),
+                end=to_point(x2, y2),
+                spread_method=spread_method,
+                recurse=False,
+            )
+            return
+
+        cx = coordinate(attrs.get("cx"), 0, "50%")
+        cy = coordinate(attrs.get("cy"), 1, "50%")
+        radius_value = attrs.get("r", "50%").strip()
+        radius_fraction = radius_value.endswith("%")
+        radius_amount = parse_number(radius_value, 0.5)
+        if radius_fraction:
+            radius_amount /= 100.0
+        if object_bbox:
+            radius_amount = radius_amount
+        elif radius_fraction:
+            radius_amount *= float(np.sqrt((view_width * view_width + view_height * view_height) / 2.0))
+        # SVG's default focal point is the center. A shifted focal point is kept as a
+        # future extension; the outer ellipse and color stops are fully GPU-evaluated.
+        center = to_point(cx, cy)
+        radial_x = to_point(cx + radius_amount, cy)
+        radial_y = to_point(cx, cy + radius_amount)
+        mob.set_fill_gradient(
+            colors,
+            offsets=offsets,
+            opacities=opacities,
+            gradient_type="radial",
+            center=center,
+            radial_axis_x=radial_x,
+            radial_axis_y=radial_y,
+            spread_method=spread_method,
+            recurse=False,
+        )
+
     def mobjects_from_svg_string(self, svg_string: str) -> list[VMobject]:
         original_root = ET.fromstring(svg_string)
         self._collect_svg_clip_metadata(original_root)
+        self._collect_svg_gradient_metadata(original_root)
 
-        # Keep the definitions in our own metadata, but do not let the generic element
-        # iterator emit clipPath children as visible shapes.
+        # Keep clipping/gradient definitions in our metadata, but do not let the generic
+        # element iterator emit their definition children as visible shapes.
         parse_root = deepcopy(original_root)
         def remove_clip_path_definitions(parent: ET.Element) -> None:
             for child in list(parent):
-                if child.tag.rsplit("}", 1)[-1] == "clipPath":
+                if child.tag.rsplit("}", 1)[-1] in ("clipPath", "linearGradient", "radialGradient"):
                     parent.remove(child)
                 else:
                     remove_clip_path_definitions(child)
@@ -394,6 +689,10 @@ class SVGMobject(VMobject):
                 continue
             if isinstance(shape, se.GraphicObject) and not is_image:
                 self.apply_style_to_mobject(mob, shape)
+            # Set gradient coordinates before applying the element transform. The gradient's
+            # point uniforms then follow the very same transform as the actual VMobject.
+            if not is_image and shape_id in self._svg_gradient_assignments:
+                self._apply_svg_gradient(mob, shape_id, shape)
             if isinstance(shape, se.Transformable) and shape.apply:
                 self.handle_transform(mob, shape.transform)
             result.append(mob)
@@ -549,13 +848,17 @@ class SVGMobject(VMobject):
         # svgelements hands back a stroke width of 1.0 even for a shape painted with
         # `stroke: none`, so the width is only taken when a stroke color came with it.
         # Otherwise it is zeroed, which is what an unstroked shape should draw as.
-        has_stroke = shape.stroke is not None and shape.stroke.hexrgb is not None
+        stroke = getattr(shape, "stroke", None)
+        fill = getattr(shape, "fill", None)
+        stroke_color = getattr(stroke, "hexrgb", None)
+        fill_color = getattr(fill, "hexrgb", None)
+        has_stroke = stroke is not None and stroke_color is not None
         mob.set_style(
             stroke_width=shape.stroke_width if has_stroke else 0.0,
-            stroke_color=shape.stroke.hexrgb if has_stroke else None,
-            stroke_opacity=shape.stroke.opacity if has_stroke else None,
-            fill_color=shape.fill.hexrgb,
-            fill_opacity=shape.fill.opacity
+            stroke_color=stroke_color if has_stroke else None,
+            stroke_opacity=getattr(stroke, "opacity", None) if has_stroke else None,
+            fill_color=fill_color,
+            fill_opacity=getattr(fill, "opacity", None),
         )
         return mob
 
