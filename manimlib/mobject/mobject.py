@@ -2152,7 +2152,7 @@ class Mobject(object):
     @staticmethod
     def _vfx_strength_attribute(effect: Any) -> str | None:
         """The parameter which takes an effect to its neutral, disabled state."""
-        return {
+        known_fields = {
             "GaussianBlur": "radius",
             "Grain": "intensity",
             "Vignette": "intensity",
@@ -2163,7 +2163,17 @@ class Mobject(object):
             "ChromaticAberration": "offset",
             "LiquidGlass": "opacity",
             "DropShadow": "opacity",
-        }.get(type(effect).__name__)
+        }
+        field = known_fields.get(type(effect).__name__)
+        if field is not None:
+            return field
+        # Keep custom PostProcessEffect subclasses fadeable when they expose a
+        # conventional scalar strength control.
+        for candidate in ("intensity", "strength", "opacity", "amount", "offset", "radius"):
+            value = getattr(effect, candidate, None)
+            if isinstance(value, numbers.Real) and not isinstance(value, (bool, np.bool_)):
+                return candidate
+        return None
 
     def _attach_vfx_copy(self, template: Any) -> Any:
         before = {id(effect) for effect in self.get_vfx_list()}
