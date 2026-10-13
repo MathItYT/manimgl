@@ -771,6 +771,8 @@ class VMobject(Mobject):
         required_uniforms = {
             "gradient_mode", "gradient_colors", "gradient_stops", "gradient_count",
             "gradient_start", "gradient_end", "gradient_axis_y", "gradient_focus",
+            "gradient_radial_center", "gradient_radial_axis_x",
+            "gradient_radial_axis_y", "gradient_radial_focus",
             "gradient_spread", "gradient_interpolation", "fill_rgba", "fill_rgba_end",
         }
         for mob in (self, mobject1, mobject2):
