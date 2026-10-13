@@ -730,15 +730,19 @@ class VMobject(Mobject):
         # interior frame, represent solids as constant-color gradients and resample
         # differing stop counts to common offsets. That lets all three transitions
         # (solid -> gradient, gradient -> solid, gradient -> gradient) remain continuous.
-        if alpha <= 1e-8 or alpha >= 1.0 - 1e-8:
+        if abs(alpha) <= 1e-8 or abs(alpha - 1.0) <= 1e-8:
             return self
-        if not all(
-            key in mob.uniforms
-            for mob in (self, mobject1, mobject2)
-            for key in ("gradient_mode", "gradient_colors", "gradient_stops", "gradient_count")
-        ):
-            return self
+        required_uniforms = {
+            "gradient_mode", "gradient_colors", "gradient_stops", "gradient_count",
+            "gradient_start", "gradient_end", "gradient_axis_y", "gradient_focus",
+            "gradient_spread", "gradient_interpolation", "fill_rgba", "fill_rgba_end",
+        }
+        for mob in (self, mobject1, mobject2):
+            names = set(mob.uniforms.array.dtype.names or ())
+            if not required_uniforms.issubset(names):
+                return self
 
+        alpha = float(np.clip(alpha, 0.0, 1.0))
         start_style = self._get_interpolated_fill_style(mobject1)
         target_style = self._get_interpolated_fill_style(mobject2)
         if not start_style["active"] and not target_style["active"]:
