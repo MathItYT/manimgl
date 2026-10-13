@@ -2,13 +2,13 @@
 A stroke along a path, drawn as a strip of quads following each bezier, with a fan of
 triangles rounding off the joint at each end.
 
-The border around a fill is a stroke like any other, except that it takes its color and
-width from the fill's fields rather than the stroke's, and that a width of zero still draws
+The border around a fill is a stroke like any other, except that it takes its color
+and width from the fill's fields rather than the stroke's, and that a width of zero still draws
 a band just wide enough to anti-alias the fill's edge. That is settled when the shader is
-compiled rather than asked per draw, so the two are two modules from this one source, see
-VShaderWrapper.init_program.
+compiled rather than asked per draw, so the two are two modules from this one source.
 */
 const IS_FILL_BORDER: bool = false;
+const FILL_BORDER_INSIDE: bool = false;
 
 #INSERT mobject_uniforms.wgsl
 #INSERT frame_uniforms.wgsl
@@ -17,6 +17,8 @@ const IS_FILL_BORDER: bool = false;
 #INSERT fill_color.wgsl
 #INSERT finalize_color.wgsl
 #INSERT clip_test.wgsl
+#INSERT antialias_coverage.wgsl
+// TEXTURES
 
 // Beyond this much alignment between the tangent and the view direction, the step to the
 // side of the curve gets adjusted to avoid glitches.
@@ -83,6 +85,8 @@ struct VertexOutput {
     @location(2) dist_to_aaw: f32,
 
     @location(3) half_width_to_aaw: f32,
+
+    @location(4) texture_uv: vec2f,
 };
 
 
@@ -585,7 +589,7 @@ fn vs_main(
                 mob.fill_rgba.a,
                 mob.fill_rgba_end.a,
             ) == 0.0;
-    } else {
+            } else {
         nothing_to_draw = nothing_to_draw
             || all(
                 vec3f(
@@ -609,6 +613,7 @@ fn vs_main(
         out.color = vec4f(0.0);
         out.dist_to_aaw = 0.0;
         out.half_width_to_aaw = 0.0;
+        out.texture_uv = vec2f(0.0);
         return out;
     }
 
@@ -623,6 +628,23 @@ fn vs_main(
         t = f32(index)
             / f32(max(n_steps - 1, 1));
     }
+
+    var texture_controls = array<vec2f, 3>(
+        read_vec2(record, DATA_OFFSET_texture_uv),
+        read_vec2(record + 1u, DATA_OFFSET_texture_uv),
+        read_vec2(record + 2u, DATA_OFFSET_texture_uv),
+    );
+    if (IS_FILL_BORDER && subpath.y == 0.0) {
+        let first_record = i32(record) - i32(subpath.x);
+        if (first_record >= 0) {
+            texture_controls[2] = read_vec2(u32(first_record), DATA_OFFSET_texture_uv);
+            texture_controls[1] = 0.5 * (texture_controls[0] + texture_controls[2]);
+        }
+    }
+    let omt = 1.0 - t;
+    out.texture_uv = texture_controls[0] * omt * omt
+        + 2.0 * texture_controls[1] * omt * t
+        + texture_controls[2] * t * t;
 
     var point = controls[2];
 
@@ -1021,6 +1043,7 @@ fn fs_main(
     );
 
     var color = in.color;
+    // TEXTURE_SAMPLE
 
     /*
     Signed distance to the region around the curve which is to be colored.
@@ -1029,13 +1052,13 @@ fn fs_main(
         abs(in.dist_to_aaw)
         - in.half_width_to_aaw;
 
-    color.a *=
-        1.0
-        - smoothstep(
-            -0.5,
-            0.5,
-            signed_dist_to_region,
-        );
+    var coverage = stroke_aa_coverage(signed_dist_to_region);
+    if (IS_FILL_BORDER && FILL_BORDER_INSIDE) {
+        // On the filled side, invert the stroke's fringe so alpha rises from 0.5 at
+        // the contour to 1.0 one half-AA-width inside. The stencil consumes this band.
+        coverage = 1.0 - coverage;
+    }
+    color.a *= coverage;
 
     return color;
 }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import wgpu
 
@@ -64,6 +66,30 @@ class ImageFile(TextureSource):
 
     def realize(self, gpu: Gpu) -> Texture:
         return Texture(self, gpu.texture(self.path).create_view())
+
+
+class PixelArray(TextureSource):
+    """Immutable RGBA pixels, uploaded as a regular 2D texture (e.g. an SVG data URI)."""
+
+    def __init__(self, pixels: np.ndarray):
+        pixels = np.asarray(pixels, dtype=np.uint8)
+        if pixels.ndim != 3 or pixels.shape[2] != 4:
+            raise ValueError("PixelArray expects an HxWx4 RGBA array")
+        self.pixels = np.array(pixels, dtype=np.uint8, copy=True, order="C")
+        digest = hashlib.sha256()
+        digest.update(np.asarray(self.pixels.shape, dtype=np.int64).tobytes())
+        digest.update(self.pixels.tobytes())
+        self.key = digest.hexdigest()
+        self.pixels.setflags(write=False)
+
+    def sharing_key(self) -> tuple[str, str]:
+        return ("pixels", self.key)
+
+    def realize(self, gpu: Gpu) -> Texture:
+        return Texture(self, gpu.pixels_texture(self.key, self.pixels).create_view())
+
+    def copy(self) -> PixelArray:
+        return self
 
 
 class LayeredPixels(TextureSource):

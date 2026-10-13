@@ -653,6 +653,9 @@ struct VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let color = textureSample(mob_tex, mob_smp, in.uv);
+
+    // The mask's rasterization already carries fractional edge coverage. Sample it once;
+    // filtering neighboring mask pixels here would blur the silhouette.
     let mask_val = textureSample(mask_tex, mask_smp, in.uv);
 
     var m: f32;

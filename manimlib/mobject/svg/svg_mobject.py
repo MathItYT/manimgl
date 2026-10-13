@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import base64
+from copy import deepcopy
+from pathlib import Path
+import re
+from urllib.parse import unquote, unquote_to_bytes, urlparse
 from xml.etree import ElementTree as ET
 
+import io
 import numpy as np
 import svgelements as se
-import io
-from pathlib import Path
 
 from manimlib.constants import RIGHT
 from manimlib.constants import TAU
@@ -17,7 +21,11 @@ from manimlib.mobject.geometry import Polyline
 from manimlib.mobject.geometry import Rectangle
 from manimlib.mobject.geometry import RoundedRectangle
 from manimlib.mobject.types.vectorized_mobject import VMobject
+from manimlib.mobject.types.vectorized_mobject import VGroup
+from manimlib.renderer.texture import ImageFile
+from manimlib.renderer.texture import PixelArray
 from manimlib.utils.bezier import quadratic_bezier_points_for_arc
+from manimlib.utils.images import get_full_raster_image_path
 from manimlib.utils.images import get_full_vector_image_path
 from manimlib.utils.iterables import hash_obj
 from manimlib.utils.space_ops import rotation_about_z
@@ -100,6 +108,12 @@ class SVGMobject(VMobject):
         path_string_config: dict = dict(),
         **kwargs
     ):
+        self._svg_source_path: Path | None = None
+        self._svg_root_attributes: dict[str, str] = {}
+        self._svg_clip_paths: dict[str, ET.Element] = {}
+        self._svg_clip_assignments: dict[str, str] = {}
+        self._svg_clip_shape_ids: set[str] = set()
+
         if svg_string != "":
             self.svg_string = svg_string
         elif file_name != "":
@@ -149,12 +163,29 @@ class SVGMobject(VMobject):
         )
 
     def init_svg_mobject(self) -> None:
+        # Clipping masks are attached to their SVG targets. Copying cached SVG submobjects
+        # one at a time would leave Mask effects pointing at cached objects, so clipped SVGs
+        # are parsed afresh instead of using the geometry cache.
+        svg_root = ET.fromstring(self.svg_string)
+        self._collect_svg_clip_metadata(svg_root)
         hash_val = hash_obj(self.hash_seed)
-        if hash_val in SVG_HASH_TO_MOB_MAP:
+        contains_images = any(
+            element.tag.rsplit("}", 1)[-1] == "image"
+            for element in svg_root.iter()
+        )
+        # A relative href can resolve differently for identical SVG markup loaded from two
+        # directories, so SVGs containing images are not reused from the geometry cache.
+        cacheable = (
+            not contains_images
+            and not self._svg_clip_paths
+            and not self._svg_clip_assignments
+        )
+        if cacheable and hash_val in SVG_HASH_TO_MOB_MAP:
             submobs = [sm.copy() for sm in SVG_HASH_TO_MOB_MAP[hash_val]]
         else:
             submobs = self.mobjects_from_svg_string(self.svg_string)
-            SVG_HASH_TO_MOB_MAP[hash_val] = [sm.copy() for sm in submobs]
+            if cacheable:
+                SVG_HASH_TO_MOB_MAP[hash_val] = [sm.copy() for sm in submobs]
 
         self.add(*submobs)
         self.flip(RIGHT)  # Flip y
@@ -170,8 +201,90 @@ class SVGMobject(VMobject):
             self.svg_string
         )
 
+    def _collect_svg_clip_metadata(self, root: ET.Element) -> None:
+        self._svg_root_attributes = dict(root.attrib)
+        self._svg_clip_paths = {}
+        self._svg_clip_assignments = {}
+        self._svg_clip_shape_ids = set()
+
+        def local_name(tag: str) -> str:
+            return tag.rsplit("}", 1)[-1]
+
+        for element in root.iter():
+            if local_name(element.tag) != "clipPath":
+                continue
+            clip_id = element.attrib.get("id")
+            if not clip_id:
+                continue
+            self._svg_clip_paths[clip_id] = deepcopy(element)
+            for child in element.iter():
+                child_id = child.attrib.get("id")
+                if child_id:
+                    self._svg_clip_shape_ids.add(child_id)
+
+        graphic_tags = {
+            "path", "rect", "image", "circle", "ellipse", "line",
+            "polyline", "polygon", "use",
+        }
+        generated_id = 0
+
+        def clip_ref(element: ET.Element) -> str | None:
+            value = element.attrib.get("clip-path", "")
+            style = element.attrib.get("style", "")
+            match_style = re.search(r"(?:^|;)\s*clip-path\s*:\s*([^;]+)", style)
+            if match_style:
+                value = match_style.group(1)
+            match = re.search(r"url\(\s*['\"]?#([^)'\"\s]+)['\"]?\s*\)", value)
+            return match.group(1) if match else None
+
+        def visit(element: ET.Element, inherited_clip: str | None = None) -> None:
+            nonlocal generated_id
+            name = local_name(element.tag)
+            # Definitions are recorded above; they are not visible geometry and their
+            # descendants must not inherit a clipping rule from the surrounding document.
+            if name in ("clipPath", "defs"):
+                return
+
+            own_value = element.attrib.get("clip-path", "")
+            own_style = element.attrib.get("style", "")
+            has_style_clip = re.search(r"(?:^|;)\s*clip-path\s*:", own_style) is not None
+            own_clip = clip_ref(element)
+            active_clip = own_clip if own_clip is not None else (
+                None if own_value == "none" or has_style_clip else inherited_clip
+            )
+
+            # svgelements exposes leaf graphic objects by their id, but SVG documents often
+            # omit ids. Give clipped shapes private, deterministic ids so the generated
+            # mobject can still be connected to its clip mask.
+            if active_clip and name in graphic_tags:
+                element_id = element.attrib.get("id")
+                if not element_id:
+                    generated_id += 1
+                    element_id = f"__manim_clip_target_{generated_id:06d}"
+                    element.set("id", element_id)
+                self._svg_clip_assignments[element_id] = active_clip
+
+            for child in element:
+                visit(child, active_clip)
+
+        visit(root)
+
     def mobjects_from_svg_string(self, svg_string: str) -> list[VMobject]:
-        element_tree = ET.ElementTree(ET.fromstring(svg_string))
+        original_root = ET.fromstring(svg_string)
+        self._collect_svg_clip_metadata(original_root)
+
+        # Keep the definitions in our own metadata, but do not let the generic element
+        # iterator emit clipPath children as visible shapes.
+        parse_root = deepcopy(original_root)
+        def remove_clip_path_definitions(parent: ET.Element) -> None:
+            for child in list(parent):
+                if child.tag.rsplit("}", 1)[-1] == "clipPath":
+                    parent.remove(child)
+                else:
+                    remove_clip_path_definitions(child)
+        remove_clip_path_definitions(parse_root)
+
+        element_tree = ET.ElementTree(parse_root)
         new_tree = self.modify_xml_tree(element_tree)
 
         # New svg based on tree contents
@@ -184,7 +297,9 @@ class SVGMobject(VMobject):
         return self.mobjects_from_svg(svg)
 
     def file_name_to_svg_string(self, file_name: str) -> str:
-        return Path(get_full_vector_image_path(file_name)).read_text()
+        path = Path(get_full_vector_image_path(file_name))
+        self._svg_source_path = path
+        return path.read_text()
 
     def modify_xml_tree(self, element_tree: ET.ElementTree) -> ET.ElementTree:
         config_style_attrs = self.generate_config_style_dict()
@@ -228,11 +343,35 @@ class SVGMobject(VMobject):
                 result[svg_key] = str(svg_default_dict[style_key])
         return result
 
-    def mobjects_from_svg(self, svg: se.SVG) -> list[VMobject]:
-        result = []
+    def mobjects_from_svg(
+        self,
+        svg: se.SVG,
+        apply_clip_paths: bool = True,
+    ) -> list[VMobject]:
+        result: list[VMobject] = []
+        mobjects_by_id: dict[str, VMobject] = {}
+        image_type = getattr(se, "Image", getattr(se, "SVGImage", None))
+
         for shape in svg.elements():
+            shape_id = (
+                getattr(shape, "id", None)
+                or getattr(shape, "values", {}).get("id")
+            )
+            if shape_id is not None:
+                shape_id = str(shape_id)
+            if apply_clip_paths and shape_id and shape_id in self._svg_clip_shape_ids:
+                # Clip geometry is used as a mask, not as a visible SVG object.
+                continue
             if isinstance(shape, (se.Group, se.Use)):
                 continue
+
+            is_image = image_type is not None and isinstance(shape, image_type)
+            if is_image:
+                try:
+                    mob = self.image_to_mobject(shape)
+                except (OSError, ValueError) as error:
+                    log.warning("Could not load SVG <image> %r: %s", shape_id, error)
+                    continue
             elif isinstance(shape, se.Path):
                 mob = self.path_to_mobject(shape, svg)
             elif isinstance(shape, se.SimpleLine):
@@ -245,21 +384,151 @@ class SVGMobject(VMobject):
                 mob = self.polygon_to_mobject(shape)
             elif isinstance(shape, se.Polyline):
                 mob = self.polyline_to_mobject(shape)
-            # elif isinstance(shape, se.Text):
-            #     mob = self.text_to_mobject(shape)
             elif type(shape) == se.SVGElement:
                 continue
             else:
                 log.warning("Unsupported element type: %s", type(shape))
                 continue
+
             if not mob.has_points():
                 continue
-            if isinstance(shape, se.GraphicObject):
+            if isinstance(shape, se.GraphicObject) and not is_image:
                 self.apply_style_to_mobject(mob, shape)
             if isinstance(shape, se.Transformable) and shape.apply:
                 self.handle_transform(mob, shape.transform)
             result.append(mob)
+            if shape_id:
+                mobjects_by_id[shape_id] = mob
+
+        if apply_clip_paths and self._svg_clip_assignments:
+            for shape_id, clip_id in self._svg_clip_assignments.items():
+                target = mobjects_by_id.get(shape_id)
+                if target is None or clip_id not in self._svg_clip_paths:
+                    continue
+                mask = self._clip_path_to_mobject(clip_id)
+                if mask is None or not len(mask.get_all_points()):
+                    log.warning(
+                        "Could not build SVG clipPath %r for element %r",
+                        clip_id, shape_id,
+                    )
+                    continue
+                clip_path = self._svg_clip_paths[clip_id]
+                if clip_path.attrib.get("clipPathUnits", "userSpaceOnUse") == "objectBoundingBox":
+                    bbox = target.get_bounding_box()
+                    lower, upper = bbox[0], bbox[2]
+                    size = upper - lower
+                    mask.scale([size[0], size[1], 1.0], about_point=np.zeros(3))
+                    mask.shift(lower)
+                mask.set_fill(color="#FFFFFF", opacity=1.0)
+                mask.set_stroke(width=0.0, opacity=0.0)
+                # Keep the mask transform-linked to its target without making it a
+                # child of the textured object. A child mask becomes part of the target's
+                # rendered layer, so the Mask post-process receives the unmasked rectangle
+                # (and the mask can be drawn into the same layer). A wrapper keeps both
+                # objects under the same parent transforms while the mask stays a sibling.
+                target.add_mask(mask)
+                wrapper = VGroup(target, mask)
+                for index, mob in enumerate(result):
+                    if mob is target:
+                        result[index] = wrapper
+                        break
         return result
+
+    def image_to_mobject(self, image) -> Rectangle:
+        width = float(image.width)
+        height = float(image.height)
+        mob = Rectangle(width=width, height=height)
+        mob.shift(_convert_point_to_3d(
+            float(image.x) + width / 2,
+            float(image.y) + height / 2,
+        ))
+        mob.set_fill(color="#FFFFFF", opacity=1.0)
+        image_opacity = getattr(image, "opacity", None)
+        if image_opacity is not None:
+            mob.set_fill(opacity=float(image_opacity))
+        mob.set_stroke(width=0.0, opacity=0.0)
+        mob.set_texture(self._texture_source_from_href(self._get_image_href(image)), flip_y=False)
+        return mob
+
+    @staticmethod
+    def _get_image_href(image) -> str:
+        href = getattr(image, "href", None)
+        if not href:
+            href = getattr(image, "url", None)
+        if not href:
+            values = getattr(image, "values", {})
+            href = values.get("href") or values.get("xlink:href")
+        if not href:
+            raise ValueError("SVG <image> has no href or xlink:href")
+        return str(href)
+
+    def _texture_source_from_href(self, href: str) -> ImageFile | PixelArray:
+        href = href.strip()
+        if href.startswith("data:"):
+            header, separator, payload = href.partition(",")
+            if not separator:
+                raise ValueError("Malformed SVG image data URI")
+            raw = base64.b64decode(payload) if ";base64" in header.lower() else unquote_to_bytes(payload)
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(io.BytesIO(raw)) as image:
+                    pixels = np.asarray(image.convert("RGBA"), dtype=np.uint8)
+            except ImportError as error:
+                raise RuntimeError("Pillow is required to decode embedded SVG images") from error
+            except Exception as error:
+                raise ValueError(f"Unsupported embedded SVG image format: {error}") from error
+            return PixelArray(pixels)
+
+        parsed = urlparse(href)
+        if parsed.scheme in ("http", "https") or href.startswith("//"):
+            raise ValueError("Remote SVG images must be embedded as a data URI or bundled as a local file")
+        if parsed.scheme == "file":
+            path = Path(unquote(parsed.path))
+        else:
+            path = Path(unquote(parsed.path or href))
+
+        if not path.is_absolute() and self._svg_source_path is not None:
+            relative_path = self._svg_source_path.parent / path
+            if relative_path.is_file():
+                path = relative_path
+        if not path.is_file() and not parsed.scheme:
+            try:
+                path = Path(get_full_raster_image_path(str(path)))
+            except Exception:
+                pass
+        if not path.is_file():
+            raise FileNotFoundError(f"SVG image resource was not found: {href}")
+        return ImageFile(str(path))
+
+    def _clip_path_to_mobject(self, clip_id: str) -> VGroup | None:
+        clip_path = self._svg_clip_paths.get(clip_id)
+        if clip_path is None:
+            return None
+
+        # Parse the clipping geometry as ordinary SVG shapes while retaining the same user
+        # coordinate space. The clipPath itself is not copied into the temporary SVG, so this
+        # does not recursively apply the same clipping rule.
+        root = ET.Element("svg")
+        group_attrs = {}
+        if clip_path.attrib.get("transform"):
+            group_attrs["transform"] = clip_path.attrib["transform"]
+        group = ET.SubElement(root, "g", group_attrs)
+        for child in list(clip_path):
+            group.append(deepcopy(child))
+        stream = io.BytesIO(ET.tostring(root))
+        try:
+            clip_svg = se.SVG.parse(stream)
+        finally:
+            stream.close()
+
+        shapes = self.mobjects_from_svg(clip_svg, apply_clip_paths=False)
+        shapes = [
+            shape for shape in shapes
+            if any(member.has_points() for member in shape.get_family())
+        ]
+        if not shapes:
+            return None
+        return VGroup(*shapes)
 
     @staticmethod
     def handle_transform(mob: VMobject, matrix: se.Matrix) -> VMobject:

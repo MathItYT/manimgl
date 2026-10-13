@@ -46,6 +46,8 @@ from manimlib.utils.space_ops import rotation_between_vectors
 from manimlib.utils.space_ops import rotation_matrix_transpose
 from manimlib.utils.space_ops import poly_line_length
 from manimlib.renderer.drawing import VDrawing
+from manimlib.renderer.texture import ImageFile
+from manimlib.renderer.texture import TextureSource
 from manimlib.renderer.uniform_block import COMMON_UNIFORMS
 from manimlib.renderer.uniform_block import uniform_block_dtype
 
@@ -66,6 +68,8 @@ class VMobject(Mobject):
     structural_data_keys = ['subpath_range']
     data_dtype: np.dtype = np.dtype([
         ('point', np.float32, (3,)),
+        # Texture coordinates stay attached to their control points as geometry moves.
+        ('texture_uv', np.float32, (2,)),
         ('stroke_rgba', np.float32, (4,)),
         ('stroke_width', np.float32, (1,)),
         # How far the subpath a point belongs to reaches back before it and on after it, as
@@ -244,6 +248,58 @@ class VMobject(Mobject):
         if not all((isinstance(m, VMobject) for m in vmobjects)):
             raise Exception("All submobjects must be of type VMobject")
         return super().add(*vmobjects)
+
+    # Textures
+    def set_texture(
+        self,
+        texture: TextureSource | str,
+        name: str = "Texture",
+        recurse: bool = False,
+        flip_y: bool = True,
+    ) -> Self:
+        """
+        Fill this VMobject with an image texture.
+
+        UV coordinates are calculated from this object's points once, then remain attached
+        to the points during transforms and animations. flip_y chooses the usual
+        bottom-left UV origin; SVG images pass False because SVG image coordinates begin
+        at the top-left.
+        """
+        if isinstance(texture, str):
+            texture = ImageFile(texture)
+        if not isinstance(texture, TextureSource):
+            raise TypeError("texture must be a TextureSource or an image file path")
+        if not isinstance(name, str) or not name.isidentifier():
+            raise ValueError(f"Texture name must be a valid shader identifier, got {name!r}")
+
+        targets = [
+            mob for mob in self.get_family(recurse=recurse)
+            if isinstance(mob, VMobject) and mob.has_points()
+        ]
+        if not targets and self.has_points():
+            targets = [self]
+
+        for mob in targets:
+            mob.textures = {
+                name: texture.copy(),
+                **{key: source for key, source in mob.textures.items() if key != name},
+            }
+            points = mob.get_points()
+            lower = points[:, :2].min(axis=0)
+            upper = points[:, :2].max(axis=0)
+            size = np.maximum(upper - lower, 1e-8)
+            uv = np.empty((len(points), 2), dtype=np.float32)
+            uv[:, 0] = (points[:, 0] - lower[0]) / size[0]
+            y = (points[:, 1] - lower[1]) / size[1]
+            uv[:, 1] = 1.0 - y if flip_y else y
+            with mob.data.being_written() as data:
+                data["texture_uv"] = uv
+
+            # A texture should not inherit the transparent default fill. Preserve an
+            # explicitly selected fill color as a tint, otherwise use white for source color.
+            if mob.get_fill_opacity() <= 0:
+                mob.set_fill(color="#FFFFFF", opacity=1.0, recurse=False)
+        return self
 
     # Colors
     def init_colors(self):
