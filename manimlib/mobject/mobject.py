@@ -2167,8 +2167,13 @@ class Mobject(object):
 
     def _attach_vfx_copy(self, template: Any) -> Any:
         before = {id(effect) for effect in self.get_vfx_list()}
+        # Detach the template's owning mobject before add_vfx makes its renderable copy;
+        # the effect's attach() will bind it to this in-flight mobject.
+        effect_copy = template.copy()
+        if hasattr(effect_copy, "mobject"):
+            effect_copy.mobject = None
         # add_vfx establishes the renderer's group/local ownership bookkeeping too.
-        self.add_vfx(template.copy())
+        self.add_vfx(effect_copy)
         added = [
             effect for effect in self.get_vfx_list()
             if id(effect) not in before
