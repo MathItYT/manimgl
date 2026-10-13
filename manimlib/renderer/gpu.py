@@ -193,6 +193,26 @@ class Gpu(object):
             self.textures[path] = texture
         return self.textures[path]
 
+    def pixels_texture(self, key: str, pixels: np.ndarray) -> Any:
+        """Upload and cache immutable RGBA pixels, independently of a filesystem path."""
+        cache_key = ("pixels", key)
+        if cache_key not in self.textures:
+            pixels = np.ascontiguousarray(pixels, dtype=np.uint8)
+            height, width = pixels.shape[:2]
+            texture = self.device.create_texture(
+                size=(width, height, 1),
+                format=wgpu.TextureFormat.rgba8unorm,
+                usage=wgpu.TextureUsage.TEXTURE_BINDING | wgpu.TextureUsage.COPY_DST,
+            )
+            self.queue.write_texture(
+                {"texture": texture, "mip_level": 0, "origin": (0, 0, 0)},
+                pixels,
+                {"offset": 0, "bytes_per_row": 4 * width, "rows_per_image": height},
+                (width, height, 1),
+            )
+            self.textures[cache_key] = texture
+        return self.textures[cache_key]
+
     def layer_texture(self, layers: np.ndarray) -> Any:
         """A texture holding a stack of images the shape of these, with nothing in it yet"""
         count, height, width = layers.shape[:3]
