@@ -664,18 +664,24 @@ class Mobject(object):
 
         for source, target in zip(source_family, target_family):
             for source_effect in source.get_vfx_list():
+                # Remember the source mask before copy(): the base effect copy uses
+                # deepcopy and would otherwise turn a family mask into an extra,
+                # unrelated Mobject.
+                source_mask = getattr(source_effect, "mask", None)
+                remapped_mask = (
+                    family_map.get(id(source_mask))
+                    if isinstance(source_mask, Mobject)
+                    else None
+                )
+
                 # Custom copy() implementations deliberately reset GPU caches, but
                 # some keep their old mobject pointer. add_vfx will make the final
                 # renderable instance and attach it to the copied owner.
                 template = source_effect.copy()
                 if hasattr(template, "mobject"):
                     template.mobject = None
-
-                # Masks inside this family must follow the copied family. External
-                # masks remain external references, matching ordinary Mobject.copy.
-                mask = getattr(template, "mask", None)
-                if isinstance(mask, Mobject) and id(mask) in family_map:
-                    template.mask = family_map[id(mask)]
+                if remapped_mask is not None:
+                    template.mask = remapped_mask
 
                 # A copied effect needs fresh relationship metadata; never retain
                 # links to an effect attached to the original mobject.
@@ -683,6 +689,11 @@ class Mobject(object):
                     template.__dict__.pop(attr, None)
 
                 target.add_vfx(template)
+                # add_vfx copies the template once more. For Mask (whose default
+                # copy() deep-copies its mask), restore the exact family remapping
+                # on the attached effect too.
+                if remapped_mask is not None:
+                    target.get_vfx_list()[-1].mask = remapped_mask
 
     @stash_mobject_pointers
     def deepcopy(self) -> Self:
