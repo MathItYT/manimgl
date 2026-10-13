@@ -198,7 +198,10 @@ fn fs_main(
     }
 
     let texel = textureSample(Texture, image_sampler, in.texture_uv);
-    if (texel.a <= 1e-5) {
+    // Match visible fill alpha during texture <-> gradient transitions. As the
+    // texture fades out, transparent texels stop punching holes into the depth buffer.
+    let texture_alpha = mix(1.0, texel.a, clamp(mob.texture_mix, 0.0, 1.0));
+    if (color.a * texture_alpha <= 1e-5) {
         discard;
     }
 
