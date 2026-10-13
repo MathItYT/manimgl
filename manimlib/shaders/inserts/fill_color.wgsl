@@ -45,7 +45,16 @@ fn multi_stop_color_at(t_in: f32) -> vec4f {
                 clamp((t - previous_offset) / max(span, 1e-8), 0.0, 1.0),
                 span > 1e-8,
             );
-            return mix(previous_color, next_color, mix_t);
+            // Match ManimGL's interpolate_color(): blend RGB in squared space,
+            // then take the square root. This avoids the dull mid-tones produced
+            // by interpolating the encoded RGB components directly. Keep alpha
+            // linear, as opacity is not a color channel.
+            let rgb = sqrt(max(
+                mix(previous_color.rgb * previous_color.rgb, next_color.rgb * next_color.rgb, mix_t),
+                vec3f(0.0),
+            ));
+            let alpha = mix(previous_color.a, next_color.a, mix_t);
+            return vec4f(rgb, alpha);
         }
         previous_offset = next_offset;
         previous_color = next_color;
