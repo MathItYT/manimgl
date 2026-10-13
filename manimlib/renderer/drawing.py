@@ -839,10 +839,14 @@ class VDrawing(Drawing):
         self.fill_group = fill_group
 
         if changed:
-            has_fill = bool(
-                self.uniforms["fill_rgba"][3]
-                or self.uniforms["fill_rgba_end"][3]
-            )
+            if self.uniforms["gradient_mode"] > 0.5:
+                stop_count = int(self.uniforms["gradient_count"])
+                has_fill = bool(np.any(self.uniforms["gradient_colors"][:stop_count, 3] > 0.0))
+            else:
+                has_fill = bool(
+                    self.uniforms["fill_rgba"][3]
+                    or self.uniforms["fill_rgba_end"][3]
+                )
 
             self.invalidated = (
                 self.invalidated
