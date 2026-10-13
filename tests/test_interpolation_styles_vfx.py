@@ -4,7 +4,6 @@ import base64
 from io import BytesIO
 
 import numpy as np
-from PIL import Image
 
 from manimlib.mobject.geometry import Rectangle
 from manimlib.mobject.svg.svg_mobject import SVGMobject
@@ -335,6 +334,8 @@ def interpolate_family_at(mobject, start, target, alpha: float):
 
 
 def make_png_data_uri() -> str:
+    from PIL import Image
+
     with BytesIO() as stream:
         Image.new("RGBA", (2, 2), (40, 120, 255, 255)).save(stream, format="PNG")
         encoded = base64.b64encode(stream.getvalue()).decode("ascii")
