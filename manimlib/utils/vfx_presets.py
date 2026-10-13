@@ -654,9 +654,8 @@ struct VertexOutput {
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let color = textureSample(mob_tex, mob_smp, in.uv);
 
-    // Sample the mask once at the corresponding pixel center. The mask texture's
-    // linear sampler provides edge coverage; offset multi-tap averaging blurs the
-    // entire silhouette and must not be used here.
+    // The mask's rasterization already carries fractional edge coverage. Sample it once;
+    // filtering neighboring mask pixels here would blur the silhouette.
     let mask_val = textureSample(mask_tex, mask_smp, in.uv);
 
     var m: f32;
