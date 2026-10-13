@@ -662,9 +662,13 @@ class VMobject(Mobject):
                 mob.uniforms["gradient_axis_y"] = np.asarray(gradient_axis_y, dtype=float)
             if gradient_focus is not None:
                 mob.uniforms["gradient_focus"] = np.asarray(gradient_focus, dtype=float)
-            if any(value is not None for value in (gradient_start, gradient_end, gradient_axis_y, gradient_focus)) or (
-                gradient_mode is not None and gradient_mode > 0.5
-            ):
+            # Only point-link the gradient geometry when a gradient is active. get_style()
+            # always returns these fields, even for an ordinary solid fill.
+            legacy_gradient = bool(
+                (mob.uniforms["fill_rgba"] != mob.uniforms["fill_rgba_end"]).any()
+            )
+            extended_gradient = mob.uniforms["gradient_mode"] > 0.5
+            if legacy_gradient or extended_gradient:
                 mob.pointlike_uniform_keys = list(GRADIENT_POINT_KEYS)
             if fill_border_width is not None:
                 mob.set_fill(border_width=fill_border_width, recurse=False)
