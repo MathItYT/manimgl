@@ -2315,22 +2315,21 @@ class Mobject(object):
                 else:
                     value = a if alpha < 0.5 else b
             elif start_effect is None:
-                # A newly introduced effect must grow into its target parameters,
-                # not appear at full radius/offset/blur size on its first frame.
-                if isinstance(b, numbers.Real) and not isinstance(b, (bool, np.bool_)):
+                # Fade spatial extents along with the main strength so a newly
+                # attached glow/shadow/vignette does not pop in at full size.
+                # Leave constrained parameters (e.g. LiquidGlass.power/downscale),
+                # colors, and modes at their target values; scaling those from zero
+                # can create invalid intermediate shader inputs.
+                if key in ("radius", "softness", "blur_radius") and isinstance(
+                    b, numbers.Real
+                ) and not isinstance(b, (bool, np.bool_)):
                     value = float(b) * alpha
-                elif isinstance(b, (tuple, list, np.ndarray)) and key not in (
-                    "center", "uv_center", "direction", "manual_direction", "color",
-                ):
+                elif key == "offset" and isinstance(b, (tuple, list, np.ndarray)):
                     try:
-                        array = np.asarray(b, dtype=float)
-                        faded = array * alpha
-                        if isinstance(b, tuple):
-                            value = tuple(faded.tolist())
-                        elif isinstance(b, list):
-                            value = faded.tolist()
-                        else:
-                            value = faded
+                        faded = np.asarray(b, dtype=float) * alpha
+                        value = tuple(faded.tolist()) if isinstance(b, tuple) else (
+                            faded.tolist() if isinstance(b, list) else faded
+                        )
                     except (TypeError, ValueError):
                         value = b
                 else:
