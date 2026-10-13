@@ -522,7 +522,10 @@ class SVGMobject(VMobject):
             stream.close()
 
         shapes = self.mobjects_from_svg(clip_svg, apply_clip_paths=False)
-        shapes = [shape for shape in shapes if shape.has_points()]
+        shapes = [
+            shape for shape in shapes
+            if any(member.has_points() for member in shape.get_family())
+        ]
         if not shapes:
             return None
         return VGroup(*shapes)
