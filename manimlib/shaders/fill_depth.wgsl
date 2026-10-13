@@ -41,6 +41,8 @@ struct VertexOutput {
 
     @location(3)
     uv_coords: vec2f,
+    @location(4)
+    point: vec3f,
 }
 
 
@@ -80,10 +82,7 @@ fn vs_main(
             controls[0] == controls[1]
         )
         ||
-        max(
-            mob.fill_rgba.a,
-            mob.fill_rgba_end.a,
-        ) == 0.0
+        !fill_has_alpha()
     ) {
         out.position = vec4f(
             0.0,
@@ -148,6 +147,7 @@ fn vs_main(
         point,
         mob.unit_normal,
     );
+    out.point = point;
 
     let projection = project_point(point);
 
@@ -167,11 +167,11 @@ fn fs_main(
     );
 
     /*
-    Invisible fill must not reserve depth.
+    Invisible fill must not reserve depth. Evaluate the fill in the fragment stage so
+    multi-stop and radial gradients agree with the visible fill's per-fragment alpha.
     */
-    if (
-        in.color.a == 0.0
-    ) {
+    let color = finalize_color(fill_color_at(in.point), in.point, mob.unit_normal);
+    if (color.a == 0.0) {
         discard;
     }
 
