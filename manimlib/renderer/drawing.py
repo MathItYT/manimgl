@@ -737,8 +737,8 @@ class VDrawing(Drawing):
 
             # Both stroke-program fill-edge passes sample the same texture at the Bezier UV.
             texture_sample = (
-                "let texel = textureSample(Texture, image_sampler, in.texture_uv);\\n"
-                "    let textured_color = vec4f(color.rgb * texel.rgb, color.a * texel.a);\\n"
+                "let texel = textureSample(Texture, image_sampler, in.texture_uv);\n"
+                "    let textured_color = vec4f(color.rgb * texel.rgb, color.a * texel.a);\n"
                 "    color = mix(color, textured_color, clamp(mob.texture_mix, 0.0, 1.0));"
             )
             border_replacements = {
