@@ -23,6 +23,26 @@ fn spread_gradient_t(t_in: f32) -> f32 {
     return select(2.0 - cycle, cycle, cycle <= 1.0);
 }
 
+// SVG 2: color-interpolation selects encoded sRGB (default) or linearRGB.
+// Gradient stops are interpolated channel by channel; alpha stays unassociated
+// and is interpolated independently, as specified for SVG paint servers.
+fn srgb_to_linear(c: vec3f) -> vec3f {
+    return select(
+        c / 12.92,
+        pow((c + vec3f(0.055)) / 1.055, vec3f(2.4)),
+        c > vec3f(0.04045),
+    );
+}
+
+fn linear_to_srgb(c: vec3f) -> vec3f {
+    let safe_c = max(c, vec3f(0.0));
+    return select(
+        12.92 * safe_c,
+        1.055 * pow(safe_c, vec3f(1.0 / 2.4)) - vec3f(0.055),
+        safe_c > vec3f(0.0031308),
+    );
+}
+
 fn multi_stop_color_at(t_in: f32) -> vec4f {
     let count = u32(clamp(mob.gradient_count, 2.0, 16.0));
     let t = spread_gradient_t(t_in);
@@ -45,14 +65,16 @@ fn multi_stop_color_at(t_in: f32) -> vec4f {
                 clamp((t - previous_offset) / max(span, 1e-8), 0.0, 1.0),
                 span > 1e-8,
             );
-            // Match ManimGL's interpolate_color(): blend RGB in squared space,
-            // then take the square root. This avoids the dull mid-tones produced
-            // by interpolating the encoded RGB components directly. Keep alpha
-            // linear, as opacity is not a color channel.
-            let rgb = sqrt(max(
-                mix(previous_color.rgb * previous_color.rgb, next_color.rgb * next_color.rgb, mix_t),
-                vec3f(0.0),
-            ));
+            var previous_rgb = previous_color.rgb;
+            var next_rgb = next_color.rgb;
+            if (mob.gradient_interpolation > 0.5) {
+                previous_rgb = srgb_to_linear(previous_rgb);
+                next_rgb = srgb_to_linear(next_rgb);
+            }
+            var rgb = mix(previous_rgb, next_rgb, mix_t);
+            if (mob.gradient_interpolation > 0.5) {
+                rgb = linear_to_srgb(rgb);
+            }
             let alpha = mix(previous_color.a, next_color.a, mix_t);
             return vec4f(rgb, alpha);
         }
