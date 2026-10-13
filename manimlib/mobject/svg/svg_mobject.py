@@ -429,6 +429,9 @@ class SVGMobject(VMobject):
             float(image.y) + height / 2,
         ))
         mob.set_fill(color="#FFFFFF", opacity=1.0)
+        image_opacity = getattr(image, "opacity", None)
+        if image_opacity is not None:
+            mob.set_fill(opacity=float(image_opacity))
         mob.set_stroke(width=0.0, opacity=0.0)
         mob.set_texture(self._texture_source_from_href(self._get_image_href(image)), flip_y=False)
         return mob
