@@ -16,6 +16,7 @@ const IS_FILL_BORDER: bool = false;
 #INSERT fill_color.wgsl
 #INSERT finalize_color.wgsl
 #INSERT clip_test.wgsl
+#INSERT antialias_coverage.wgsl
 
 // Beyond this much alignment between the tangent and the view direction, the step to the
 // side of the curve gets adjusted to avoid glitches.
@@ -584,7 +585,11 @@ fn vs_main(
                 mob.fill_rgba.a,
                 mob.fill_rgba_end.a,
             ) == 0.0;
-
+        if (mob.fill_border_width == 0.0) {
+            // Bezier edges use the shared coverage function in fill.wgsl.
+            // Keep only the implicit closing chord of an open filled subpath here.
+            nothing_to_draw = nothing_to_draw || subpath.y != 0.0;
+        }
     } else {
         nothing_to_draw = nothing_to_draw
             || all(
@@ -1029,13 +1034,7 @@ fn fs_main(
         abs(in.dist_to_aaw)
         - in.half_width_to_aaw;
 
-    color.a *=
-        1.0
-        - smoothstep(
-            -0.5,
-            0.5,
-            signed_dist_to_region,
-        );
+    color.a *= stroke_aa_coverage(signed_dist_to_region);
 
     return color;
 }
