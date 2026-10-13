@@ -864,16 +864,15 @@ class VMobject(Mobject):
             elif alpha >= 1.0:
                 # Return to the target's ordinary single-texture binding at the endpoint.
                 self.textures = dict(target_textures)
+                if isinstance(target, VMobject):
+                    self._copy_texture_uvs(target)
             else:
-                # Keep both endpoint images bound for one shader draw. SVG <image>
-                # elements use normalized rectangle UVs; hold the source mapping while
-                # the target has the same normalized mapping on the aligned rectangle.
+                # Keep both endpoint images bound for one shader draw. Point data and
+                # texture_uv interpolate continuously between both endpoint mappings.
                 self.textures = {
                     "Texture": next(iter(start_textures.values())),
                     "TransformTargetTexture": next(iter(target_textures.values())),
                 }
-                if isinstance(start, VMobject):
-                    self._copy_texture_uvs(start)
                 self.uniforms["texture_mode"] = 3.0
                 self.uniforms["texture_mix"] = alpha
         else:

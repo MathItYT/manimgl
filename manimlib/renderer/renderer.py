@@ -554,8 +554,13 @@ class Renderer(object):
                 if len(mob.data) == 0 or not drawing_class.draws(mob):
                     continue
                 drawing = held.get(mob)
-                if drawing is None or drawing.replacements is not mob.shader_code_replacements:
-                    drawing = drawing_class(self.material_for(mob, drawing_class), mob)
+                material = self.material_for(mob, drawing_class)
+                if (
+                    drawing is None
+                    or drawing.material is not material
+                    or drawing.replacements is not mob.shader_code_replacements
+                ):
+                    drawing = drawing_class(material, mob)
                 self.drawings[mob] = drawing
                 drawn.append(drawing)
 

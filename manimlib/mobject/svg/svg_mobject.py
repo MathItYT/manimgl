@@ -802,21 +802,41 @@ class SVGMobject(VMobject):
                     size = upper - lower
                     mask.scale([size[0], size[1], 1.0], about_point=np.zeros(3))
                     mask.shift(lower)
-                mask.set_fill(color="#FFFFFF", opacity=1.0)
-                mask.set_stroke(width=0.0, opacity=0.0)
-                # Keep the mask transform-linked to its target without making it a
-                # child of the textured object. A child mask becomes part of the target's
-                # rendered layer, so the Mask post-process receives the unmasked rectangle
-                # (and the mask can be drawn into the same layer). A wrapper keeps both
-                # objects under the same parent transforms while the mask stays a sibling.
-                target.add_mask(mask)
-                wrapper = VGroup(target, mask)
-                wrapper._svg_element_id = shape_id
-                wrapper._svg_element_type = getattr(target, "_svg_element_type", "group")
-                for index, mob in enumerate(result):
-                    if mob is target:
-                        result[index] = wrapper
-                        break
+                is_image = (
+                    getattr(target, "_svg_element_type", None) == "image"
+                    or bool(getattr(target, "textures", None))
+                )
+                if is_image:
+                    bbox = target.get_bounding_box()
+                    lower, upper = bbox[0], bbox[2]
+                    size = np.maximum(upper - lower, 1e-8)
+                    for leaf in mask.get_family():
+                        if leaf.has_points():
+                            leaf.textures = dict(target.textures)
+                            pts = leaf.get_points()
+                            uv = np.empty((len(pts), 2), dtype=np.float32)
+                            uv[:, 0] = (pts[:, 0] - lower[0]) / size[0]
+                            uv[:, 1] = (pts[:, 1] - lower[1]) / size[1]
+                            with leaf.data.being_written() as data:
+                                data["texture_uv"] = uv
+                            leaf.set_fill(color="#FFFFFF", opacity=target.get_fill_opacity())
+                            leaf.set_stroke(width=0.0, opacity=0.0)
+                            if not leaf.has_fill_gradient():
+                                leaf.set_fill_gradient_points(direction=RIGHT, recurse=False)
+
+                    clipped_mob = mask.submobjects[0] if len(mask.submobjects) == 1 else mask
+                    clipped_mob.parents = []
+                    clipped_mob._svg_element_id = shape_id
+                    clipped_mob._svg_element_type = "image"
+                    for index, mob in enumerate(result):
+                        if mob is target:
+                            result[index] = clipped_mob
+                            break
+                    mobjects_by_id[shape_id] = clipped_mob
+                else:
+                    mask.set_fill(color="#FFFFFF", opacity=1.0)
+                    mask.set_stroke(width=0.0, opacity=0.0)
+                    target.add_mask(mask)
         return result
 
     def image_to_mobject(self, image) -> Rectangle:

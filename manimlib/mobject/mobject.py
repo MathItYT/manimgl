@@ -268,6 +268,7 @@ class Mobject(object):
                 return func(points)
             return func(points - about_point) + about_point
 
+        masks_to_transform = set()
         for mob in self.get_family():
             # Asked for before the points move, since a stale one is worked out from
             # them, and moving it is only right for the box the points had
@@ -282,6 +283,19 @@ class Mobject(object):
                 corners = moved(box[::2].copy())
                 box[0], box[2] = corners.min(0), corners.max(0)
                 box[1] = (box[0] + box[2]) / 2
+            if hasattr(mob, "_vfx_effects"):
+                for effect in mob._vfx_effects:
+                    mask = getattr(effect, "mask", None)
+                    if isinstance(mask, Mobject) and mask not in self.get_family():
+                        masks_to_transform.add(mask)
+
+        for mask in masks_to_transform:
+            mask.apply_points_function(
+                func,
+                about_point=about_point,
+                about_edge=about_edge,
+                works_on_bounding_box=works_on_bounding_box,
+            )
 
         if not works_on_bounding_box:
             self.refresh_bounding_box(recurse_down=True)
@@ -684,12 +698,18 @@ class Mobject(object):
                     template = copy.copy(source_effect)
                     template._initialized = False
                     template._last_uniform_data = None
+                    if remapped_mask is not None:
+                        template.mask = remapped_mask
+                    elif isinstance(source_mask, Mobject):
+                        template.mask = source_mask.copy()
                 else:
                     template = source_effect.copy()
                 if hasattr(template, "mobject"):
                     template.mobject = None
                 if remapped_mask is not None:
                     template.mask = remapped_mask
+                elif getattr(source_effect, "name", "") == "Mask" and isinstance(source_mask, Mobject):
+                    template.mask = getattr(template, "mask", source_mask.copy())
 
                 # A copied effect needs fresh relationship metadata; never retain
                 # links to an effect attached to the original mobject.
@@ -702,6 +722,8 @@ class Mobject(object):
                 # on the attached effect too.
                 if remapped_mask is not None:
                     target.get_vfx_list()[-1].mask = remapped_mask
+                elif getattr(source_effect, "name", "") == "Mask" and isinstance(source_mask, Mobject):
+                    target.get_vfx_list()[-1].mask = template.mask
 
     @stash_mobject_pointers
     def deepcopy(self) -> Self:

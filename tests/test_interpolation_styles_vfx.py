@@ -8,6 +8,7 @@ import numpy as np
 from manimlib.animation.transform import Transform
 from manimlib.mobject.geometry import Rectangle
 from manimlib.mobject.svg.svg_mobject import SVGMobject
+from manimlib.mobject.types.vectorized_mobject import VMobject
 from manimlib.renderer.texture import PixelArray
 from manimlib.utils.vfx_presets import Grain
 
@@ -493,3 +494,94 @@ def test_transform_aligns_svg_submobjects_by_id_not_document_order() -> None:
         target.submobjects[1].get_center(),
         atol=1e-6,
     )
+
+
+def test_svg_image_with_clip_path_creates_textured_shape() -> None:
+    svg_masked = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"
+         viewBox="0 0 200 100">
+      <defs>
+        <clipPath id="circleClip">
+          <circle cx="100" cy="50" r="40"/>
+        </clipPath>
+      </defs>
+      <image id="test-img" x="0" y="0" width="200" height="100"
+             href="{make_png_data_uri((255, 100, 50, 255))}"
+             clip-path="url(#circleClip)"/>
+    </svg>
+    """
+    mob = SVGMobject(svg_string=svg_masked, should_center=False, height=1.0)
+    assert len(mob.submobjects) == 1
+    clipped_shape = mob.submobjects[0]
+    # The shape itself is the circle, not a VGroup wrapper with an obscured child
+    assert isinstance(clipped_shape, VMobject)
+    assert len(clipped_shape.submobjects) == 0
+    assert "Texture" in clipped_shape.textures
+    assert len(clipped_shape.data["texture_uv"]) == len(clipped_shape.get_points())
+    # Center points in UV coordinates should be near (0.5, 0.5)
+    center_uv = np.mean(clipped_shape.data["texture_uv"], axis=0)
+    np.testing.assert_allclose(center_uv, [0.5, 0.5], atol=0.05)
+
+
+def test_transform_sequence_gradient_to_image_to_image_to_gradient() -> None:
+    # 1. Gradient
+    gradient = Rectangle(width=3, height=2)
+    gradient.set_fill_gradient(["#ff0000", "#0000ff"], direction=[1, 0, 0])
+
+    # 2. Image 1 (circle clip)
+    svg_img1 = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+      <defs><clipPath id="c1"><circle cx="50" cy="50" r="40"/></clipPath></defs>
+      <image x="0" y="0" width="100" height="100"
+             href="{make_png_data_uri((255, 0, 0, 255))}" clip-path="url(#c1)"/>
+    </svg>
+    """
+    mob_img1 = SVGMobject(svg_string=svg_img1, should_center=False, height=2.0).submobjects[0]
+
+    # 3. Image 2 (rect clip)
+    svg_img2 = f"""
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+      <defs><clipPath id="c2"><rect x="10" y="10" width="80" height="80"/></clipPath></defs>
+      <image x="0" y="0" width="100" height="100"
+             href="{make_png_data_uri((0, 255, 0, 255))}" clip-path="url(#c2)"/>
+    </svg>
+    """
+    mob_img2 = SVGMobject(svg_string=svg_img2, should_center=False, height=2.0).submobjects[0]
+
+    def run_transform_at(mob, target, alpha: float):
+        mob_copy = mob.copy()
+        anim = Transform(mob_copy, target)
+        anim.begin()
+        anim.interpolate(alpha)
+        if alpha >= 1.0:
+            anim.finish()
+        return mob_copy
+
+    # Step A: Gradient -> Image 1
+    mid_a = run_transform_at(gradient, mob_img1, 0.5)
+    assert mid_a.uniforms["texture_mode"] == 1.0
+    assert "Texture" in mid_a.textures
+
+    end_a = run_transform_at(gradient, mob_img1, 1.0)
+    assert end_a.uniforms["texture_mode"] == 0.0
+    assert "Texture" in end_a.textures
+
+    # Step B: Image 1 -> Image 2
+    mid_b = run_transform_at(mob_img1, mob_img2, 0.5)
+    assert mid_b.uniforms["texture_mode"] == 3.0
+    assert tuple(mid_b.textures.keys()) == ("Texture", "TransformTargetTexture")
+
+    end_b = run_transform_at(mob_img1, mob_img2, 1.0)
+    assert end_b.uniforms["texture_mode"] == 0.0
+    assert tuple(end_b.textures.keys()) == ("Texture",)
+    assert end_b.textures["Texture"] is mob_img2.textures["Texture"]
+
+    # Step C: Image 2 -> Gradient
+    mid_c = run_transform_at(mob_img2, gradient, 0.5)
+    assert mid_c.uniforms["texture_mode"] == 2.0
+    assert "Texture" in mid_c.textures
+
+    end_c = run_transform_at(mob_img2, gradient, 1.0)
+    assert not end_c.textures
+
+
