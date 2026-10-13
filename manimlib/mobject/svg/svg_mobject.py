@@ -238,7 +238,19 @@ class SVGMobject(VMobject):
     def mobjects_from_svg_string(self, svg_string: str) -> list[VMobject]:
         original_root = ET.fromstring(svg_string)
         self._collect_svg_clip_metadata(original_root)
-        element_tree = ET.ElementTree(original_root)
+
+        # Keep the definitions in our own metadata, but do not let the generic element
+        # iterator emit clipPath children as visible shapes.
+        parse_root = deepcopy(original_root)
+        def remove_clip_path_definitions(parent: ET.Element) -> None:
+            for child in list(parent):
+                if child.tag.rsplit("}", 1)[-1] == "clipPath":
+                    parent.remove(child)
+                else:
+                    remove_clip_path_definitions(child)
+        remove_clip_path_definitions(parse_root)
+
+        element_tree = ET.ElementTree(parse_root)
         new_tree = self.modify_xml_tree(element_tree)
 
         # New svg based on tree contents
@@ -303,7 +315,7 @@ class SVGMobject(VMobject):
         apply_clip_paths: bool = True,
     ) -> list[VMobject]:
         result: list[VMobject] = []
-        mobjects_by_id: dict[str, VMobject] = []
+        mobjects_by_id: dict[str, VMobject] = {}
         image_type = getattr(se, "Image", None)
 
         for shape in svg.elements():
