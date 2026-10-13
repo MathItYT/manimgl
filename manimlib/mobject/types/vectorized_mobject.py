@@ -389,6 +389,10 @@ class VMobject(Mobject):
         describe the center and its two ellipse axes. The geometry is stored as
         points, so it follows subsequent transforms just like the mobject.
 
+        `color_interpolation` follows SVG 2's `color-interpolation` property:
+        `"sRGB"` is the default and `"linearRGB"` interpolates in linearized sRGB.
+        `"auto"` is resolved to sRGB for deterministic output.
+
         Up to MAX_FILL_GRADIENT_STOPS stops are supported by the GPU uniform block.
         Offsets are normalized to [0, 1] and kept in nondecreasing order.
         """
