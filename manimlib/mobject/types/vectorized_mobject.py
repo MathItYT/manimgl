@@ -474,8 +474,13 @@ class VMobject(Mobject):
             else:
                 gradient_start = np.asarray(start, dtype=float)
                 gradient_end = np.asarray(end, dtype=float)
-                if gradient_start.shape != (3,) or gradient_end.shape != (3,):
-                    raise ValueError("start and end must be 3D points")
+                if (
+                    gradient_start.shape != (3,)
+                    or gradient_end.shape != (3,)
+                    or not np.all(np.isfinite(gradient_start))
+                    or not np.all(np.isfinite(gradient_end))
+                ):
+                    raise ValueError("start and end must be finite 3D points")
             gradient_axis_y = gradient_start.copy()
             gradient_focus = gradient_start.copy()
             gradient_mode = 1.0
@@ -502,8 +507,13 @@ class VMobject(Mobject):
                 if radial_axis_y is not None
                 else gradient_start + np.array([0.0, radius_y_value, 0.0])
             )
-            if gradient_end.shape != (3,) or gradient_axis_y.shape != (3,):
-                raise ValueError("radial_axis_x and radial_axis_y must be 3D points")
+            if (
+                gradient_end.shape != (3,)
+                or gradient_axis_y.shape != (3,)
+                or not np.all(np.isfinite(gradient_end))
+                or not np.all(np.isfinite(gradient_axis_y))
+            ):
+                raise ValueError("radial_axis_x and radial_axis_y must be finite 3D points")
             gradient_mode = 2.0
 
         gradient_colors = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
