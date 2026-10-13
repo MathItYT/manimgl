@@ -253,3 +253,19 @@ def test_transform_endpoints_keep_independent_vfx_after_copy() -> None:
     interpolate_at(animated, source, target, 0.5)
     effect = next(effect for effect in animated.get_vfx_list() if effect.name == "Grain")
     assert abs(effect.intensity - 0.5) < 1e-6
+
+def test_copy_remaps_mask_vfx_to_the_copied_family() -> None:
+    from manimlib.mobject.mobject import Group
+
+    source = Group(Rectangle(), Rectangle())
+    source_mask = source.submobjects[1]
+    source.add_mask(source_mask)
+
+    clone = source.copy()
+    clone_mask = clone.submobjects[1]
+    clone_effect = next(effect for effect in clone.get_vfx_list() if effect.name == "Mask")
+
+    assert clone_effect is not source.get_vfx_list()[0]
+    assert clone_effect.mask is clone_mask
+    assert clone_effect.mask is not source_mask
+    assert source.get_vfx_list()[0].mask is source_mask
