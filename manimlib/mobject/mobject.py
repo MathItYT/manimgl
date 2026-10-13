@@ -696,14 +696,38 @@ class Mobject(object):
         self.become(self.saved_state)
         return self
 
-    def become(self, mobject: Mobject, match_updaters=False) -> Self:
+    def become(
+        self,
+        mobject: Mobject,
+        match_updaters: bool = False,
+        replace_vfx: bool = False,
+    ) -> Self:
         """
-        Edit all data and submobjects to be idential
-        to another mobject
+        Edit all data and submobjects to be identical to another mobject.
+
+        Visual effects belong to the receiving object and are preserved by default. Pass
+        replace_vfx=True to replace them with the effects attached to mobject.
         """
         self.align_family(mobject)
         family1 = self.get_family()
         family2 = mobject.get_family()
+
+        # Copy effects before clearing anything: source and receiver can be the same object,
+        # and Mask effects may refer to another member of the source family.
+        vfx_replacements = None
+        if replace_vfx:
+            family_map = {id(source): target for target, source in zip(family1, family2)}
+            vfx_replacements = []
+            for target, source in zip(family1, family2):
+                effects = []
+                for source_effect in source.get_vfx_list():
+                    effect = source_effect.copy()
+                    mask = getattr(effect, "mask", None)
+                    if isinstance(mask, Mobject) and id(mask) in family_map:
+                        effect.mask = family_map[id(mask)]
+                    effects.append(effect)
+                vfx_replacements.append((target, source.is_hidden(), effects))
+
         for sm1, sm2 in zip(family1, family2):
             sm1.set_data(sm2.data)
             sm1.set_uniforms(sm2.uniforms)
@@ -714,10 +738,25 @@ class Mobject(object):
             sm1.texture_filter = sm2.texture_filter
             sm1.depth_test = sm2.depth_test
             sm1._needs_new_bounding_box = sm2._needs_new_bounding_box
-        # Make sure named family members carry over
+
+        # Make sure named family members carry over.
         for attr, value in list(mobject.__dict__.items()):
             if isinstance(value, Mobject) and value in family2:
                 setattr(self, attr, family1[family2.index(value)])
+
+        if replace_vfx:
+            # Do not leave an old clipping mask hidden when its effect is replaced.
+            for member in family1:
+                for effect in member.get_vfx_list():
+                    mask = getattr(effect, "mask", None)
+                    if getattr(effect, "name", "") == "Mask" and isinstance(mask, Mobject):
+                        mask.set_hidden(False)
+            self.clear_vfx()
+            for target, hidden, effects in vfx_replacements:
+                target.set_hidden(hidden, recurse=False)
+                for effect in effects:
+                    target.add_vfx(effect)
+
         if match_updaters:
             self.match_updaters(mobject)
         return self
