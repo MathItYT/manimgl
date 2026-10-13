@@ -35,6 +35,7 @@ struct VertexOutput {
     // uv space is where the curve coincides with y = x^2
     @location(3) uv_coords: vec2f,
     @location(4) texture_uv: vec2f,
+    @location(5) point: vec3f,
 }
 
 @vertex
@@ -54,7 +55,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
     anchor. Nothing to draw for those, or for a clear fill, so collapse all six corners onto
     one point to leave no area to rasterize.
     */
-    if (all(controls[0] == controls[1]) || max(mob.fill_rgba.a, mob.fill_rgba_end.a) == 0.0) {
+    if (all(controls[0] == controls[1]) || !fill_has_alpha()) {
         out.position = vec4f(0.0, 0.0, 0.0, 1.0);
         return out;
     }
@@ -107,6 +108,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
     }
 
     out.color = finalize_color(fill_color_at(point), point, mob.unit_normal);
+    out.point = point;
     let projection = project_point(point);
     out.position = projection.position;
     out.clip_distances = projection.clip_distances;
@@ -116,9 +118,10 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     clip_test(in.clip_distances);
-    if (in.color.a == 0.0) { discard; }
+    let fill_color = finalize_color(fill_color_at(in.point), in.point, mob.unit_normal);
+    if (fill_color.a == 0.0) { discard; }
     let texel = textureSample(Texture, image_sampler, in.texture_uv);
-    let color = vec4f(texel.rgb * in.color.rgb, texel.a * in.color.a);
+    let color = vec4f(texel.rgb * fill_color.rgb, texel.a * fill_color.a);
     if (color.a <= 1e-5) { discard; }
     /*
     For the triangles hugging a bezier curve, cut away the part of the triangle falling
