@@ -121,7 +121,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let fill_color = finalize_color(fill_color_at(in.point), in.point, mob.unit_normal);
     if (fill_color.a == 0.0) { discard; }
     let texel = textureSample(Texture, image_sampler, in.texture_uv);
-    let color = vec4f(texel.rgb * fill_color.rgb, texel.a * fill_color.a);
+    let textured_color = vec4f(texel.rgb * fill_color.rgb, texel.a * fill_color.a);
+    // During a gradient <-> image Transform, blend the sampled image with the
+    // ordinary solid/gradient fill instead of snapping the texture binding.
+    let color = mix(fill_color, textured_color, clamp(mob.texture_mix, 0.0, 1.0));
     if (color.a <= 1e-5) { discard; }
     /*
     For the triangles hugging a bezier curve, cut away the part of the triangle falling
