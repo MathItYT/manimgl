@@ -546,9 +546,12 @@ class SVGMobject(VMobject):
             radius_amount = radius_amount
         elif radius_fraction:
             radius_amount *= float(np.sqrt((view_width * view_width + view_height * view_height) / 2.0))
-        # SVG's default focal point is the center. A shifted focal point is kept as a
-        # future extension; the outer ellipse and color stops are fully GPU-evaluated.
+        # Keep the focal point and both outer-radius axes in the same transformed
+        # coordinate system, so the shader can solve the ray/circle intersection.
+        fx = coordinate(attrs.get("fx"), 0, attrs.get("cx", "50%"))
+        fy = coordinate(attrs.get("fy"), 1, attrs.get("cy", "50%"))
         center = to_point(cx, cy)
+        focus = to_point(fx, fy)
         radial_x = to_point(cx + radius_amount, cy)
         radial_y = to_point(cx, cy + radius_amount)
         mob.set_fill_gradient(
@@ -557,6 +560,7 @@ class SVGMobject(VMobject):
             opacities=opacities,
             gradient_type="radial",
             center=center,
+            focus=focus,
             radial_axis_x=radial_x,
             radial_axis_y=radial_y,
             spread_method=spread_method,
