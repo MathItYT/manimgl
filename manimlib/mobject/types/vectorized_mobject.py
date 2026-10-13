@@ -62,7 +62,11 @@ if TYPE_CHECKING:
 
 
 MAX_FILL_GRADIENT_STOPS = 16
-GRADIENT_POINT_KEYS = ['gradient_start', 'gradient_end', 'gradient_axis_y', 'gradient_focus']
+GRADIENT_POINT_KEYS = [
+    'gradient_start', 'gradient_end', 'gradient_axis_y', 'gradient_focus',
+    'gradient_radial_center', 'gradient_radial_axis_x',
+    'gradient_radial_axis_y', 'gradient_radial_focus',
+]
 
 
 class VMobject(Mobject):
@@ -92,6 +96,10 @@ class VMobject(Mobject):
         ("gradient_end", 3),
         ("gradient_axis_y", 3),
         ("gradient_focus", 3),
+        ("gradient_radial_center", 3),
+        ("gradient_radial_axis_x", 3),
+        ("gradient_radial_axis_y", 3),
+        ("gradient_radial_focus", 3),
         ("gradient_colors", 4, MAX_FILL_GRADIENT_STOPS),
         ("gradient_stops", 4, MAX_FILL_GRADIENT_STOPS),
         ("gradient_count", 1),
@@ -252,6 +260,10 @@ class VMobject(Mobject):
             gradient_interpolation=0.0,
             gradient_start=np.zeros(3),
             gradient_end=np.zeros(3),
+            gradient_radial_center=np.zeros(3),
+            gradient_radial_axis_x=np.zeros(3),
+            gradient_radial_axis_y=np.zeros(3),
+            gradient_radial_focus=np.zeros(3),
             fill_border_width=float(self.fill_border_width),
         )
 
@@ -560,6 +572,24 @@ class VMobject(Mobject):
                 raise ValueError("radial_axis_x and radial_axis_y must be finite 3D points")
             gradient_mode = 2.0
 
+        # Keep a well-conditioned radial coordinate frame even when the source
+        # gradient is linear. Using the linear endpoints directly as a radial
+        # ellipse makes its determinant collapse during linear <-> radial morphs.
+        if gradient_type == "linear":
+            radial_center = 0.5 * (gradient_start + gradient_end)
+            radial_half_axis = 0.5 * (gradient_end - gradient_start)
+            radial_perp = np.array([-radial_half_axis[1], radial_half_axis[0], 0.0])
+            if np.linalg.norm(radial_perp[:2]) < 1e-8:
+                radial_perp = np.array([0.0, 1.0, 0.0])
+            radial_axis_x = radial_center + radial_half_axis
+            radial_axis_y = radial_center + radial_perp
+            radial_focus = radial_center.copy()
+        else:
+            radial_center = gradient_start.copy()
+            radial_axis_x = gradient_end.copy()
+            radial_axis_y = gradient_axis_y.copy()
+            radial_focus = gradient_focus.copy()
+
         gradient_colors = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
         gradient_colors[:stop_count] = rgba
         gradient_stops = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
@@ -579,6 +609,10 @@ class VMobject(Mobject):
             mob.uniforms["gradient_end"] = gradient_end
             mob.uniforms["gradient_axis_y"] = gradient_axis_y
             mob.uniforms["gradient_focus"] = gradient_focus
+            mob.uniforms["gradient_radial_center"] = radial_center
+            mob.uniforms["gradient_radial_axis_x"] = radial_axis_x
+            mob.uniforms["gradient_radial_axis_y"] = radial_axis_y
+            mob.uniforms["gradient_radial_focus"] = radial_focus
             mob.pointlike_uniform_keys = list(GRADIENT_POINT_KEYS)
         return self
 
@@ -869,6 +903,10 @@ class VMobject(Mobject):
         gradient_end: Vect3 | None = None,
         gradient_axis_y: Vect3 | None = None,
         gradient_focus: Vect3 | None = None,
+        gradient_radial_center: Vect3 | None = None,
+        gradient_radial_axis_x: Vect3 | None = None,
+        gradient_radial_axis_y: Vect3 | None = None,
+        gradient_radial_focus: Vect3 | None = None,
         recurse: bool = True
     ) -> Self:
         for mob in self.get_family(recurse):
@@ -905,6 +943,14 @@ class VMobject(Mobject):
                 mob.uniforms["gradient_axis_y"] = np.asarray(gradient_axis_y, dtype=float)
             if gradient_focus is not None:
                 mob.uniforms["gradient_focus"] = np.asarray(gradient_focus, dtype=float)
+            if gradient_radial_center is not None:
+                mob.uniforms["gradient_radial_center"] = np.asarray(gradient_radial_center, dtype=float)
+            if gradient_radial_axis_x is not None:
+                mob.uniforms["gradient_radial_axis_x"] = np.asarray(gradient_radial_axis_x, dtype=float)
+            if gradient_radial_axis_y is not None:
+                mob.uniforms["gradient_radial_axis_y"] = np.asarray(gradient_radial_axis_y, dtype=float)
+            if gradient_radial_focus is not None:
+                mob.uniforms["gradient_radial_focus"] = np.asarray(gradient_radial_focus, dtype=float)
             # Only point-link the gradient geometry when a gradient is active. get_style()
             # always returns these fields, even for an ordinary solid fill.
             legacy_gradient = bool(
@@ -954,6 +1000,10 @@ class VMobject(Mobject):
             "gradient_end": self.uniforms["gradient_end"].copy(),
             "gradient_axis_y": self.uniforms["gradient_axis_y"].copy(),
             "gradient_focus": self.uniforms["gradient_focus"].copy(),
+            "gradient_radial_center": self.uniforms["gradient_radial_center"].copy(),
+            "gradient_radial_axis_x": self.uniforms["gradient_radial_axis_x"].copy(),
+            "gradient_radial_axis_y": self.uniforms["gradient_radial_axis_y"].copy(),
+            "gradient_radial_focus": self.uniforms["gradient_radial_focus"].copy(),
             "stroke_rgba": data['stroke_rgba'].copy(),
             "stroke_width": data['stroke_width'].copy(),
             "stroke_behind": self.stroke_behind,
