@@ -94,10 +94,6 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    // Evaluate screen-space derivatives before any fragment-dependent discard.
-    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
-    let aa_width = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-5);
-
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     /*
@@ -106,13 +102,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    // Use the same conservative edge in both the winding-count and color passes so the
-    // stencil includes the pixels that receive fractional edge coverage.
-    if (in.fill_all == 0.0 && curve_distance < -0.5 * aa_width) { discard; }
-
-    var color = in.color;
-    if (in.fill_all == 0.0) {
-        color.a *= smoothstep(-0.5 * aa_width, 0.5 * aa_width, curve_distance);
-    }
-    return color;
+    // The fill-border pass applies two-sided alpha coverage, including holes.
+    if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
+    return in.color;
 }
