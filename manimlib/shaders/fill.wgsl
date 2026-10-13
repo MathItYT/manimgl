@@ -14,7 +14,6 @@ projected, see VShaderWrapper.render_fill.
 #INSERT fill_color.wgsl
 #INSERT finalize_color.wgsl
 #INSERT clip_test.wgsl
-#INSERT antialias_coverage.wgsl
 
 const VERTS_PER_CURVE: u32 = 6u;
 // Consecutive beziers share an anchor, so curve n begins at record 2n
@@ -95,14 +94,6 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    // Signed distance in pixels to the Bezier boundary. The filled side is
-    // curve_distance < 0, so its signed distance is negative, just like stroke.wgsl.
-    // Evaluate derivatives before any discard.
-    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
-    let curve_gradient = vec2f(dpdx(curve_distance), dpdy(curve_distance));
-    let aaw = max(length(curve_gradient) * mob.anti_alias_width, 1e-8);
-    let signed_dist_to_region = curve_distance / aaw;
-
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     /*
@@ -111,15 +102,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    // This auxiliary Bezier triangle is part of the winding construction. Keep its
-    // clipping hard and unchanged; the antialiased color comes from the interior fan.
-    if (in.fill_all == 0.0 && curve_distance < 0.0) { discard; }
-
-    var color = in.color;
-    if (in.fill_all != 0.0) {
-        // Smooth only the filled side. The stroke shader's zero-width border supplies
-        // the complementary outside half, selected by the exterior stencil.
-        color.a *= stroke_aa_coverage(signed_dist_to_region);
-    }
-    return color;
+    if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
+    return in.color;
 }
