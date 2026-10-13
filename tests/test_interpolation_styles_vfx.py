@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from manimlib.mobject.geometry import Rectangle
+from manimlib.renderer.texture import PixelArray
 from manimlib.utils.vfx_presets import Grain
 
 
@@ -269,3 +270,50 @@ def test_copy_remaps_mask_vfx_to_the_copied_family() -> None:
     assert clone_effect.mask is clone_mask
     assert clone_effect.mask is not source_mask
     assert source.get_vfx_list()[0].mask is source_mask
+
+def make_test_texture() -> PixelArray:
+    pixels = np.array([
+        [[255, 40, 80, 255], [40, 120, 255, 255]],
+        [[255, 210, 40, 255], [20, 230, 160, 255]],
+    ], dtype=np.uint8)
+    return PixelArray(pixels)
+
+
+def test_gradient_to_svg_image_interpolates_texture_contribution() -> None:
+    gradient = Rectangle(width=3, height=2)
+    gradient.set_fill_gradient(["#ff0000", "#0000ff"], direction=[1, 0, 0])
+
+    image = Rectangle(width=3, height=2)
+    image.set_fill("#ffffff", opacity=1)
+    image.set_texture(make_test_texture(), flip_y=False)
+
+    animated = gradient.copy()
+    interpolate_at(animated, gradient, image, 0.25)
+
+    assert "Texture" in animated.textures
+    assert animated.textures["Texture"] is image.textures["Texture"]
+    assert abs(animated.uniforms["texture_mix"] - 0.25) < 1e-6
+
+    interpolate_at(animated, gradient, image, 1.0)
+    assert "Texture" in animated.textures
+    assert abs(animated.uniforms["texture_mix"] - 1.0) < 1e-6
+
+
+def test_svg_image_to_gradient_interpolates_texture_contribution() -> None:
+    image = Rectangle(width=3, height=2)
+    image.set_fill("#ffffff", opacity=1)
+    image.set_texture(make_test_texture(), flip_y=False)
+
+    gradient = Rectangle(width=3, height=2)
+    gradient.set_fill_gradient(["#ff0000", "#0000ff"], direction=[1, 0, 0])
+
+    animated = image.copy()
+    interpolate_at(animated, image, gradient, 0.25)
+
+    assert "Texture" in animated.textures
+    assert animated.textures["Texture"] is image.textures["Texture"]
+    assert abs(animated.uniforms["texture_mix"] - 0.75) < 1e-6
+
+    interpolate_at(animated, image, gradient, 1.0)
+    assert not animated.textures
+    assert abs(animated.uniforms["texture_mix"] - 1.0) < 1e-6
