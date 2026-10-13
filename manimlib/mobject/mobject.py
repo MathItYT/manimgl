@@ -677,7 +677,15 @@ class Mobject(object):
                 # Custom copy() implementations deliberately reset GPU caches, but
                 # some keep their old mobject pointer. add_vfx will make the final
                 # renderable instance and attach it to the copied owner.
-                template = source_effect.copy()
+                if getattr(source_effect, "name", "") == "Mask" and hasattr(source_effect, "mask"):
+                    # Mask.copy() calls the Mask constructor, which hides its mask and
+                    # may change its fill. Avoid touching the original mask while making
+                    # an intermediate template; add_vfx() will create the final instance.
+                    template = copy.copy(source_effect)
+                    template._initialized = False
+                    template._last_uniform_data = None
+                else:
+                    template = source_effect.copy()
                 if hasattr(template, "mobject"):
                     template.mobject = None
                 if remapped_mask is not None:
