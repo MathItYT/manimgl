@@ -396,12 +396,8 @@ class VMobject(Mobject):
         color_list = listify(colors)
         if len(color_list) < 2:
             raise ValueError("A fill gradient needs at least two color stops")
-        if len(color_list) > MAX_FILL_GRADIENT_STOPS:
-            raise ValueError(
-                f"A fill gradient supports at most {MAX_FILL_GRADIENT_STOPS} stops"
-            )
-
-        stop_count = len(color_list)
+        source_stop_count = len(color_list)
+        stop_count = source_stop_count
         if offsets is None:
             stop_offsets = np.linspace(0.0, 1.0, stop_count)
         else:
@@ -433,6 +429,28 @@ class VMobject(Mobject):
         for index, color in enumerate(color_list):
             rgba[index, :3] = color_to_rgb(color)
             rgba[index, 3] = stop_opacities[index]
+
+        # Keep the uniform block fixed-size without rejecting SVGs that contain many stops.
+        # Oversized gradients are resampled into evenly spaced RGBA stops before upload.
+        if stop_count > MAX_FILL_GRADIENT_STOPS:
+            sampled_offsets = np.linspace(0.0, 1.0, MAX_FILL_GRADIENT_STOPS)
+            sampled_rgba = np.empty((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
+            for sample_index, position in enumerate(sampled_offsets):
+                right = int(np.searchsorted(stop_offsets, position, side="right"))
+                if right <= 0:
+                    sampled_rgba[sample_index] = rgba[0]
+                elif right >= stop_count:
+                    sampled_rgba[sample_index] = rgba[-1]
+                else:
+                    left = right - 1
+                    span = stop_offsets[right] - stop_offsets[left]
+                    mix_value = 0.0 if span <= 1e-8 else (position - stop_offsets[left]) / span
+                    sampled_rgba[sample_index] = (
+                        rgba[left] * (1.0 - mix_value) + rgba[right] * mix_value
+                    )
+            rgba = sampled_rgba
+            stop_offsets = sampled_offsets
+            stop_count = MAX_FILL_GRADIENT_STOPS
 
         bbox = self.get_bounding_box()
         lower, upper = bbox[0], bbox[2]
