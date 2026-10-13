@@ -115,6 +115,8 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    // Evaluate screen-space derivatives before any fragment-dependent discard.
+
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     let texel = textureSample(Texture, image_sampler, in.texture_uv);
