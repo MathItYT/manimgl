@@ -421,11 +421,17 @@ class SVGMobject(VMobject):
                     mask.shift(lower)
                 mask.set_fill(color="#FFFFFF", opacity=1.0)
                 mask.set_stroke(width=0.0, opacity=0.0)
-                # Keep the mask inside the clipped mobject's family, not as a sibling
-                # of the image. This makes every parent transform follow the target's
-                # mask and prevents it from being resolved as an independent scene layer.
-                target.add(mask)
+                # Keep the mask transform-linked to its target without making it a
+                # child of the textured object. A child mask becomes part of the target's
+                # rendered layer, so the Mask post-process receives the unmasked rectangle
+                # (and the mask can be drawn into the same layer). A wrapper keeps both
+                # objects under the same parent transforms while the mask stays a sibling.
                 target.add_mask(mask)
+                wrapper = VGroup(target, mask)
+                for index, mob in enumerate(result):
+                    if mob is target:
+                        result[index] = wrapper
+                        break
         return result
 
     def image_to_mobject(self, image) -> Rectangle:
