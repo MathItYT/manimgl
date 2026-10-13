@@ -507,6 +507,14 @@ class SVGMobject(VMobject):
             color = stop_attrs.get("stop-color", "black").strip()
             if color.lower() == "currentcolor":
                 color = "black"
+            # VMobject's color API expects Manim's normalized hex colors, while SVG allows
+            # names, rgb()/rgba() functions, and short hex notation in stop-color.
+            try:
+                parsed_color = se.Color(color)
+                color = parsed_color.hexrgb or "#000000"
+            except (TypeError, ValueError):
+                log.warning("Unsupported SVG gradient stop color %r; using black", color)
+                color = "#000000"
             colors.append(color)
             offsets.append(float(np.clip(offset, 0.0, 1.0)))
             opacities.append(
