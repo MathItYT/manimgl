@@ -703,16 +703,18 @@ class VDrawing(Drawing):
 
         fill_file = cls.fill_file
         fill_replacements = for_fill
+        fill_depth_file = cls.fill_depth_file
+        fill_depth_replacements = for_fill
         texture_names = tuple(mobject.textures)
         if texture_names:
             # Textured VMobjects keep the same Bezier/winding geometry, but their fill
             # shader samples the first declared 2D texture using per-control-point UVs.
             fill_file = "fill_texture.wgsl"
+            fill_depth_file = "fill_depth_texture.wgsl"
             if texture_names[0] != "Texture":
-                fill_replacements = {
-                    **for_fill,
-                    r"\bTexture\b": texture_names[0],
-                }
+                texture_name_replacement = {r"\bTexture\b": texture_names[0]}
+                fill_replacements = {**for_fill, **texture_name_replacement}
+                fill_depth_replacements = {**for_fill, **texture_name_replacement}
 
         return [
             (
@@ -738,8 +740,8 @@ class VDrawing(Drawing):
 
             (
                 "fill_depth",
-                cls.fill_depth_file,
-                for_fill,
+                fill_depth_file,
+                fill_depth_replacements,
             ),
 
             (
@@ -819,6 +821,11 @@ class VDrawing(Drawing):
         self,
         previous: Drawing,
     ) -> bool:
+        # Textures are bound per Drawing. Do not merge these records into a batch whose
+        # members would then all sample the first Drawing's texture.
+        if self.mobject.textures or previous.mobject.textures:
+            return False
+
         if not (
             super().can_follow(previous)
             and self.stroke_behind
