@@ -916,8 +916,9 @@ class VDrawing(Drawing):
         self,
         render_pass: RenderPass,
     ) -> None:
-        # This zero-width border is the fill's anti-aliasing fringe, not a visible stroke.
-        # It must be rendered for every filled contour, including the inner contours of holes.
+        # Reuse the stroke shader's signed-distance coverage for the fill boundary.
+        # The zero-width border is an AA fringe, not a visible stroke; stencil==0 keeps it
+        # on transparent pixels, including the inside edges of ring-shaped fills.
         self.draw_pass(
             render_pass,
             "border",
