@@ -627,7 +627,9 @@ class VMobject(Mobject):
         active = has_extended_gradient or has_legacy_gradient
 
         if has_extended_gradient:
-            mode = 2.0 if raw_mode > 1.5 else 1.0
+            # Preserve intermediate shape blends when an animation starts from
+            # a mobject that was itself partway through a gradient transition.
+            mode = float(np.clip(raw_mode, 1.0, 2.0))
             count = int(np.clip(round(float(uniforms["gradient_count"])), 2, MAX_FILL_GRADIENT_STOPS))
             colors = np.asarray(uniforms["gradient_colors"][:count], dtype=float).copy()
             offsets = np.asarray(uniforms["gradient_stops"][:count, 0], dtype=float).copy()
