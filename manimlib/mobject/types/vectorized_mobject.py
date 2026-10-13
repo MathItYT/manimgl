@@ -396,8 +396,7 @@ class VMobject(Mobject):
         color_list = listify(colors)
         if len(color_list) < 2:
             raise ValueError("A fill gradient needs at least two color stops")
-        source_stop_count = len(color_list)
-        stop_count = source_stop_count
+        stop_count = len(color_list)
         if offsets is None:
             stop_offsets = np.linspace(0.0, 1.0, stop_count)
         else:
