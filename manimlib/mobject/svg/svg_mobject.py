@@ -163,9 +163,9 @@ class SVGMobject(VMobject):
         )
 
     def init_svg_mobject(self) -> None:
-        # Clipping masks refer to sibling mobjects. Copying cached SVG submobjects one at a
-        # time would leave Mask effects pointing at the cached siblings, so clipped SVGs are
-        # parsed afresh instead of using the geometry cache.
+        # Clipping masks are attached to their SVG targets. Copying cached SVG submobjects
+        # one at a time would leave Mask effects pointing at cached objects, so clipped SVGs
+        # are parsed afresh instead of using the geometry cache.
         svg_root = ET.fromstring(self.svg_string)
         self._collect_svg_clip_metadata(svg_root)
         hash_val = hash_obj(self.hash_seed)
