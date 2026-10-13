@@ -50,6 +50,7 @@ from manimlib.renderer.texture import ImageFile
 from manimlib.renderer.texture import TextureSource
 from manimlib.renderer.uniform_block import COMMON_UNIFORMS
 from manimlib.renderer.uniform_block import uniform_block_dtype
+from manimlib.utils.paths import straight_path
 
 from typing import TYPE_CHECKING
 from typing import Generic, TypeVar, Iterable
@@ -610,6 +611,194 @@ class VMobject(Mobject):
             # Only now that these mean something do they need carrying along with the
             # points. Left out otherwise, so that moving a plain fill touches nothing.
             mob.pointlike_uniform_keys = GRADIENT_POINT_KEYS
+        return self
+
+    @staticmethod
+    def _get_interpolated_fill_style(mob: VMobject) -> dict:
+        """Read one fill as either a solid color or a normalized gradient description."""
+        uniforms = mob.uniforms
+        fill_rgba = np.asarray(uniforms["fill_rgba"], dtype=float).copy()
+        fill_rgba_end = np.asarray(uniforms["fill_rgba_end"], dtype=float).copy()
+        raw_mode = float(uniforms["gradient_mode"])
+        has_extended_gradient = raw_mode > 0.5
+        has_legacy_gradient = not has_extended_gradient and not np.allclose(
+            fill_rgba, fill_rgba_end,
+        )
+        active = has_extended_gradient or has_legacy_gradient
+
+        if has_extended_gradient:
+            mode = 2.0 if raw_mode > 1.5 else 1.0
+            count = int(np.clip(round(float(uniforms["gradient_count"])), 2, MAX_FILL_GRADIENT_STOPS))
+            colors = np.asarray(uniforms["gradient_colors"][:count], dtype=float).copy()
+            offsets = np.asarray(uniforms["gradient_stops"][:count, 0], dtype=float).copy()
+            interpolation = float(uniforms["gradient_interpolation"])
+            spread = float(uniforms["gradient_spread"])
+            solid_color = fill_rgba.copy()
+        elif has_legacy_gradient:
+            mode = 1.0
+            count = 2
+            colors = np.vstack((fill_rgba, fill_rgba_end))
+            offsets = np.array([0.0, 1.0])
+            interpolation = 0.0
+            spread = 0.0
+            solid_color = fill_rgba.copy()
+        else:
+            mode = 0.0
+            count = 2
+            colors = np.vstack((fill_rgba, fill_rgba))
+            offsets = np.array([0.0, 1.0])
+            interpolation = 0.0
+            spread = 0.0
+            solid_color = fill_rgba.copy()
+
+        offsets = np.maximum.accumulate(np.clip(offsets, 0.0, 1.0))
+        geometry = {
+            key: np.asarray(uniforms[key], dtype=float).copy()
+            for key in GRADIENT_POINT_KEYS
+        }
+        return {
+            "active": active,
+            "mode": mode,
+            "colors": colors,
+            "offsets": offsets,
+            "interpolation": interpolation,
+            "spread": spread,
+            "solid_color": solid_color,
+            "geometry": geometry,
+        }
+
+    @staticmethod
+    def _sample_fill_style(style: dict, positions: np.ndarray) -> np.ndarray:
+        """Sample a gradient at normalized offsets using SVG sRGB/linearRGB rules."""
+        colors = style["colors"]
+        offsets = style["offsets"]
+        if not style["active"]:
+            return np.repeat(colors[:1], len(positions), axis=0)
+
+        def srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
+            return np.where(
+                rgb <= 0.04045,
+                rgb / 12.92,
+                ((rgb + 0.055) / 1.055) ** 2.4,
+            )
+
+        def linear_to_srgb(rgb: np.ndarray) -> np.ndarray:
+            rgb = np.maximum(rgb, 0.0)
+            return np.where(
+                rgb <= 0.0031308,
+                12.92 * rgb,
+                1.055 * rgb ** (1.0 / 2.4) - 0.055,
+            )
+
+        result = np.empty((len(positions), 4), dtype=float)
+        for out_index, position in enumerate(positions):
+            right = int(np.searchsorted(offsets, position, side="right"))
+            if right <= 0:
+                result[out_index] = colors[0]
+                continue
+            if right >= len(offsets):
+                result[out_index] = colors[-1]
+                continue
+            left = right - 1
+            span = offsets[right] - offsets[left]
+            amount = 0.0 if span <= 1e-8 else float(np.clip(
+                (position - offsets[left]) / span, 0.0, 1.0,
+            ))
+            rgb_a = colors[left, :3]
+            rgb_b = colors[right, :3]
+            if style["interpolation"] > 0.5:
+                rgb_a = srgb_to_linear(rgb_a)
+                rgb_b = srgb_to_linear(rgb_b)
+            rgb = rgb_a * (1.0 - amount) + rgb_b * amount
+            if style["interpolation"] > 0.5:
+                rgb = linear_to_srgb(rgb)
+            alpha = colors[left, 3] * (1.0 - amount) + colors[right, 3] * amount
+            result[out_index] = (*rgb, alpha)
+        return result
+
+    def interpolate(
+        self,
+        mobject1: Mobject,
+        mobject2: Mobject,
+        alpha: float,
+        path_func=straight_path,
+    ) -> Self:
+        # Point data, stroke style, and ordinary uniforms use the normal Manim path.
+        super().interpolate(mobject1, mobject2, alpha, path_func)
+
+        # At the ends, preserve the exact source/target style and API state. For an
+        # interior frame, represent solids as constant-color gradients and resample
+        # differing stop counts to common offsets. That lets all three transitions
+        # (solid -> gradient, gradient -> solid, gradient -> gradient) remain continuous.
+        if alpha <= 1e-8 or alpha >= 1.0 - 1e-8:
+            return self
+        if not all(
+            key in mob.uniforms
+            for mob in (self, mobject1, mobject2)
+            for key in ("gradient_mode", "gradient_colors", "gradient_stops", "gradient_count")
+        ):
+            return self
+
+        start_style = self._get_interpolated_fill_style(mobject1)
+        target_style = self._get_interpolated_fill_style(mobject2)
+        if not start_style["active"] and not target_style["active"]:
+            return self
+
+        # A solid has no gradient geometry. Borrow the other endpoint's geometry and
+        # paint it with a constant color so its style can genuinely morph into/from it.
+        if not start_style["active"]:
+            start_style["geometry"] = {
+                key: value.copy() for key, value in target_style["geometry"].items()
+            }
+            start_style["mode"] = target_style["mode"]
+            start_style["spread"] = target_style["spread"]
+            start_style["interpolation"] = target_style["interpolation"]
+        if not target_style["active"]:
+            target_style["geometry"] = {
+                key: value.copy() for key, value in start_style["geometry"].items()
+            }
+            target_style["mode"] = start_style["mode"]
+            target_style["spread"] = start_style["spread"]
+            target_style["interpolation"] = start_style["interpolation"]
+
+        all_offsets = np.unique(np.concatenate((
+            np.array([0.0, 1.0]),
+            start_style["offsets"] if start_style["active"] else np.array([]),
+            target_style["offsets"] if target_style["active"] else np.array([]),
+        )))
+        if len(all_offsets) > MAX_FILL_GRADIENT_STOPS:
+            all_offsets = np.linspace(0.0, 1.0, MAX_FILL_GRADIENT_STOPS)
+        stop_count = len(all_offsets)
+        start_colors = self._sample_fill_style(start_style, all_offsets)
+        target_colors = self._sample_fill_style(target_style, all_offsets)
+        interpolated_colors = start_colors * (1.0 - alpha) + target_colors * alpha
+
+        gradient_colors = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
+        gradient_colors[:stop_count] = interpolated_colors
+        gradient_stops = np.zeros((MAX_FILL_GRADIENT_STOPS, 4), dtype=float)
+        gradient_stops[:stop_count, 0] = all_offsets
+        self.uniforms["gradient_colors"] = gradient_colors
+        self.uniforms["gradient_stops"] = gradient_stops
+        self.uniforms["gradient_count"] = float(stop_count)
+
+        # 1 = linear, 2 = radial. Interpolating between them lets the shader morph
+        # the sampling coordinates rather than switching abruptly at alpha == 0.5.
+        self.uniforms["gradient_mode"] = (
+            start_style["mode"] * (1.0 - alpha) + target_style["mode"] * alpha
+        )
+        self.uniforms["gradient_interpolation"] = (
+            start_style["interpolation"] * (1.0 - alpha)
+            + target_style["interpolation"] * alpha
+        )
+        self.uniforms["gradient_spread"] = (
+            start_style["spread"] if alpha < 0.5 else target_style["spread"]
+        )
+        for key in GRADIENT_POINT_KEYS:
+            self.uniforms[key] = path_func(
+                start_style["geometry"][key],
+                target_style["geometry"][key],
+                alpha,
+            )
         return self
 
     def set_stroke(
