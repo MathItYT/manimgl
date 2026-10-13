@@ -94,6 +94,10 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    // Evaluate screen-space derivatives before any fragment-dependent discard.
+    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
+    let aa_width = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-5);
+
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     /*
@@ -102,12 +106,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    // Signed implicit distance to the quadratic boundary, in interpolated UV space.
-    // fwidth converts that distance to a per-pixel transition, like the stroke shader's
-    // anti-alias band. Compute it before the varying-dependent branch for WGSL derivatives.
-    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
-    let aa_width = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-5);
-
     // Use the same conservative edge in both the winding-count and color passes so the
     // stencil includes the pixels that receive fractional edge coverage.
     if (in.fill_all == 0.0 && curve_distance < -0.5 * aa_width) { discard; }
