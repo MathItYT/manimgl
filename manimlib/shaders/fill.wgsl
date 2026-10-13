@@ -14,6 +14,7 @@ projected, see VShaderWrapper.render_fill.
 #INSERT fill_color.wgsl
 #INSERT finalize_color.wgsl
 #INSERT clip_test.wgsl
+#INSERT antialias_coverage.wgsl
 
 const VERTS_PER_CURVE: u32 = 6u;
 // Consecutive beziers share an anchor, so curve n begins at record 2n
@@ -102,6 +103,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
-    return in.color;
+    // Signed implicit distance to the visible fill region. Normalize by the
+    // screen-space derivative and AA width, then use the exact stroke coverage curve.
+    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
+    let aaw = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-8);
+    let signed_dist_to_region = -curve_distance / aaw;
+    if (in.fill_all == 0.0 && signed_dist_to_region > 0.5) { discard; }
+
+    var color = in.color;
+    if (in.fill_all == 0.0) {
+        color.a *= stroke_aa_coverage(signed_dist_to_region);
+    }
+    return color;
 }
