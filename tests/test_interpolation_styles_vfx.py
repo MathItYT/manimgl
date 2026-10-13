@@ -188,3 +188,17 @@ def test_new_vfx_radius_and_strength_both_fade_in() -> None:
     glow = next(effect for effect in animated.get_vfx_list() if effect.name == "Glow")
     assert abs(glow.radius - 16.0) < 1e-6
     assert abs(glow.intensity - 0.8) < 1e-6
+
+def test_matching_glow_interpolates_default_tint_to_explicit_tint() -> None:
+    from manimlib.utils.vfx_presets import Glow
+
+    start = Rectangle()
+    start.add_vfx(Glow(color=None, intensity=1.0))
+    target = Rectangle()
+    target.add_vfx(Glow(color="#0000ff", intensity=1.0))
+    animated = start.copy()
+
+    interpolate_at(animated, start, target, 0.5)
+
+    glow = next(effect for effect in animated.get_vfx_list() if effect.name == "Glow")
+    np.testing.assert_allclose(glow.color, [0.5, 0.5, 1.0, 1.0], atol=1e-5)
