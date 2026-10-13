@@ -115,6 +115,10 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    // Work out the curve's screen-space edge width before any discard, as WGSL
+    // derivatives must be evaluated in uniform control flow.
+    let curve_distance = in.uv_coords.y - in.uv_coords.x * in.uv_coords.x;
+    let aa_width = max(fwidth(curve_distance) * mob.anti_alias_width, 1e-5);
     clip_test(in.clip_distances);
     if (in.color.a == 0.0) { discard; }
     let texel = textureSample(Texture, image_sampler, in.texture_uv);
@@ -126,8 +130,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     during both the stencil and the cover pass, so the region counted is exactly the region
     colored in.
     */
-    // Keep the winding test hard-edged here; the fill-border pass below VMobject
-    // applies two-sided alpha coverage to both exterior and interior contours.
-    if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
-    return color;
+    // Keep the winding boundary exact. FILL_BORDER draws the exterior fringe,
+    // while this ramp antialiases the filled side, including the annulus side of holes.
+    if (in.fill_all == 0.0 && curve_distance < 0.0) { discard; }
+
+    var final_color = color;
+    if (in.fill_all == 0.0) {
+        final_color.a *= smoothstep(0.0, 0.5 * aa_width, curve_distance);
+    }
+    return final_color;
 }
