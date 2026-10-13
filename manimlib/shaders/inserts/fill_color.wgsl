@@ -66,9 +66,28 @@ fn fill_color_at(point: vec3f) -> vec4f {
             if (abs(determinant) < 1e-8) {
                 determinant = select(-1e-8, 1e-8, determinant >= 0.0);
             }
-            let radial_x = (delta.x * axis_y.y - delta.y * axis_y.x) / determinant;
-            let radial_y = (axis_x.x * delta.y - axis_x.y * delta.x) / determinant;
-            t = length(vec2f(radial_x, radial_y));
+            let point_x = (delta.x * axis_y.y - delta.y * axis_y.x) / determinant;
+            let point_y = (axis_x.x * delta.y - axis_x.y * delta.x) / determinant;
+            let focus_delta = mob.gradient_focus.xy - center;
+            let focus_x = (focus_delta.x * axis_y.y - focus_delta.y * axis_y.x) / determinant;
+            let focus_y = (axis_x.x * focus_delta.y - axis_x.y * focus_delta.x) / determinant;
+            let ray = vec2f(point_x - focus_x, point_y - focus_y);
+            let ray_length_squared = dot(ray, ray);
+            if (ray_length_squared < 1e-8) {
+                t = 0.0;
+            } else {
+                let ray_focus_dot = dot(vec2f(focus_x, focus_y), ray);
+                let discriminant = max(
+                    ray_focus_dot * ray_focus_dot
+                    + ray_length_squared * (1.0 - dot(vec2f(focus_x, focus_y), vec2f(focus_x, focus_y))),
+                    0.0,
+                );
+                let edge_parameter = max(
+                    (-ray_focus_dot + sqrt(discriminant)) / ray_length_squared,
+                    1e-8,
+                );
+                t = 1.0 / edge_parameter;
+            }
         } else {
             let axis = mob.gradient_end - mob.gradient_start;
             t = dot(point - mob.gradient_start, axis) / max(dot(axis, axis), 1e-8);
