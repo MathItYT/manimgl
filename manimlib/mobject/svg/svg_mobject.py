@@ -212,24 +212,48 @@ class SVGMobject(VMobject):
                 if child_id:
                     self._svg_clip_shape_ids.add(child_id)
 
+        graphic_tags = {
+            "path", "rect", "image", "circle", "ellipse", "line",
+            "polyline", "polygon", "use",
+        }
+        generated_id = 0
+
         def clip_ref(element: ET.Element) -> str | None:
             value = element.attrib.get("clip-path", "")
             style = element.attrib.get("style", "")
-            match_style = re.search(r"(?:^|;)\\s*clip-path\\s*:\\s*([^;]+)", style)
+            match_style = re.search(r"(?:^|;)\s*clip-path\s*:\s*([^;]+)", style)
             if match_style:
                 value = match_style.group(1)
-            match = re.search(r"url\\(\\s*['\\"]?#([^)'\\"]+)['\\"]?\\s*\\)", value)
+            match = re.search(r"url\(\s*['\"]?#([^)'\"\s]+)['\"]?\s*\)", value)
             return match.group(1) if match else None
 
         def visit(element: ET.Element, inherited_clip: str | None = None) -> None:
+            nonlocal generated_id
+            name = local_name(element.tag)
+            # Definitions are recorded above; they are not visible geometry and their
+            # descendants must not inherit a clipping rule from the surrounding document.
+            if name in ("clipPath", "defs"):
+                return
+
             own_value = element.attrib.get("clip-path", "")
             own_style = element.attrib.get("style", "")
-            has_style_clip = re.search(r"(?:^|;)\\s*clip-path\\s*:", own_style) is not None
+            has_style_clip = re.search(r"(?:^|;)\s*clip-path\s*:", own_style) is not None
             own_clip = clip_ref(element)
-            active_clip = own_clip if own_clip is not None else (None if own_value == "none" or has_style_clip else inherited_clip)
-            element_id = element.attrib.get("id")
-            if element_id and active_clip:
+            active_clip = own_clip if own_clip is not None else (
+                None if own_value == "none" or has_style_clip else inherited_clip
+            )
+
+            # svgelements exposes leaf graphic objects by their id, but SVG documents often
+            # omit ids. Give clipped shapes private, deterministic ids so the generated
+            # mobject can still be connected to its clip mask.
+            if active_clip and name in graphic_tags:
+                element_id = element.attrib.get("id")
+                if not element_id:
+                    generated_id += 1
+                    element_id = f"__manim_clip_target_{generated_id:06d}"
+                    element.set("id", element_id)
                 self._svg_clip_assignments[element_id] = active_clip
+
             for child in element:
                 visit(child, active_clip)
 
@@ -320,7 +344,7 @@ class SVGMobject(VMobject):
 
         for shape in svg.elements():
             shape_id = getattr(shape, "id", None)
-            if shape_id and shape_id in self._svg_clip_shape_ids:
+            if apply_clip_paths and shape_id and shape_id in self._svg_clip_shape_ids:
                 # Clip geometry is used as a mask, not as a visible SVG object.
                 continue
             if isinstance(shape, (se.Group, se.Use)):
