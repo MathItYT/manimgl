@@ -2340,6 +2340,19 @@ class Mobject(object):
                 value = b if alpha >= 0.5 else getattr(current, key, b)
             elif key not in target_attrs:
                 value = a if alpha < 0.5 else getattr(current, key, a)
+            elif key == "color" and start_effect is not None and target_effect is not None and (
+                a is None or b is None
+            ):
+                # None means the preset's own tint, not "no color". Resolve it to
+                # the relevant default first so changing a VFX tint is interpolated,
+                # rather than switching from its default to the explicit color at 50%.
+                default_color = "#FFFFFF" if type(current).__name__ == "Glow" else "#000000"
+                value = cls._blend_vfx_value(
+                    key,
+                    default_color if a is None else a,
+                    default_color if b is None else b,
+                    alpha,
+                )
             else:
                 value = cls._blend_vfx_value(key, a, b, alpha)
             if key in current.__dict__ or hasattr(current, key):
