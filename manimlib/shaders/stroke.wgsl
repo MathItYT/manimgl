@@ -585,10 +585,7 @@ fn vs_main(
 
     if (IS_FILL_BORDER) {
         nothing_to_draw = nothing_to_draw
-            || max(
-                mob.fill_rgba.a,
-                mob.fill_rgba_end.a,
-            ) == 0.0;
+            || !fill_has_alpha();
             } else {
         nothing_to_draw = nothing_to_draw
             || all(
