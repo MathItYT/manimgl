@@ -340,7 +340,7 @@ class SVGMobject(VMobject):
     ) -> list[VMobject]:
         result: list[VMobject] = []
         mobjects_by_id: dict[str, VMobject] = {}
-        image_type = getattr(se, "Image", None)
+        image_type = getattr(se, "Image", getattr(se, "SVGImage", None))
 
         for shape in svg.elements():
             shape_id = getattr(shape, "id", None)
