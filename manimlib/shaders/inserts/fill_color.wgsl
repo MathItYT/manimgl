@@ -13,14 +13,17 @@ fn fill_has_alpha() -> bool {
 }
 
 fn spread_gradient_t(t_in: f32) -> f32 {
-    if (mob.gradient_spread < 0.5) {
-        return clamp(t_in, 0.0, 1.0);
-    }
-    if (mob.gradient_spread < 1.5) {
-        return t_in - floor(t_in);
-    }
+    // Blend between spread modes instead of switching at the midpoint. This keeps
+    // repeat/reflect/pad changes continuous during a Transform.
+    let pad_t = clamp(t_in, 0.0, 1.0);
+    let repeat_t = t_in - floor(t_in);
     let cycle = t_in - 2.0 * floor(t_in / 2.0);
-    return select(2.0 - cycle, cycle, cycle <= 1.0);
+    let reflect_t = select(2.0 - cycle, cycle, cycle <= 1.0);
+    let mode = clamp(mob.gradient_spread, 0.0, 2.0);
+    if (mode <= 1.0) {
+        return mix(pad_t, repeat_t, mode);
+    }
+    return mix(repeat_t, reflect_t, mode - 1.0);
 }
 
 // SVG 2: color-interpolation selects encoded sRGB (default) or linearRGB.
@@ -95,25 +98,23 @@ fn fill_color_at(point: vec3f) -> vec4f {
         // Evaluate the radial field as well. During a linear <-> radial style
         // morph, gradient_mode moves smoothly from 1 to 2 and blends these two
         // coordinates, rather than taking a hard branch at the halfway point.
-        var center = mob.gradient_start.xy;
-        var axis_x = mob.gradient_end.xy - center;
-        var axis_y = mob.gradient_axis_y.xy - center;
+        var center = mob.gradient_radial_center.xy;
+        var axis_x = mob.gradient_radial_axis_x.xy - center;
+        var axis_y = mob.gradient_radial_axis_y.xy - center;
         var determinant = axis_x.x * axis_y.y - axis_x.y * axis_y.x;
         if (abs(determinant) < 1e-8) {
-            // Linear gradients have no radial y-axis. Build a stable perpendicular
-            // basis around the linear gradient's midpoint for the unused radial field.
-            center = 0.5 * (mob.gradient_start.xy + mob.gradient_end.xy);
-            axis_x = 0.5 * (mob.gradient_end.xy - mob.gradient_start.xy);
+            // Invalid/degenerate user geometry gets a stable fallback, but ordinary
+            // linear -> radial interpolation never passes through a singular basis.
+            if (length(axis_x) < 1e-6) {
+                axis_x = vec2f(1.0, 0.0);
+            }
             axis_y = vec2f(-axis_x.y, axis_x.x);
             determinant = axis_x.x * axis_y.y - axis_x.y * axis_y.x;
-            if (abs(determinant) < 1e-8) {
-                determinant = select(-1e-8, 1e-8, determinant >= 0.0);
-            }
         }
         let delta = point.xy - center;
         let point_x = (delta.x * axis_y.y - delta.y * axis_y.x) / determinant;
         let point_y = (axis_x.x * delta.y - axis_x.y * delta.x) / determinant;
-        let focus_delta = mob.gradient_focus.xy - center;
+        let focus_delta = mob.gradient_radial_focus.xy - center;
         let focus_x = (focus_delta.x * axis_y.y - focus_delta.y * axis_y.x) / determinant;
         let focus_y = (axis_x.x * focus_delta.y - axis_x.y * focus_delta.x) / determinant;
         let ray = vec2f(point_x - focus_x, point_y - focus_y);
