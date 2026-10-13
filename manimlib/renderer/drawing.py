@@ -559,10 +559,9 @@ FILL_BORDER = PipelineState(
     depth_write=False,
     depth_compare="less",
 
-    # Draw the AA fringe on both sides of every contour. This pass runs before the
-    # winding cover: the cover overwrites the fringe on the filled side, while the
-    # transparent side (including the interior of a ring) keeps its fractional alpha.
-    stencil_compare="always",
+    # Stencil value 0 denotes the exterior of the fill, including holes in rings.
+    # Draw the fringe there; fill.wgsl supplies matching coverage on the filled side.
+    stencil_compare="equal",
 
     stencil_ops=(
         KEEP,
