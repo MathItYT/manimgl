@@ -261,7 +261,7 @@ class VMobject(Mobject):
             # A second color, equal to the first unless a gradient was asked for,
             # along with the two points it runs between, see inserts/fill_color.wgsl
             fill_rgba_end=np.zeros(4),
-            # 1 = fully textured fill, 0 = underlying solid/gradient fill.
+            # Mix factor for texture <-> paint or source texture <-> target texture.
             texture_mix=1.0,
             texture_mode=0.0,
             gradient_interpolation=0.0,

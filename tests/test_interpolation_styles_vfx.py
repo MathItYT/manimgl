@@ -317,11 +317,12 @@ def test_svg_image_to_gradient_interpolates_texture_contribution() -> None:
 
     assert "Texture" in animated.textures
     assert animated.textures["Texture"] is image.textures["Texture"]
-    assert abs(animated.uniforms["texture_mix"] - 0.75) < 1e-6
+    assert animated.uniforms["texture_mode"] == 2.0
+    assert abs(animated.uniforms["texture_mix"] - 0.25) < 1e-6
 
     interpolate_at(animated, image, gradient, 1.0)
     assert not animated.textures
-    assert abs(animated.uniforms["texture_mix"] - 0.0) < 1e-6
+    assert animated.uniforms["texture_mode"] == 0.0
 
 def interpolate_family_at(mobject, start, target, alpha: float):
     mobject.prepare_interpolation(start, target)
@@ -377,17 +378,18 @@ def test_svg_gradient_and_svg_image_transform_blends_texture_both_ways() -> None
     assert animated_shape.textures["Texture"] is image_shape.textures["Texture"]
     assert abs(animated_shape.uniforms["texture_mix"] - 0.25) < 1e-6
 
-    # Image -> gradient: keep the original texture until the final frame while
-    # fading it out to reveal the gradient fill underneath.
+    # Image -> gradient: blend sampled image pixels toward the evaluated gradient
+    # pixels, reaching the exact gradient at the endpoint.
     animated = image.copy()
     interpolate_family_at(animated, image, gradient, 0.25)
     animated_shape = animated.submobjects[0]
     assert "Texture" in animated_shape.textures
-    assert abs(animated_shape.uniforms["texture_mix"] - 0.75) < 1e-6
+    assert animated_shape.uniforms["texture_mode"] == 2.0
+    assert abs(animated_shape.uniforms["texture_mix"] - 0.25) < 1e-6
 
     interpolate_family_at(animated, image, gradient, 1.0)
     assert not animated.submobjects[0].textures
-    assert abs(animated.submobjects[0].uniforms["texture_mix"]) < 1e-6
+    assert animated.submobjects[0].uniforms["texture_mode"] == 0.0
 
 
 
