@@ -406,7 +406,7 @@ class SVGMobject(VMobject):
                 if target is None or clip_id not in self._svg_clip_paths:
                     continue
                 mask = self._clip_path_to_mobject(clip_id)
-                if mask is None or not mask.has_points():
+                if mask is None or not len(mask.get_all_points()):
                     log.warning(
                         "Could not build SVG clipPath %r for element %r",
                         clip_id, shape_id,
