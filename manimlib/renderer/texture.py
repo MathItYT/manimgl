@@ -76,7 +76,10 @@ class PixelArray(TextureSource):
         if pixels.ndim != 3 or pixels.shape[2] != 4:
             raise ValueError("PixelArray expects an HxWx4 RGBA array")
         self.pixels = np.ascontiguousarray(pixels)
-        self.key = hashlib.sha256(self.pixels.tobytes()).hexdigest()
+        digest = hashlib.sha256()
+        digest.update(np.asarray(self.pixels.shape, dtype=np.int64).tobytes())
+        digest.update(self.pixels.tobytes())
+        self.key = digest.hexdigest()
         self.pixels.setflags(write=False)
 
     def sharing_key(self) -> tuple[str, str]:
