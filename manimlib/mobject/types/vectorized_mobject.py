@@ -639,9 +639,23 @@ class VMobject(Mobject):
         bbox = self.get_bounding_box()
         reach = np.dot(np.abs(direction), 0.5 * (bbox[2] - bbox[0]))
         for mob in self.get_family(recurse):
-            mob.uniforms["gradient_start"] = bbox[1] - reach * direction
-            mob.uniforms["gradient_end"] = bbox[1] + reach * direction
+            gradient_start = bbox[1] - reach * direction
+            gradient_end = bbox[1] + reach * direction
+            mob.uniforms["gradient_start"] = gradient_start
+            mob.uniforms["gradient_end"] = gradient_end
             mob.uniforms["gradient_axis_y"] = bbox[1]
+            # Keep the unused radial field well-conditioned for a later linear -> radial
+            # Transform. Do not overwrite a radial gradient's own ellipse geometry.
+            if float(mob.uniforms["gradient_mode"]) < 1.5:
+                radial_center = 0.5 * (gradient_start + gradient_end)
+                radial_half_axis = 0.5 * (gradient_end - gradient_start)
+                radial_perp = np.array([-radial_half_axis[1], radial_half_axis[0], 0.0])
+                if np.linalg.norm(radial_perp[:2]) < 1e-8:
+                    radial_perp = np.array([0.0, 1.0, 0.0])
+                mob.uniforms["gradient_radial_center"] = radial_center
+                mob.uniforms["gradient_radial_axis_x"] = radial_center + radial_half_axis
+                mob.uniforms["gradient_radial_axis_y"] = radial_center + radial_perp
+                mob.uniforms["gradient_radial_focus"] = radial_center
             # Only now that these mean something do they need carrying along with the
             # points. Left out otherwise, so that moving a plain fill touches nothing.
             mob.pointlike_uniform_keys = GRADIENT_POINT_KEYS
