@@ -202,3 +202,54 @@ def test_matching_glow_interpolates_default_tint_to_explicit_tint() -> None:
 
     glow = next(effect for effect in animated.get_vfx_list() if effect.name == "Glow")
     np.testing.assert_allclose(glow.color, [0.5, 0.5, 1.0, 1.0], atol=1e-5)
+
+def test_shallow_copy_has_independent_vfx_instances_and_bookkeeping() -> None:
+    source = Rectangle()
+    source.add_vfx(Grain(intensity=0.4, speed=12))
+    source_effect = source.get_vfx_list()[0]
+
+    clone = source.copy()
+    clone_effect = clone.get_vfx_list()[0]
+
+    assert clone.get_vfx_list() is not source.get_vfx_list()
+    assert clone_effect is not source_effect
+    assert clone_effect.mobject is clone
+    assert source_effect.mobject is source
+    assert clone._vfx_group is clone
+    assert clone._vfx_local is clone
+
+    clone.clear_vfx()
+    assert len(source.get_vfx_list()) == 1
+    assert not clone.get_vfx_list()
+
+
+def test_deep_copy_has_independent_vfx_instances() -> None:
+    source = Rectangle()
+    source.add_vfx(Grain(intensity=0.35, speed=7))
+    source_effect = source.get_vfx_list()[0]
+
+    clone = source.copy(deep=True)
+    clone_effect = clone.get_vfx_list()[0]
+
+    assert clone_effect is not source_effect
+    assert clone_effect.mobject is clone
+    assert source_effect.mobject is source
+    clone_effect.intensity = 0.9
+    assert abs(source_effect.intensity - 0.35) < 1e-6
+
+
+def test_transform_endpoints_keep_independent_vfx_after_copy() -> None:
+    source = Rectangle()
+    source.add_vfx(Grain(intensity=0.2))
+    target = source.copy()
+    target.clear_vfx()
+    target.add_vfx(Grain(intensity=0.8))
+
+    assert len(source.get_vfx_list()) == 1
+    assert len(target.get_vfx_list()) == 1
+    assert source.get_vfx_list()[0] is not target.get_vfx_list()[0]
+
+    animated = source.copy()
+    interpolate_at(animated, source, target, 0.5)
+    effect = next(effect for effect in animated.get_vfx_list() if effect.name == "Grain")
+    assert abs(effect.intensity - 0.5) < 1e-6
