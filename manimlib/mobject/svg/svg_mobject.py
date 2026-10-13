@@ -7,10 +7,9 @@ import re
 from urllib.parse import unquote, unquote_to_bytes, urlparse
 from xml.etree import ElementTree as ET
 
+import io
 import numpy as np
 import svgelements as se
-import io
-from PIL import Image as PILImage
 
 from manimlib.constants import RIGHT
 from manimlib.constants import TAU
@@ -167,9 +166,20 @@ class SVGMobject(VMobject):
         # Clipping masks refer to sibling mobjects. Copying cached SVG submobjects one at a
         # time would leave Mask effects pointing at the cached siblings, so clipped SVGs are
         # parsed afresh instead of using the geometry cache.
-        self._collect_svg_clip_metadata(ET.fromstring(self.svg_string))
+        svg_root = ET.fromstring(self.svg_string)
+        self._collect_svg_clip_metadata(svg_root)
         hash_val = hash_obj(self.hash_seed)
-        cacheable = not self._svg_clip_paths and not self._svg_clip_assignments
+        contains_images = any(
+            element.tag.rsplit("}", 1)[-1] == "image"
+            for element in svg_root.iter()
+        )
+        # A relative href can resolve differently for identical SVG markup loaded from two
+        # directories, so SVGs containing images are not reused from the geometry cache.
+        cacheable = (
+            not contains_images
+            and not self._svg_clip_paths
+            and not self._svg_clip_assignments
+        )
         if cacheable and hash_val in SVG_HASH_TO_MOB_MAP:
             submobs = [sm.copy() for sm in SVG_HASH_TO_MOB_MAP[hash_val]]
         else:
@@ -443,8 +453,11 @@ class SVGMobject(VMobject):
                 raise ValueError("Malformed SVG image data URI")
             raw = base64.b64decode(payload) if ";base64" in header.lower() else unquote_to_bytes(payload)
             try:
+                from PIL import Image as PILImage
                 with PILImage.open(io.BytesIO(raw)) as image:
                     pixels = np.asarray(image.convert("RGBA"), dtype=np.uint8)
+            except ImportError as error:
+                raise RuntimeError("Pillow is required to decode embedded SVG images") from error
             except Exception as error:
                 raise ValueError(f"Unsupported embedded SVG image format: {error}") from error
             return PixelArray(pixels)
