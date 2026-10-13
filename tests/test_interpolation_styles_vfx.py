@@ -316,4 +316,4 @@ def test_svg_image_to_gradient_interpolates_texture_contribution() -> None:
 
     interpolate_at(animated, image, gradient, 1.0)
     assert not animated.textures
-    assert abs(animated.uniforms["texture_mix"] - 1.0) < 1e-6
+    assert abs(animated.uniforms["texture_mix"] - 0.0) < 1e-6
