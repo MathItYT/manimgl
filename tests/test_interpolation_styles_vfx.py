@@ -126,3 +126,65 @@ def test_matching_vfx_parameters_are_interpolated() -> None:
     effect = next(effect for effect in animated.get_vfx_list() if effect.name == "Grain")
     assert abs(effect.intensity - 0.5) < 1e-6
     assert abs(effect.speed - 20.0) < 1e-6
+
+def test_linear_to_radial_keeps_a_stable_radial_basis() -> None:
+    start = Rectangle(width=3, height=1)
+    start.set_fill_gradient(
+        ["#ff0000", "#0000ff"],
+        direction=[1, 0, 0],
+    )
+    target = start.copy()
+    target.set_fill_gradient(
+        ["#ff0000", "#0000ff"],
+        gradient_type="radial",
+        center=[0, 0, 0],
+        radius=1.5,
+        radius_y=0.6,
+    )
+    animated = start.copy()
+
+    interpolate_at(animated, start, target, 0.01)
+    uniforms = animated.uniforms
+    center = uniforms["gradient_radial_center"][:2]
+    axis_x = uniforms["gradient_radial_axis_x"][:2] - center
+    axis_y = uniforms["gradient_radial_axis_y"][:2] - center
+    determinant = axis_x[0] * axis_y[1] - axis_x[1] * axis_y[0]
+    assert abs(determinant) > 1e-4
+
+
+def test_gradient_color_interpolation_and_spread_modes_morph_continuously() -> None:
+    start = Rectangle(width=3, height=1)
+    start.set_fill_gradient(
+        ["#ff0000", "#0000ff"],
+        direction=[1, 0, 0],
+        spread_method="pad",
+        color_interpolation="sRGB",
+    )
+    target = start.copy()
+    target.set_fill_gradient(
+        ["#ff0000", "#0000ff"],
+        direction=[1, 0, 0],
+        spread_method="reflect",
+        color_interpolation="linearRGB",
+    )
+    animated = start.copy()
+
+    interpolate_at(animated, start, target, 0.5)
+
+    assert abs(animated.uniforms["gradient_spread"] - 1.0) < 1e-6
+    assert abs(animated.uniforms["gradient_interpolation"] - 0.5) < 1e-6
+
+
+def test_new_vfx_radius_and_strength_both_fade_in() -> None:
+    from manimlib.utils.vfx_presets import Glow
+
+    start = Rectangle()
+    target = start.copy()
+    target.add_vfx(Glow(radius=32, intensity=1.6))
+    animated = start.copy()
+
+    interpolate_at(animated, start, target, 0.5)
+
+    glow = next(effect for effect in animated.get_vfx_list() if effect.name == "Glow")
+    assert abs(glow.radius - 16.0) < 1e-6
+    assert abs(glow.intensity - 0.8) < 1e-6
