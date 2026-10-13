@@ -65,16 +65,17 @@ fn multi_stop_color_at(t_in: f32) -> vec4f {
                 clamp((t - previous_offset) / max(span, 1e-8), 0.0, 1.0),
                 span > 1e-8,
             );
-            var previous_rgb = previous_color.rgb;
-            var next_rgb = next_color.rgb;
-            if (mob.gradient_interpolation > 0.5) {
-                previous_rgb = srgb_to_linear(previous_rgb);
-                next_rgb = srgb_to_linear(next_rgb);
-            }
-            var rgb = mix(previous_rgb, next_rgb, mix_t);
-            if (mob.gradient_interpolation > 0.5) {
-                rgb = linear_to_srgb(rgb);
-            }
+            let srgb_rgb = mix(previous_color.rgb, next_color.rgb, mix_t);
+            let linear_rgb = linear_to_srgb(mix(
+                srgb_to_linear(previous_color.rgb),
+                srgb_to_linear(next_color.rgb),
+                mix_t,
+            ));
+            let rgb = mix(
+                srgb_rgb,
+                linear_rgb,
+                clamp(mob.gradient_interpolation, 0.0, 1.0),
+            );
             let alpha = mix(previous_color.a, next_color.a, mix_t);
             return vec4f(rgb, alpha);
         }
@@ -87,42 +88,53 @@ fn multi_stop_color_at(t_in: f32) -> vec4f {
 
 fn fill_color_at(point: vec3f) -> vec4f {
     if (mob.gradient_mode > 0.5) {
-        var t = 0.0;
-        if (mob.gradient_mode > 1.5) {
-            let center = mob.gradient_start.xy;
-            let axis_x = mob.gradient_end.xy - center;
-            let axis_y = mob.gradient_axis_y.xy - center;
-            let delta = point.xy - center;
-            var determinant = axis_x.x * axis_y.y - axis_x.y * axis_y.x;
+        let linear_axis = mob.gradient_end - mob.gradient_start;
+        let linear_t = dot(point - mob.gradient_start, linear_axis)
+            / max(dot(linear_axis, linear_axis), 1e-8);
+
+        // Evaluate the radial field as well. During a linear <-> radial style
+        // morph, gradient_mode moves smoothly from 1 to 2 and blends these two
+        // coordinates, rather than taking a hard branch at the halfway point.
+        var center = mob.gradient_start.xy;
+        var axis_x = mob.gradient_end.xy - center;
+        var axis_y = mob.gradient_axis_y.xy - center;
+        var determinant = axis_x.x * axis_y.y - axis_x.y * axis_y.x;
+        if (abs(determinant) < 1e-8) {
+            // Linear gradients have no radial y-axis. Build a stable perpendicular
+            // basis around the linear gradient's midpoint for the unused radial field.
+            center = 0.5 * (mob.gradient_start.xy + mob.gradient_end.xy);
+            axis_x = 0.5 * (mob.gradient_end.xy - mob.gradient_start.xy);
+            axis_y = vec2f(-axis_x.y, axis_x.x);
+            determinant = axis_x.x * axis_y.y - axis_x.y * axis_y.x;
             if (abs(determinant) < 1e-8) {
                 determinant = select(-1e-8, 1e-8, determinant >= 0.0);
             }
-            let point_x = (delta.x * axis_y.y - delta.y * axis_y.x) / determinant;
-            let point_y = (axis_x.x * delta.y - axis_x.y * delta.x) / determinant;
-            let focus_delta = mob.gradient_focus.xy - center;
-            let focus_x = (focus_delta.x * axis_y.y - focus_delta.y * axis_y.x) / determinant;
-            let focus_y = (axis_x.x * focus_delta.y - axis_x.y * focus_delta.x) / determinant;
-            let ray = vec2f(point_x - focus_x, point_y - focus_y);
-            let ray_length_squared = dot(ray, ray);
-            if (ray_length_squared < 1e-8) {
-                t = 0.0;
-            } else {
-                let ray_focus_dot = dot(vec2f(focus_x, focus_y), ray);
-                let discriminant = max(
-                    ray_focus_dot * ray_focus_dot
-                    + ray_length_squared * (1.0 - dot(vec2f(focus_x, focus_y), vec2f(focus_x, focus_y))),
-                    0.0,
-                );
-                let edge_parameter = max(
-                    (-ray_focus_dot + sqrt(discriminant)) / ray_length_squared,
-                    1e-8,
-                );
-                t = 1.0 / edge_parameter;
-            }
-        } else {
-            let axis = mob.gradient_end - mob.gradient_start;
-            t = dot(point - mob.gradient_start, axis) / max(dot(axis, axis), 1e-8);
         }
+        let delta = point.xy - center;
+        let point_x = (delta.x * axis_y.y - delta.y * axis_y.x) / determinant;
+        let point_y = (axis_x.x * delta.y - axis_x.y * delta.x) / determinant;
+        let focus_delta = mob.gradient_focus.xy - center;
+        let focus_x = (focus_delta.x * axis_y.y - focus_delta.y * axis_y.x) / determinant;
+        let focus_y = (axis_x.x * focus_delta.y - axis_x.y * focus_delta.x) / determinant;
+        let ray = vec2f(point_x - focus_x, point_y - focus_y);
+        let ray_length_squared = dot(ray, ray);
+        var radial_t = 0.0;
+        if (ray_length_squared >= 1e-8) {
+            let ray_focus = vec2f(focus_x, focus_y);
+            let ray_focus_dot = dot(ray_focus, ray);
+            let discriminant = max(
+                ray_focus_dot * ray_focus_dot
+                + ray_length_squared * (1.0 - dot(ray_focus, ray_focus)),
+                0.0,
+            );
+            let edge_parameter = max(
+                (-ray_focus_dot + sqrt(discriminant)) / ray_length_squared,
+                1e-8,
+            );
+            radial_t = 1.0 / edge_parameter;
+        }
+        let shape_mix = clamp(mob.gradient_mode - 1.0, 0.0, 1.0);
+        let t = mix(linear_t, radial_t, shape_mix);
         return multi_stop_color_at(t);
     }
 
