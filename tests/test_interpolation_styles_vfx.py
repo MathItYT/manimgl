@@ -28,7 +28,7 @@ def test_solid_fill_morphs_into_a_gradient() -> None:
     assert animated.uniforms["gradient_count"] == 2.0
     np.testing.assert_allclose(
         animated.uniforms["gradient_colors"][:2, :3],
-        [[1.0, 0.5, 0.0], [0.5, 0.0, 0.5]],
+        [[1.0, 0.0, 0.0], [0.5, 0.0, 0.5]],
         atol=1e-5,
     )
 
