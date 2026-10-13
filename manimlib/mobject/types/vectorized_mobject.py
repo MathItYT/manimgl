@@ -830,8 +830,11 @@ class VMobject(Mobject):
             start_style["interpolation"] * (1.0 - alpha)
             + target_style["interpolation"] * alpha
         )
+        # spread modes are blended by the shader (pad -> repeat -> reflect),
+        # rather than switching abruptly at alpha == 0.5.
         self.uniforms["gradient_spread"] = (
-            start_style["spread"] if alpha < 0.5 else target_style["spread"]
+            start_style["spread"] * (1.0 - alpha)
+            + target_style["spread"] * alpha
         )
         for key in GRADIENT_POINT_KEYS:
             self.uniforms[key] = path_func(
