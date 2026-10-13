@@ -558,14 +558,22 @@ WINDING_COUNT = PipelineState(
 FILL_BORDER = PipelineState(
     depth_write=False,
     depth_compare="less",
-
-    # Stencil value 0 denotes the exterior of the fill, including holes in rings.
-    # Draw the fringe there; fill.wgsl supplies matching coverage on the filled side.
     stencil_compare="equal",
-
     stencil_ops=(
         KEEP,
         KEEP,
+    ),
+)
+
+# The same stroke-shader geometry covers the filled half of a zero-width AA fringe.
+# Consuming its stencil pixels prevents the hard fill cover from overwriting that ramp.
+FILL_BORDER_INSIDE = PipelineState(
+    depth_write=False,
+    depth_compare="less",
+    stencil_compare="not-equal",
+    stencil_ops=(
+        ("keep", "keep", "zero"),
+        ("keep", "keep", "zero"),
     ),
 )
 
@@ -640,6 +648,9 @@ class VDrawing(Drawing):
     border_declaration = (
         "const IS_FILL_BORDER: bool = false;"
     )
+    fill_border_inside_declaration = (
+        "const FILL_BORDER_INSIDE: bool = false;"
+    )
 
     @classmethod
     def draws(
@@ -669,19 +680,25 @@ class VDrawing(Drawing):
         )
 
         declaration = cls.border_declaration
+        inside_declaration = cls.fill_border_inside_declaration
 
         if declaration not in stroke_source:
             raise ValueError(
                 f"The stroke shader no longer declares "
                 f"{declaration!r}"
             )
+        if inside_declaration not in stroke_source:
+            raise ValueError(
+                f"The stroke shader no longer declares "
+                f"{inside_declaration!r}"
+            )
 
         border = {
-            declaration:
-                declaration.replace(
-                    "false",
-                    "true",
-                )
+            declaration: declaration.replace("false", "true"),
+        }
+        border_inside = {
+            **border,
+            inside_declaration: inside_declaration.replace("false", "true"),
         }
 
         target = mobject.shader_code_target
@@ -703,6 +720,10 @@ class VDrawing(Drawing):
             else nothing
         )
 
+        border_replacements = {**for_stroke, **border}
+        border_inside_replacements = {**for_stroke, **border_inside}
+        border_depth_replacements = {**for_stroke, **border}
+
         fill_file = cls.fill_file
         fill_replacements = for_fill
         fill_depth_file = cls.fill_depth_file
@@ -713,10 +734,27 @@ class VDrawing(Drawing):
             # shader samples the first declared 2D texture using per-control-point UVs.
             fill_file = "fill_texture.wgsl"
             fill_depth_file = "fill_depth_texture.wgsl"
+
+            # Both stroke-program fill-edge passes sample the same texture at the Bezier UV.
+            texture_sample = (
+                "let texel = textureSample(Texture, image_sampler, in.texture_uv);\n"
+                "    color = vec4f(color.rgb * texel.rgb, color.a * texel.a);"
+            )
+            border_replacements = {
+                **border_replacements,
+                "// TEXTURE_SAMPLE": texture_sample,
+            }
+            border_inside_replacements = {
+                **border_inside_replacements,
+                "// TEXTURE_SAMPLE": texture_sample,
+            }
+
             if texture_names[0] != "Texture":
                 texture_name_replacement = {r"\bTexture\b": texture_names[0]}
                 fill_replacements = {**for_fill, **texture_name_replacement}
                 fill_depth_replacements = {**for_fill, **texture_name_replacement}
+                border_replacements = {**border_replacements, **texture_name_replacement}
+                border_inside_replacements = {**border_inside_replacements, **texture_name_replacement}
 
         return [
             (
@@ -734,10 +772,13 @@ class VDrawing(Drawing):
             (
                 "border",
                 cls.stroke_file,
-                {
-                    **for_stroke,
-                    **border,
-                },
+                border_replacements,
+            ),
+
+            (
+                "border_inside",
+                cls.stroke_file,
+                border_inside_replacements,
             ),
 
             (
@@ -755,10 +796,7 @@ class VDrawing(Drawing):
             (
                 "border_depth",
                 cls.stroke_depth_file,
-                {
-                    **for_stroke,
-                    **border,
-                },
+                border_depth_replacements,
             ),
         ]
 
@@ -895,12 +933,13 @@ class VDrawing(Drawing):
             vertices,
         )
 
-        # Draw the border.
-        #
-        # This also never touches depth.
-        self.draw_fill_border(
-            render_pass,
-        )
+        # Use the stroke shader to rasterize the outside half of the AA fringe.
+        self.draw_fill_border(render_pass)
+
+        # With a zero-width border, draw the complementary inside half using the same
+        # stroke shader and consume those stencil pixels before the opaque fill cover.
+        if self.mobject.fill_border_width == 0.0:
+            self.draw_fill_border_inside(render_pass)
 
         # Draw the actual fill.
         #
@@ -916,16 +955,25 @@ class VDrawing(Drawing):
         self,
         render_pass: RenderPass,
     ) -> None:
-        # Reuse the stroke shader's signed-distance coverage for the fill boundary.
-        # The zero-width border is an AA fringe, not a visible stroke; stencil==0 keeps it
-        # on transparent pixels, including the inside edges of ring-shaped fills.
+        # Exterior half: exact stroke shader, only where the winding number is zero.
         self.draw_pass(
             render_pass,
             "border",
             FILL_BORDER,
-            self.stroke_vertices(
-                extra_curves=1,
-            ),
+            self.stroke_vertices(extra_curves=1),
+        )
+
+    def draw_fill_border_inside(
+        self,
+        render_pass: RenderPass,
+    ) -> None:
+        # Interior half: complement the stroke fringe and consume stencil so the opaque
+        # winding cover cannot overwrite the partial alpha with a hard edge.
+        self.draw_pass(
+            render_pass,
+            "border_inside",
+            FILL_BORDER_INSIDE,
+            self.stroke_vertices(extra_curves=1),
         )
 
     def draw_stroke(
