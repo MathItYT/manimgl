@@ -280,7 +280,10 @@ class VMobject(Mobject):
             targets = [self]
 
         for mob in targets:
-            mob.textures[name] = texture.copy()
+            mob.textures = {
+                name: texture.copy(),
+                **{key: source for key, source in mob.textures.items() if key != name},
+            }
             points = mob.get_points()
             lower = points[:, :2].min(axis=0)
             upper = points[:, :2].max(axis=0)
