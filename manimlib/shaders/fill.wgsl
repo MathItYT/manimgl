@@ -33,6 +33,7 @@ struct VertexOutput {
     @location(2) fill_all: f32,
     // uv space is where the curve coincides with y = x^2
     @location(3) uv_coords: vec2f,
+    @location(4) point: vec3f,
 }
 
 @vertex
@@ -52,7 +53,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
     anchor. Nothing to draw for those, or for a clear fill, so collapse all six corners onto
     one point to leave no area to rasterize.
     */
-    if (all(controls[0] == controls[1]) || max(mob.fill_rgba.a, mob.fill_rgba_end.a) == 0.0) {
+    if (all(controls[0] == controls[1]) || !fill_has_alpha()) {
         out.position = vec4f(0.0, 0.0, 0.0, 1.0);
         return out;
     }
@@ -86,6 +87,7 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
     var uv = SIMPLE_QUADRATIC;
     out.uv_coords = uv[corner_index];
     out.color = finalize_color(fill_color_at(point), point, mob.unit_normal);
+    out.point = point;
     let projection = project_point(point);
     out.position = projection.position;
     out.clip_distances = projection.clip_distances;
@@ -95,7 +97,8 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     clip_test(in.clip_distances);
-    if (in.color.a == 0.0) { discard; }
+    let color = finalize_color(fill_color_at(in.point), in.point, mob.unit_normal);
+    if (color.a == 0.0) { discard; }
     /*
     For the triangles hugging a bezier curve, cut away the part of the triangle falling
     outside it. In uv space the curve coincides with y = x^2. Note that this same test runs
@@ -103,5 +106,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     colored in.
     */
     if (in.fill_all == 0.0 && in.uv_coords.y < in.uv_coords.x * in.uv_coords.x) { discard; }
-    return in.color;
+    return color;
 }
