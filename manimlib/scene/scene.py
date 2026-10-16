@@ -399,6 +399,14 @@ class Scene(object):
             self.update_mobjects(dt)
         self.draw_frame(dt, force_draw)
 
+    def update_mobjects_in_steps(self, dt: float) -> None:
+        remaining = max(0.0, float(dt))
+        max_step = 1.0 / max(1.0, float(self.camera.fps))
+        while remaining > 1e-9:
+            step = min(remaining, max_step)
+            self.update_mobjects(step)
+            remaining -= step
+
     async def update_mobjects_in_steps_async(self, dt: float) -> None:
         """Apply a possibly delayed browser time interval in safe updater steps.
 
@@ -407,6 +415,9 @@ class Scene(object):
         the full elapsed timeline interval, but subdivide updater calls and draw
         only after the caller has finished catching up.
         """
+        if not any(mob.has_async_updaters() for mob in self.mobjects):
+            self.update_mobjects_in_steps(dt)
+            return
         remaining = max(0.0, float(dt))
         max_step = 1.0 / max(1.0, float(self.camera.fps))
         while remaining > 1e-9:
@@ -457,6 +468,9 @@ class Scene(object):
             mobject.update(dt, frame_rate=self.camera.fps)
 
     async def update_mobjects_async(self, dt: float) -> None:
+        if not any(mob.has_async_updaters() for mob in self.mobjects):
+            self.update_mobjects(dt)
+            return
         for mobject in self.mobjects:
             await mobject.update_async(dt, frame_rate=self.camera.fps)
 

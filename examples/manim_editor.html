@@ -583,6 +583,32 @@
   <script type="module">
     import { initializeBrowserWasm } from "./browser_wasm/browser_wasm.js";
 
+    window.__manimNextFrame = () => new Promise(resolve => {
+      let done = false;
+      let timerId = null;
+      const finish = ts => {
+        if (!done) {
+          done = true;
+          if (timerId !== null) {
+            clearTimeout(timerId);
+            timerId = null;
+          }
+          const now = typeof ts === "number" ? ts : performance.now();
+          window.__totalFrames = (window.__totalFrames || 0) + 1;
+          resolve(now);
+        }
+      };
+      const win = (canvas && canvas.ownerDocument && canvas.ownerDocument.defaultView)
+        || (canvasPreviewWindow && !canvasPreviewWindow.closed ? canvasPreviewWindow : window);
+      const raf = (win && typeof win.requestAnimationFrame === "function")
+        ? win.requestAnimationFrame.bind(win)
+        : (typeof requestAnimationFrame === "function" ? requestAnimationFrame : null);
+      if (raf) {
+        raf(finish);
+      }
+      timerId = setTimeout(finish, 250);
+    });
+
     let canvas = null;
     // Keep the render target at true Full HD regardless of the editor preview size.
     // CSS scales it down on screen; frames are read directly from the WebGPU canvas.
@@ -2037,6 +2063,12 @@ async def _browser_add_number_line_numbers(line):
     await line.add_numbers_async(excluding=line.numbers_to_exclude)
     return line
 
+def _browser_schedule_task(coro_or_val):
+    import asyncio, inspect
+    if inspect.isawaitable(coro_or_val):
+        return asyncio.create_task(coro_or_val)
+    return coro_or_val
+
 _previous_scene = globals().get("_editor_scene")
 _reusable_window = (
     getattr(_previous_scene, "window", None)
@@ -2078,6 +2110,7 @@ from js import window
 _canvas_target = window.__manimCanvasElement
 if _canvas_target is None:
     raise RuntimeError("Open the canvas window with “Open Canvas” first.")
+
 _editor_scene = await run_scene_from_class(
     _scene_class,
     _canvas_target,
@@ -2309,6 +2342,7 @@ _editor_scene_token = ${token}`;
             showWords: true,
           },
         });
+        window.editor = editor;
         registerLightweightPythonCompletions();
 
         // Explicitly request suggestions when the user types the space after
@@ -2592,6 +2626,8 @@ _editor_scene_token = ${token}`;
         setLoading(true, "Loading Pyodide…");
         const { loadPyodide } = await import(PYODIDE_URL);
         pyodide = await loadPyodide();
+        window.pyodide = pyodide;
+        window.transformSource = transformSource;
 
         setStatus("Installing Python dependencies…");
         await pyodide.loadPackage([
@@ -2611,6 +2647,37 @@ import micropip
 await micropip.install(${JSON.stringify(new URL(manifest.wgpu, wheelBase).href)})
 await micropip.install(${JSON.stringify(new URL(manifest.manimgl, wheelBase).href)})
 `);
+
+        try {
+          const transformSourceUrl = new URL("../manimlib/utils/browser_code_transform.py", document.baseURI);
+          const transformCode = await fetch(transformSourceUrl, { cache: "no-store" }).then(r => r.ok ? r.text() : null);
+          if (transformCode) {
+            await pyodide.runPythonAsync(`
+import sys
+from types import ModuleType
+_mod = ModuleType("manimlib.utils.browser_code_transform")
+exec(${JSON.stringify(transformCode)}, _mod.__dict__)
+sys.modules["manimlib.utils.browser_code_transform"] = _mod
+`);
+          }
+        } catch (e) {
+          console.warn("[browser_code_transform sync]", e);
+        }
+
+        try {
+          const windowSourceUrl = new URL("../manimlib/window.py", document.baseURI);
+          const windowCode = await fetch(windowSourceUrl, { cache: "no-store" }).then(r => r.ok ? r.text() : null);
+          if (windowCode) {
+            await pyodide.runPythonAsync(`
+import sys
+_wmod = sys.modules.get("manimlib.window")
+if _wmod:
+    exec(${JSON.stringify(windowCode)}, _wmod.__dict__)
+`);
+          }
+        } catch (e) {
+          console.warn("[window sync]", e);
+        }
 
         // Restore the user's package list after the editor's pinned runtime wheels.
         const savedDependencies = getSavedPythonDependencies();

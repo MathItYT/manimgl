@@ -750,6 +750,20 @@ class Line(TipableVMobject):
 
     def put_start_and_end_on(self, start: Vect3, end: Vect3) -> Self:
         curr_start, curr_end = self.get_start_and_end()
+        if (
+            len(curr_start) == len(start) == 3
+            and len(curr_end) == len(end) == 3
+            and abs(curr_start[0] - start[0]) < 1e-6
+            and abs(curr_start[1] - start[1]) < 1e-6
+            and abs(curr_start[2] - start[2]) < 1e-6
+            and abs(curr_end[0] - end[0]) < 1e-6
+            and abs(curr_end[1] - end[1]) < 1e-6
+            and abs(curr_end[2] - end[2]) < 1e-6
+        ):
+            return self
+        if self.path_arc == 0:
+            self.set_points_by_ends(start, end, buff=0, path_arc=0)
+            return self
         if np.isclose(curr_start, curr_end).all():
             # Handle null lines more gracefully
             self.set_points_by_ends(start, end, buff=0, path_arc=self.path_arc)

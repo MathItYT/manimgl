@@ -123,6 +123,31 @@ class DecimalNumber(VMobject):
         if self.include_background_rectangle:
             self.add_background_rectangle()
 
+    _glyph_cache_by_font: dict = {}
+
+    async def init_glyph_cache_async(self) -> dict:
+        try:
+            font_key = (self.get_font_size(), tuple(sorted((k, str(v)) for k, v in self.text_config.items())))
+        except Exception:
+            font_key = self.get_font_size()
+        if font_key not in DecimalNumber._glyph_cache_by_font:
+            from manimlib.mobject.svg.typst_mobject import Typst
+            chars = "0123456789.-+–, i"
+            t = await Typst.create(chars, isolate=tuple(chars), font_size=self.get_font_size(), **self.text_config)
+            cache = {}
+            for idx, ch in enumerate(chars):
+                indices = t.find_submobject_indices_by_span((idx, idx + 1))
+                if indices:
+                    mob = VGroup(*(t.submobjects[i].copy() for i in indices))
+                    mob.font_size = self.get_font_size()
+                    cache[ch] = mob
+            blank = VMobject()
+            blank.font_size = self.get_font_size()
+            cache[" "] = blank
+            DecimalNumber._glyph_cache_by_font[font_key] = cache
+        self._glyph_cache = DecimalNumber._glyph_cache_by_font[font_key]
+        return self._glyph_cache
+
     @classmethod
     async def create(cls, number: float | complex = 0, **kwargs):
         """Asynchronously construct a DecimalNumber in browser/Pyodide."""
@@ -131,7 +156,8 @@ class DecimalNumber(VMobject):
             return cls(number, **kwargs)
 
         obj = cls(number, _skip_text_render=True, **kwargs)
-        await obj.set_submobjects_from_number_async(number)
+        await obj.init_glyph_cache_async()
+        obj.set_submobjects_from_number(number)
         obj.draw_fills_together_if_disjoint()
         return obj
 
@@ -268,7 +294,10 @@ class DecimalNumber(VMobject):
         num_string = num_string.replace("-", "–")
         return num_string
 
-    def char_to_mob(self, char: str) -> Text:
+    def char_to_mob(self, char: str) -> VMobject:
+        cache = getattr(self, "_glyph_cache", None)
+        if cache and char in cache:
+            return cache[char].copy()
         return char_to_cahced_mob(char, **self.text_config)
 
     def interpolate(
@@ -295,6 +324,10 @@ class DecimalNumber(VMobject):
         - num_decimal_places
         - field_name (e.g. 0 or 0.real)
         """
+        if not kwargs:
+            cached = getattr(self, "_cached_formatter", None)
+            if cached is not None:
+                return cached
         config = dict([
             (attr, getattr(self, attr))
             for attr in [
@@ -306,7 +339,7 @@ class DecimalNumber(VMobject):
         ])
         config.update(kwargs)
         ndp = config["num_decimal_places"]
-        return "".join([
+        formatter = "".join([
             "{",
             config.get("field_name", ""),
             ":",
@@ -316,6 +349,9 @@ class DecimalNumber(VMobject):
             f".{ndp}f" if ndp > 0 else "d",
             "}",
         ])
+        if not kwargs:
+            self._cached_formatter = formatter
+        return formatter
 
     def get_complex_formatter(self, **kwargs) -> str:
         return "".join([

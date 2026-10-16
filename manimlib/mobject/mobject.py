@@ -323,23 +323,31 @@ class Mobject(object):
             self._needs_new_bounding_box = False
         return self.bounding_box
 
+    def has_points_in_family(self) -> bool:
+        if len(self.data) > 0:
+            return True
+        return any(sm.has_points_in_family() for sm in self.submobjects)
+
     def compute_bounding_box(self) -> Vect3Array:
-        all_points = np.vstack([
-            self.get_points(),
-            *(
-                mob.get_bounding_box()
-                for mob in self.get_family()[1:]
-                if mob.has_points()
-            )
-        ])
-        if len(all_points) == 0:
-            return np.zeros((3, self.dim))
+        pts = self.get_points()
+        sub_bbs = [
+            sm.get_bounding_box()
+            for sm in self.submobjects
+            if sm.has_points_in_family()
+        ]
+        if len(pts) == 0:
+            if not sub_bbs:
+                return np.zeros((3, self.dim))
+            mins = np.min([bb[0] for bb in sub_bbs], axis=0)
+            maxs = np.max([bb[2] for bb in sub_bbs], axis=0)
         else:
-            # Lower left and upper right corners
-            mins = all_points.min(0)
-            maxs = all_points.max(0)
-            mids = (mins + maxs) / 2
-            return np.array([mins, mids, maxs])
+            mins = pts.min(0)
+            maxs = pts.max(0)
+            if sub_bbs:
+                mins = np.minimum(mins, np.min([bb[0] for bb in sub_bbs], axis=0))
+                maxs = np.maximum(maxs, np.max([bb[2] for bb in sub_bbs], axis=0))
+        mids = (mins + maxs) / 2
+        return np.array([mins, mids, maxs])
 
     def refresh_bounding_box(
         self,
@@ -794,6 +802,7 @@ class Mobject(object):
         self.updaters: list[Updater] = list()
         self._has_updaters_in_family: Optional[bool] = False
         self._has_time_based_updaters_in_family: Optional[bool] = False
+        self._has_async_updaters_in_family: Optional[bool] = False
         self.updating_suspended: bool = False
 
     def update(self, dt: float = 0, recurse: bool = True, frame_rate: float | None = None) -> Self:
@@ -811,6 +820,8 @@ class Mobject(object):
         """Run synchronous and asynchronous updaters without blocking WASM."""
         if not self.has_updaters() or self.updating_suspended:
             return self
+        if not self.has_async_updaters():
+            return self.update(dt, recurse, frame_rate)
         if recurse:
             for submob in self.submobjects:
                 await submob.update_async(dt, recurse, frame_rate)
@@ -846,6 +857,7 @@ class Mobject(object):
             mob.updaters = []
             mob._has_updaters_in_family = None
             mob._has_time_based_updaters_in_family = None
+            mob._has_async_updaters_in_family = None
         # Note this also propagates up to any ancestors, which may
         # still have other descendants with updaters
         self.refresh_has_updater_status()
@@ -892,9 +904,21 @@ class Mobject(object):
             )
         return self._has_time_based_updaters_in_family
 
+    def has_async_updaters(self) -> bool:
+        if not self.has_updaters():
+            return False
+        if self._has_async_updaters_in_family is None:
+            self._has_async_updaters_in_family = any(
+                updater.is_async for updater in self.updaters
+            ) or any(
+                sm.has_async_updaters() for sm in self.submobjects
+            )
+        return self._has_async_updaters_in_family
+
     def refresh_has_updater_status(self) -> Self:
         self._has_updaters_in_family = None
         self._has_time_based_updaters_in_family = None
+        self._has_async_updaters_in_family = None
         for parent in self.parents:
             parent.refresh_has_updater_status()
         return self
@@ -912,11 +936,19 @@ class Mobject(object):
     # Transforming operations
 
     def shift(self, vector: Vect3) -> Self:
-        self.apply_points_function(
-            lambda points: points + vector,
-            about_edge=None,
-            works_on_bounding_box=True,
-        )
+        if not np.any(vector):
+            return self
+        vector = np.asarray(vector)
+        for m in self.get_family():
+            if len(m.data) > 0:
+                for key in m.pointlike_data_keys:
+                    m.data[key] += vector
+            for key in m.pointlike_uniform_keys:
+                m.uniforms.apply(key, lambda pts: pts + vector)
+            if not m._needs_new_bounding_box:
+                m.bounding_box += vector
+        for parent in self.parents:
+            parent.refresh_bounding_box()
         return self
 
     def scale(
@@ -1515,11 +1547,11 @@ class Mobject(object):
 
     def get_bounding_box_point(self, direction: Vect3) -> Vect3:
         bb = self.get_bounding_box()
-        indices = (np.sign(direction) + 1).astype(int)
-        return np.array([
-            bb[indices[i]][i]
-            for i in range(3)
-        ])
+        dx, dy, dz = direction[0], direction[1], direction[2]
+        ix = 2 if dx > 0 else (0 if dx < 0 else 1)
+        iy = 2 if dy > 0 else (0 if dy < 0 else 1)
+        iz = 2 if dz > 0 else (0 if dz < 0 else 1)
+        return np.array([bb[ix, 0], bb[iy, 1], bb[iz, 2]])
 
     def get_edge_center(self, direction: Vect3) -> Vect3:
         return self.get_bounding_box_point(direction)
@@ -2428,6 +2460,7 @@ class Updater(object):
     def __init__(self, func: UpdateFunction):
         self.func = func
         self.takes_dt = self.func_takes_dt(func)
+        self.is_async = inspect.iscoroutinefunction(func) or inspect.iscoroutinefunction(getattr(func, "__call__", None))
 
     @staticmethod
     def func_takes_dt(func: UpdateFunction) -> bool:
@@ -2452,9 +2485,11 @@ class Updater(object):
         for _ in range(n_steps):
             self.func(mobject, dt / n_steps)
 
-
     async def call_async(self, mobject: Mobject, dt: float = 0, frame_rate: float | None = None) -> None:
         """Invoke an updater and await its result when it is asynchronous."""
+        if not self.is_async:
+            self(mobject, dt, frame_rate)
+            return
         n_steps = 1 if frame_rate is None else max(int(dt * frame_rate), 1)
         step_dt = dt / n_steps
         for _ in range(n_steps):

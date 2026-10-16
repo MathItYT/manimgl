@@ -265,15 +265,27 @@ class Window(object):
                     return;
                 }
 
+                let cachedRect = null;
+                const updateRect = () => {
+                    cachedRect = canvas.getBoundingClientRect();
+                };
+                updateRect();
+                window.addEventListener("resize", updateRect, { passive: true });
+                if (canvas.ownerDocument && canvas.ownerDocument.defaultView && canvas.ownerDocument.defaultView !== window) {
+                    canvas.ownerDocument.defaultView.addEventListener("resize", updateRect, { passive: true });
+                }
+
                 const update = (event) => {
-                    const rect = canvas.getBoundingClientRect();
+                    if (!cachedRect) {
+                        cachedRect = canvas.getBoundingClientRect();
+                    }
                     canvas.__manimPointer = {
                         clientX: event.clientX,
                         clientY: event.clientY,
-                        left: rect.left,
-                        top: rect.top,
-                        width: rect.width,
-                        height: rect.height,
+                        left: cachedRect.left,
+                        top: cachedRect.top,
+                        width: cachedRect.width,
+                        height: cachedRect.height,
                     };
                 };
 
@@ -334,16 +346,29 @@ class Window(object):
             },
             primitive={"topology": wgpu.PrimitiveTopology.triangle_list},
         )
+        self._present_bind_group = None
+        self._present_frame_view = None
 
     def present(self, target_view) -> None:
         """
         Draws the finished frame onto what the surface gave us, stretched to fill it, see
         shaders/present.wgsl. A pass of its own, the two textures differing in size and format.
         """
-        bind_group = self.device.create_bind_group(layout=self.present_layout, entries=[
-            {"binding": 0, "resource": self.frame_view},
-            {"binding": 1, "resource": self.present_sampler},
-        ])
+        if self.frame_view is None:
+            return
+        if (
+            getattr(self, "_present_bind_group", None) is None
+            or getattr(self, "_present_frame_view", None) is not self.frame_view
+        ):
+            self._present_frame_view = self.frame_view
+            self._present_bind_group = self.device.create_bind_group(
+                layout=self.present_layout,
+                entries=[
+                    {"binding": 0, "resource": self.frame_view},
+                    {"binding": 1, "resource": self.present_sampler},
+                ],
+            )
+        bind_group = self._present_bind_group
         encoder = self.device.create_command_encoder()
         render_pass = encoder.begin_render_pass(color_attachments=[{
             "view": target_view,
@@ -468,8 +493,11 @@ class Window(object):
                         client_y = None
 
                     if client_y is not None:
-                        rect = canvas.getBoundingClientRect()
-                        width, height = float(rect.width), float(rect.height)
+                        width = float(getattr(pointer, "width", 0) or 0)
+                        height = float(getattr(pointer, "height", 0) or 0)
+                        if width <= 0 or height <= 0:
+                            rect = canvas.getBoundingClientRect()
+                            width, height = float(rect.width), float(rect.height)
                         render_width, render_height = self.render_size
 
                         if width > 0 and height > 0:
