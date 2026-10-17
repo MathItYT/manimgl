@@ -203,6 +203,33 @@ def char_to_mob(self, char: str):
                                 if isinstance(fn_node, ast.FunctionDef) and fn_node.name == target_name:
                                     fn_node.__class__ = ast.AsyncFunctionDef
 
+        # Phase 0.6: Transform construct and setup methods in Scene classes into async
+        scene_class_names = {'Scene'}
+        changed_scene = True
+        while changed_scene:
+            changed_scene = False
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name not in scene_class_names:
+                    if any(
+                        (isinstance(b, ast.Name) and (b.id == 'Scene' or b.id.endswith('Scene') or b.id in scene_class_names)) or
+                        (isinstance(b, ast.Attribute) and (b.attr == 'Scene' or b.attr.endswith('Scene') or b.attr in scene_class_names))
+                        for b in node.bases
+                    ):
+                        scene_class_names.add(node.name)
+                        changed_scene = True
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and (
+                node.name in scene_class_names or any(
+                    (isinstance(b, ast.Name) and (b.id == 'Scene' or b.id.endswith('Scene') or b.id in scene_class_names)) or
+                    (isinstance(b, ast.Attribute) and (b.attr == 'Scene' or b.attr.endswith('Scene') or b.attr in scene_class_names))
+                    for b in node.bases
+                )
+            ):
+                for child in node.body:
+                    if isinstance(child, ast.FunctionDef) and child.name in ('construct', 'setup'):
+                        child.__class__ = ast.AsyncFunctionDef
+
         # Phase 1: Transform built-in async primitives (Text.create, play_async, wait_async, etc.)
         tree = self.visit(tree)
 
@@ -246,17 +273,75 @@ def char_to_mob(self, char: str):
                             if isinstance(target, ast.Name):
                                 async_func_names.add(target.id)
 
+            # Build map from function node to its enclosing ClassDef (if any)
+            func_to_class = {}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    for item in node.body:
+                        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            func_to_class[item] = node
+
+            # Classify methods by class type
+            scene_class_names = {'Scene'}
+            changed_scene = True
+            while changed_scene:
+                changed_scene = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ClassDef) and node.name not in scene_class_names:
+                        if any(
+                            (isinstance(b, ast.Name) and (b.id == 'Scene' or b.id.endswith('Scene') or b.id in scene_class_names)) or
+                            (isinstance(b, ast.Attribute) and (b.attr == 'Scene' or b.attr.endswith('Scene') or b.attr in scene_class_names))
+                            for b in node.bases
+                        ):
+                            scene_class_names.add(node.name)
+                            changed_scene = True
+
+            scene_async_methods = set()
+            non_scene_async_methods = set()
+            non_scene_sync_methods = set()
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    is_sc = node.name in scene_class_names or any(
+                        (isinstance(b, ast.Name) and (b.id == 'Scene' or b.id.endswith('Scene') or b.id in scene_class_names)) or
+                        (isinstance(b, ast.Attribute) and (b.attr == 'Scene' or b.attr.endswith('Scene') or b.attr in scene_class_names))
+                        for b in node.bases
+                    )
+                    for item in node.body:
+                        if isinstance(item, ast.AsyncFunctionDef):
+                            if is_sc:
+                                scene_async_methods.add(item.name)
+                            else:
+                                non_scene_async_methods.add(item.name)
+                        elif isinstance(item, ast.FunctionDef):
+                            if not is_sc:
+                                non_scene_sync_methods.add(item.name)
+
+            non_scene_sync_methods -= non_scene_async_methods
+
             await_added = False
             transformer = self
 
             class AwaitCallTransformer(ast.NodeTransformer):
-                def __init__(self, async_names):
+                def __init__(self, async_names, scene_async_methods, non_scene_async_methods, non_scene_sync_methods, scene_class_names):
                     super().__init__()
                     self.async_names = async_names
+                    self.scene_async_methods = scene_async_methods
+                    self.non_scene_async_methods = non_scene_async_methods
+                    self.non_scene_sync_methods = non_scene_sync_methods
+                    self.scene_class_names = scene_class_names
+                    self.current_class = None
                     self.await_added = False
                     self.in_await = False
                     self.in_lambda = False
                     self.in_init = False
+
+                def visit_ClassDef(self, node):
+                    prev_class = self.current_class
+                    self.current_class = node
+                    node = self.generic_visit(node)
+                    self.current_class = prev_class
+                    return node
 
                 def visit_FunctionDef(self, node):
                     prev_init = self.in_init
@@ -305,13 +390,68 @@ def char_to_mob(self, char: str):
                         func_name = node.func.attr
                         is_attr = True
 
-                    if is_attr and func_name in SYNCHRONOUS_MOBJECT_METHODS:
-                        return node
-
                     if func_name == '__init__':
                         return node
 
-                    if func_name in self.async_names and func_name != 'construct':
+                    if is_attr and func_name in SYNCHRONOUS_MOBJECT_METHODS:
+                        return node
+
+                    should_await = False
+                    if not is_attr:
+                        if func_name in self.async_names and func_name != 'construct':
+                            should_await = True
+                    else:
+                        val = node.func.value
+                        is_self_or_super = False
+                        if isinstance(val, ast.Name) and val.id in ('self', 'cls', 'scene'):
+                            is_self_or_super = True
+                        elif isinstance(val, ast.Call):
+                            if (isinstance(val.func, ast.Name) and val.func.id == 'super') or \
+                               (isinstance(val.func, ast.Attribute) and val.func.attr == 'super'):
+                                is_self_or_super = True
+                        elif isinstance(val, ast.Attribute) and isinstance(val.value, ast.Name) and val.value.id == 'self' and val.attr == 'scene':
+                            is_self_or_super = True
+
+                        if is_self_or_super:
+                            if isinstance(val, ast.Name) and val.id in ('self', 'cls') and self.current_class is not None:
+                                current_is_scene = (
+                                    self.current_class.name in self.scene_class_names or
+                                    any(
+                                        (isinstance(b, ast.Name) and (b.id == 'Scene' or b.id.endswith('Scene') or b.id in self.scene_class_names)) or
+                                        (isinstance(b, ast.Attribute) and (b.attr == 'Scene' or b.attr.endswith('Scene') or b.attr in self.scene_class_names))
+                                        for b in self.current_class.bases
+                                    )
+                                )
+                                current_class_async = {
+                                    m.name for m in self.current_class.body if isinstance(m, ast.AsyncFunctionDef)
+                                }
+                                current_class_sync = {
+                                    m.name for m in self.current_class.body if isinstance(m, ast.FunctionDef)
+                                }
+                                if func_name in current_class_sync:
+                                    should_await = False
+                                elif func_name in current_class_async and func_name != 'construct':
+                                    should_await = True
+                                elif current_is_scene and (func_name in self.scene_async_methods or func_name in self.async_names) and func_name != 'construct':
+                                    should_await = True
+                                elif not current_is_scene and func_name in self.non_scene_async_methods and func_name != 'construct':
+                                    should_await = True
+                            else:
+                                if func_name in self.async_names and func_name != 'construct':
+                                    should_await = True
+                        else:
+                            if func_name == 'create' and isinstance(val, ast.Name) and val.id in (transformer.async_create_mobjects | SYNC_CREATE_MOBJECTS):
+                                should_await = True
+                            elif func_name in self.non_scene_async_methods:
+                                should_await = True
+                            elif func_name in self.non_scene_sync_methods:
+                                should_await = False
+                            elif func_name in self.scene_async_methods:
+                                should_await = False
+                            else:
+                                should_await = False
+
+                    if should_await:
                         if self.in_init:
                             return node
                         if self.in_lambda:
@@ -340,11 +480,18 @@ def char_to_mob(self, char: str):
                             )
                     return node
 
-            caller_transformer = AwaitCallTransformer(async_func_names)
+            caller_transformer = AwaitCallTransformer(
+                async_func_names,
+                scene_async_methods=scene_async_methods,
+                non_scene_async_methods=non_scene_async_methods,
+                non_scene_sync_methods=non_scene_sync_methods,
+                scene_class_names=scene_class_names,
+            )
             for func in all_funcs:
                 prev_init = caller_transformer.in_init
                 if func.name == '__init__':
                     caller_transformer.in_init = True
+                caller_transformer.current_class = func_to_class.get(func)
                 new_body = []
                 for stmt in func.body:
                     res = caller_transformer.visit(stmt)
@@ -361,17 +508,20 @@ def char_to_mob(self, char: str):
             if not newly_marked_async and not await_added:
                 break
 
-        # Ensure any Scene construct method is AsyncFunctionDef
+        # Ensure any Scene construct or setup method is AsyncFunctionDef
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
-                is_scene = any(
-                    (isinstance(b, ast.Name) and (b.id == 'Scene' or b.id.endswith('Scene'))) or
-                    (isinstance(b, ast.Attribute) and (b.attr == 'Scene' or b.attr.endswith('Scene')))
-                    for b in node.bases
+                is_scene = (
+                    node.name in scene_class_names or
+                    any(
+                        (isinstance(b, ast.Name) and (b.id == 'Scene' or b.id.endswith('Scene') or b.id in scene_class_names)) or
+                        (isinstance(b, ast.Attribute) and (b.attr == 'Scene' or b.attr.endswith('Scene') or b.attr in scene_class_names))
+                        for b in node.bases
+                    )
                 )
                 if is_scene:
                     for child in node.body:
-                        if isinstance(child, ast.FunctionDef) and child.name == 'construct':
+                        if isinstance(child, ast.FunctionDef) and child.name in ('construct', 'setup'):
                             child.__class__ = ast.AsyncFunctionDef
 
                 existing_methods = {
@@ -659,7 +809,7 @@ def char_to_mob(self, char: str):
 
         if is_scene_class:
             for child in node.body:
-                if isinstance(child, ast.FunctionDef) and child.name == 'construct':
+                if isinstance(child, ast.FunctionDef) and child.name in ('construct', 'setup'):
                     child.__class__ = ast.AsyncFunctionDef
 
         return node

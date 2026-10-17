@@ -140,7 +140,85 @@ class Handler:
         self.assertIn("if inspect.iscoroutine(_res):", transformed)
         self.assertIn("_res = await _res", transformed)
         self.assertIn("import inspect", transformed)
+        self.assertIn("async def setup(self):", transformed)
+        self.assertIn("await super().setup()", transformed)
+        self.assertIn("v.reset(notify=False)", transformed)
+        self.assertNotIn("await v.reset", transformed)
+
+    def test_scene_setup_transformed_to_async(self):
+        source = """
+class MyScene(Scene):
+    def setup(self):
+        super().setup()
+        self.val = 42
+
+    def construct(self):
+        self.wait(1)
+"""
+        transformed = transform_browser_source(source)
+        self.assertIn("async def setup(self):", transformed)
+        self.assertIn("await super().setup()", transformed)
+        self.assertIn("async def construct(self):", transformed)
+
+    def test_non_scene_sync_methods_not_awaited_when_scene_has_same_name(self):
+        source = """
+class LiveValue:
+    def reset(self, notify=True):
+        return self
+
+class MyScene(Scene):
+    def reset(self):
+        for v in self.lives:
+            v.reset(notify=False)
+        self.wait(1)
+"""
+        transformed = transform_browser_source(source)
+        self.assertIn("def reset(self, notify=True):", transformed)
+        self.assertIn("async def reset(self):", transformed)
+        self.assertIn("v.reset(notify=False)", transformed)
+        self.assertNotIn("await v.reset", transformed)
+
+    def test_runtime_execution_livevalue_reset_no_cant_be_awaited_error(self):
+        source = """
+class LiveValue:
+    def __init__(self, val):
+        self.initial = val
+        self.val = val
+
+    def reset(self, notify=True):
+        self.val = self.initial
+        return self
+
+class DummyScene(Scene):
+    def __init__(self):
+        self.lives = [LiveValue(10), LiveValue(20)]
+        self.waited = False
+
+    async def wait_async(self, t):
+        self.waited = True
+
+    def reset(self):
+        for v in self.lives:
+            v.reset(notify=False)
+        self.wait(1)
+"""
+        transformed = transform_browser_source(source)
+        scope = {"Scene": object}
+        exec(transformed, scope)
+        DummySceneClass = scope["DummyScene"]
+
+        scene = DummySceneClass()
+        scene.lives[0].val = 99
+        scene.lives[1].val = 88
+
+        # Calling reset should succeed and NOT raise "LiveValue object can't be awaited"
+        asyncio.run(scene.reset())
+
+        self.assertEqual(scene.lives[0].val, 10)
+        self.assertEqual(scene.lives[1].val, 20)
+        self.assertTrue(scene.waited)
 
 
 if __name__ == "__main__":
     unittest.main()
+
