@@ -105,6 +105,9 @@ class VMobject(Mobject):
         # From 0, leaving corners as sharp as they can be without jutting out, up to
         # 1, rounding off every one of them
         joint_roundness: float = 0.0,
+        # If true, stroke lies in the object's unit normal plane. If false, stroke
+        # expands perpendicular to the curve in the camera's view plane, maintaining
+        # uniform thickness across arbitrary 3D camera angles.
         flat_stroke: bool = False,
         # If false, stroke width is measured relative to the frame, so that a given
         # width looks the same at any zoom level. If true, it's measured relative to
@@ -349,7 +352,7 @@ class VMobject(Mobject):
                 mob.stroke_behind = behind
 
         if flat is not None:
-            self.set_flat_stroke(flat)
+            self.set_flat_stroke(flat, recurse=recurse)
 
         return self
 
@@ -561,6 +564,31 @@ class VMobject(Mobject):
 
     def has_fill(self) -> bool:
         return bool(max(self.uniforms["fill_rgba"][3], self.uniforms["fill_rgba_end"][3]))
+
+    def is_fill_opaque(self) -> bool:
+        if not self.has_fill():
+            return False
+        return bool(
+            self.uniforms["fill_rgba"][3] >= 0.999
+            and self.uniforms["fill_rgba_end"][3] >= 0.999
+        )
+
+    def is_stroke_opaque(self) -> bool:
+        if not self.has_stroke():
+            return False
+        data = self.data.rows_or_defaults
+        return bool((data['stroke_rgba'][:, 3] >= 0.999).all())
+
+    def is_opaque(self) -> bool:
+        has_f = self.has_fill()
+        has_s = self.has_stroke()
+        if not has_f and not has_s:
+            return True
+        if has_f and not self.is_fill_opaque():
+            return False
+        if has_s and not self.is_stroke_opaque():
+            return False
+        return True
 
     def get_opacity(self) -> float:
         if self.has_fill():

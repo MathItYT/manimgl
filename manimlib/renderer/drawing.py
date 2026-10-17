@@ -390,6 +390,12 @@ class Drawing(object):
         )
 
 
+TRANSPARENT_DEFAULT = PipelineState(
+    depth_write=False,
+    depth_compare="less",
+)
+
+
 class SurfaceDrawing(Drawing):
     """
     Drawing for ordinary 3D surfaces.
@@ -519,10 +525,17 @@ class SurfaceDrawing(Drawing):
             )
             return
 
+        mob = self.mobject
+        state = (
+            DEFAULT
+            if getattr(mob, "is_opaque", lambda: True)()
+            else TRANSPARENT_DEFAULT
+        )
+
         self.draw_pass(
             render_pass,
             "main",
-            DEFAULT,
+            state,
             self.order_count,
             self.order_buffer,
         )
@@ -756,6 +769,7 @@ class VDrawing(Drawing):
         )
 
         self.has_fill = False
+        self.has_opaque_fill = False
         self.stroke_behind = False
         self.fill_group: Any = None
 
@@ -788,13 +802,19 @@ class VDrawing(Drawing):
                 self.uniforms["fill_rgba"][3]
                 or self.uniforms["fill_rgba_end"][3]
             )
+            has_opaque_fill = bool(
+                self.uniforms["fill_rgba"][3] >= 0.999
+                and self.uniforms["fill_rgba_end"][3] >= 0.999
+            )
 
             self.invalidated = (
                 self.invalidated
                 or has_fill != self.has_fill
+                or has_opaque_fill != self.has_opaque_fill
             )
 
             self.has_fill = has_fill
+            self.has_opaque_fill = has_opaque_fill
 
         return changed
 
@@ -980,14 +1000,23 @@ class VDrawing(Drawing):
         if not self.depth_test:
             return
 
-        if self.has_fill:
+        # Transparent fills (alpha < 1.0) must not reserve depth, otherwise
+        # they clip and occlude geometry (e.g. text or vectors) behind or on them.
+        if getattr(self, "has_opaque_fill", False):
             self.draw_fill_depth(
                 render_pass,
             )
 
-        self.draw_stroke_depth(
-            render_pass,
-        )
+        mob = self.mobject
+        if hasattr(mob, "is_stroke_opaque"):
+            if mob.is_stroke_opaque():
+                self.draw_stroke_depth(
+                    render_pass,
+                )
+        else:
+            self.draw_stroke_depth(
+                render_pass,
+            )
 
     # -------------------------------------------------------------------------
     # Complete VMobject

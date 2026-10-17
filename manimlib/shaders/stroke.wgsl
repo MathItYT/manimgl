@@ -256,6 +256,63 @@ fn flat_tangent(
 }
 
 
+fn safe_normalize_2d(v: vec2f, fallback: vec2f) -> vec2f {
+    let len2 = dot(v, v);
+    if (len2 <= EPSILON * EPSILON) {
+        let fallback_len2 = dot(fallback, fallback);
+        if (fallback_len2 <= EPSILON * EPSILON) {
+            return vec2f(0.0, 0.0);
+        }
+        return fallback * inverseSqrt(fallback_len2);
+    }
+    return v * inverseSqrt(len2);
+}
+
+
+fn get_camera_basis() -> array<vec3f, 2> {
+    var R = vec3f(frame.view[0].x, frame.view[1].x, frame.view[2].x);
+    var U = vec3f(frame.view[0].y, frame.view[1].y, frame.view[2].y);
+    if (mob.is_fixed_in_frame != 0.0) {
+        R = vec3f(1.0, 0.0, 0.0);
+        U = vec3f(0.0, 1.0, 0.0);
+    } else {
+        R = safe_normalize(R, vec3f(1.0, 0.0, 0.0));
+        U = safe_normalize(U, vec3f(0.0, 1.0, 0.0));
+    }
+    return array<vec3f, 2>(R, U);
+}
+
+
+fn get_camera_normal() -> vec3f {
+    if (mob.is_fixed_in_frame != 0.0) {
+        return vec3f(0.0, 0.0, 1.0);
+    }
+    let N = vec3f(frame.view[0].z, frame.view[1].z, frame.view[2].z);
+    return safe_normalize(N, vec3f(0.0, 0.0, 1.0));
+}
+
+
+fn get_screen_tangent(point: vec3f, tangent: vec3f) -> vec2f {
+    var p_view = (frame.view * vec4f(point, 1.0)).xyz;
+    var t_view = (frame.view * vec4f(tangent, 0.0)).xyz;
+    if (mob.is_fixed_in_frame != 0.0) {
+        p_view = point;
+        t_view = tangent;
+    }
+
+    let w = 1.0 - p_view.z * frame.frame_rescale_factors.z;
+    let screen_tan = t_view.xy * w + p_view.xy * (t_view.z * frame.frame_rescale_factors.z);
+
+    if (dot(screen_tan, screen_tan) > EPSILON * EPSILON) {
+        return safe_normalize_2d(screen_tan, vec2f(1.0, 0.0));
+    }
+    if (dot(t_view.xy, t_view.xy) > EPSILON * EPSILON) {
+        return safe_normalize_2d(t_view.xy, vec2f(1.0, 0.0));
+    }
+    return vec2f(1.0, 0.0);
+}
+
+
 /*
 How far along its tangent the incoming strip must run to reach where the outgoing strip's
 edge meets it, the exact miter.
@@ -264,10 +321,37 @@ Degenerate tangents are deliberately treated as having no miter shift. The neigh
 geometry will still be rendered, rather than being discarded.
 */
 fn joint_shift(
+    point: vec3f,
     tan_in: vec3f,
     tan_out: vec3f,
     facing_normal: vec3f,
+    draw_flat: bool,
 ) -> f32 {
+    if (!draw_flat) {
+        let a = get_screen_tangent(point, tan_in);
+        let b = get_screen_tangent(point, tan_out);
+
+        let sin_angle = a.x * b.y - a.y * b.x;
+
+        if (abs(sin_angle) < 1e-6) {
+            return 0.0;
+        }
+
+        let cos_angle = clamp(
+            dot(a, b),
+            -1.0,
+            1.0,
+        );
+
+        let keep = smoothstep(
+            ROUND_COS_ROUND,
+            ROUND_COS_SHARP,
+            cos_angle,
+        ) * (1.0 - mob.joint_roundness);
+
+        return keep * (cos_angle - 1.0) / sin_angle;
+    }
+
     let a = flat_tangent(tan_in, facing_normal);
     let b = flat_tangent(tan_out, facing_normal);
 
@@ -306,19 +390,22 @@ Step perpendicular to the curve, out to the edge of the stroke, then along the c
 however far the joint at this end reaches.
 */
 fn step_to_corner(
+    point: vec3f,
     tangent: vec3f,
     facing_normal: vec3f,
     shift: f32,
     draw_flat: bool,
 ) -> vec3f {
-    var unflattened = tangent;
-
     if (!draw_flat) {
-        unflattened = project(
-            tangent,
-            facing_normal,
-        );
+        let basis = get_camera_basis();
+        let R = basis[0];
+        let U = basis[1];
+        let tan_2d = get_screen_tangent(point, tangent);
+        let step_2d = vec2f(-tan_2d.y, tan_2d.x);
+        return (step_2d.x + shift * tan_2d.x) * R + (step_2d.y + shift * tan_2d.y) * U;
     }
+
+    var unflattened = tangent;
 
     /*
     A degenerate tangent can occur in text paths. In that case use the object's normal
@@ -345,58 +432,6 @@ fn step_to_corner(
         step,
         vec3f(0.0),
     );
-
-    /*
-    For non-flat stroke, there can be glitches when the tangent direction lines up very
-    closely with the direction to the camera, treated here as the unit normal. To avoid
-    those, this smoothly transitions to a step direction perpendicular to the true curve
-    normal.
-    */
-    let tangent_normalized = safe_normalize(
-        tangent,
-        unit_tan,
-    );
-
-    let alignment = abs(
-        dot(
-            tangent_normalized,
-            facing_normal,
-        ),
-    );
-
-    if (alignment > ALIGNMENT_THRESHOLD) {
-        let perp_raw = cross(
-            mob.unit_normal,
-            tangent_normalized,
-        );
-
-        if (!is_degenerate(perp_raw)) {
-            let perp = safe_normalize(
-                perp_raw,
-                step,
-            );
-
-            let projected_step = project(
-                step,
-                perp,
-            );
-
-            if (!is_degenerate(projected_step)) {
-                step = mix(
-                    step,
-                    safe_normalize(
-                        projected_step,
-                        step,
-                    ),
-                    smoothstep(
-                        ALIGNMENT_THRESHOLD,
-                        1.0,
-                        alignment,
-                    ),
-                );
-            }
-        }
-    }
 
     return step + shift * unit_tan;
 }
@@ -677,10 +712,7 @@ fn vs_main(
         mob.flat_stroke != 0.0
         || mob.is_fixed_in_frame != 0.0;
 
-    var facing_normal = safe_normalize(
-        frame.camera_position - point,
-        mob.unit_normal,
-    );
+    var facing_normal = get_camera_normal();
 
     if (draw_flat) {
         facing_normal = safe_normalize(
@@ -757,15 +789,19 @@ fn vs_main(
     if (has_joint) {
         if (at_start) {
             shift = -joint_shift(
+                point,
                 neighbor,
                 tangent,
                 facing_normal,
+                draw_flat,
             );
         } else {
             shift = joint_shift(
+                point,
                 tangent,
                 neighbor,
                 facing_normal,
+                draw_flat,
             );
         }
     }
@@ -780,191 +816,254 @@ fn vs_main(
     var edge_dist = 0.0;
 
     if (joint_fan) {
-        /*
-        The fan normally joins the incoming and outgoing strips.
-
-        If one of the tangents is degenerate, do NOT discard the whole fan.
-        Instead construct a local round cap using the valid tangent.
-
-        This is the important change for complex VMobjects/text.
-        */
-        var tan_in = flat_tangent(
-            tangent,
-            facing_normal,
-        );
-
-        var tan_out = flat_tangent(
-            neighbor,
-            facing_normal,
-        );
-
-        /*
-        If the neighboring tangent is unavailable, use the current tangent.
-        This turns the fan into a round cap instead of creating a hole.
-        */
-        if (is_degenerate(tan_out)) {
-            tan_out = tan_in;
+        if (!has_joint) {
+            out.position = blank;
+            return out;
         }
 
-        if (is_degenerate(tan_in)) {
-            tan_in = tan_out;
-        }
+        if (!draw_flat) {
+            let basis = get_camera_basis();
+            let R = basis[0];
+            let U = basis[1];
 
-        /*
-        If both are still unavailable, fall back to a stable direction derived from
-        the object's normal. This prevents NaNs and, importantly, prevents an entire
-        reserved fan from disappearing.
-        */
-        if (is_degenerate(tan_in) && is_degenerate(tan_out)) {
-            let fallback_axis = safe_normalize(
+            let a = get_screen_tangent(point, tangent);
+            let b = get_screen_tangent(point, neighbor);
+
+            let perp_a = vec2f(-a.y, a.x);
+            let perp_b = vec2f(-b.y, b.x);
+
+            var outward = -1.0;
+            if (a.x * b.y - a.y * b.x < 0.0) {
+                outward = 1.0;
+            }
+
+            let edge_in_2d = outward * safe_normalize_2d(perp_a + shift * a, perp_a);
+            let edge_out_2d = outward * safe_normalize_2d(perp_b - shift * b, perp_b);
+
+            let sweep = atan2(
+                edge_in_2d.x * edge_out_2d.y - edge_in_2d.y * edge_out_2d.x,
+                dot(edge_in_2d, edge_out_2d),
+            );
+
+            if (abs(sweep) < 1e-5) {
+                out.position = blank;
+                return out;
+            }
+
+            let fan_tri =
+                2 * (segment - POLYLINE_SEGMENTS) + tri_vert / 3;
+
+            let fan_vert = tri_vert % 3;
+
+            let along =
+                f32(fan_tri + fan_vert - 1) / f32(FAN_TRIANGLES);
+
+            let angle = along * sweep;
+            let c = cos(angle);
+            let s = sin(angle);
+            let rotated_2d = vec2f(
+                edge_in_2d.x * c - edge_in_2d.y * s,
+                edge_in_2d.x * s + edge_in_2d.y * c,
+            );
+
+            step = rotated_2d.x * R + rotated_2d.y * U;
+
+            edge_dist =
+                sqrt(1.0 + shift * shift) * 0.5 * width;
+
+            dist_to_curve = 0.0;
+
+            if (fan_vert != 0) {
+                dist_to_curve =
+                    edge_dist + 0.5 * aaw;
+            }
+        } else {
+            /*
+            The fan normally joins the incoming and outgoing strips.
+
+            If one of the tangents is degenerate, do NOT discard the whole fan.
+            Instead construct a local round cap using the valid tangent.
+
+            This is the important change for complex VMobjects/text.
+            */
+            var tan_in = flat_tangent(
+                tangent,
+                facing_normal,
+            );
+
+            var tan_out = flat_tangent(
+                neighbor,
+                facing_normal,
+            );
+
+            /*
+            If the neighboring tangent is unavailable, use the current tangent.
+            This turns the fan into a round cap instead of creating a hole.
+            */
+            if (is_degenerate(tan_out)) {
+                tan_out = tan_in;
+            }
+
+            if (is_degenerate(tan_in)) {
+                tan_in = tan_out;
+            }
+
+            /*
+            If both are still unavailable, fall back to a stable direction derived from
+            the object's normal. This prevents NaNs and, importantly, prevents an entire
+            reserved fan from disappearing.
+            */
+            if (is_degenerate(tan_in) && is_degenerate(tan_out)) {
+                let fallback_axis = safe_normalize(
+                    cross(
+                        facing_normal,
+                        mob.unit_normal,
+                    ),
+                    vec3f(1.0, 0.0, 0.0),
+                );
+
+                tan_in = fallback_axis;
+                tan_out = fallback_axis;
+
+                has_joint = false;
+            }
+
+            var outward = -1.0;
+
+            if (
+                dot(
+                    cross(
+                        tan_in,
+                        tan_out,
+                    ),
+                    facing_normal,
+                ) < 0.0
+            ) {
+                outward = 1.0;
+            }
+
+            /*
+            Construct the incoming and outgoing edge directions.
+
+            Unlike the previous version, normalize() is never applied to a vector that
+            has not first been checked for degeneracy.
+            */
+            var edge_in_raw =
                 cross(
                     facing_normal,
-                    mob.unit_normal,
-                ),
-                vec3f(1.0, 0.0, 0.0),
-            );
-
-            tan_in = fallback_axis;
-            tan_out = fallback_axis;
-
-            has_joint = false;
-        }
-
-        var outward = -1.0;
-
-        if (
-            dot(
-                cross(
                     tan_in,
-                    tan_out,
-                ),
-                facing_normal,
-            ) < 0.0
-        ) {
-            outward = 1.0;
-        }
+                )
+                + shift * tan_in;
 
-        /*
-        Construct the incoming and outgoing edge directions.
-
-        Unlike the previous version, normalize() is never applied to a vector that
-        has not first been checked for degeneracy.
-        */
-        var edge_in_raw =
-            cross(
-                facing_normal,
-                tan_in,
-            )
-            + shift * tan_in;
-
-        var edge_out_raw =
-            cross(
-                facing_normal,
-                tan_out,
-            )
-            - shift * tan_out;
-
-        var edge_in = safe_normalize(
-            edge_in_raw,
-            cross(
-                facing_normal,
-                tan_in,
-            ),
-        );
-
-        var edge_out = safe_normalize(
-            edge_out_raw,
-            cross(
-                facing_normal,
-                tan_out,
-            ),
-        );
-
-        /*
-        A completely degenerate camera/normal configuration should still produce
-        finite geometry.
-        */
-        if (is_degenerate(edge_in)) {
-            edge_in = safe_normalize(
+            var edge_out_raw =
                 cross(
-                    mob.unit_normal,
+                    facing_normal,
+                    tan_out,
+                )
+                - shift * tan_out;
+
+            var edge_in = safe_normalize(
+                edge_in_raw,
+                cross(
+                    facing_normal,
                     tan_in,
                 ),
-                vec3f(1.0, 0.0, 0.0),
             );
-        }
 
-        if (is_degenerate(edge_out)) {
-            edge_out = safe_normalize(
+            var edge_out = safe_normalize(
+                edge_out_raw,
                 cross(
-                    mob.unit_normal,
+                    facing_normal,
                     tan_out,
                 ),
-                edge_in,
             );
-        }
 
-        edge_in *= outward;
-        edge_out *= outward;
+            /*
+            A completely degenerate camera/normal configuration should still produce
+            finite geometry.
+            */
+            if (is_degenerate(edge_in)) {
+                edge_in = safe_normalize(
+                    cross(
+                        mob.unit_normal,
+                        tan_in,
+                    ),
+                    vec3f(1.0, 0.0, 0.0),
+                );
+            }
 
-        let sweep = atan2(
-            dot(
-                cross(
+            if (is_degenerate(edge_out)) {
+                edge_out = safe_normalize(
+                    cross(
+                        mob.unit_normal,
+                        tan_out,
+                    ),
+                    edge_in,
+                );
+            }
+
+            edge_in *= outward;
+            edge_out *= outward;
+
+            let sweep = atan2(
+                dot(
+                    cross(
+                        edge_in,
+                        edge_out,
+                    ),
+                    facing_normal,
+                ),
+                dot(
                     edge_in,
                     edge_out,
                 ),
-                facing_normal,
-            ),
-            dot(
+            );
+
+            /*
+            Of each triangle's three vertices, one sits at the joint and two on the arc.
+            */
+            let fan_tri =
+                2 * (
+                    segment - POLYLINE_SEGMENTS
+                )
+                + tri_vert / 3;
+
+            let fan_vert = tri_vert % 3;
+
+            let along =
+                f32(
+                    fan_tri
+                    + fan_vert
+                    - 1
+                )
+                / f32(FAN_TRIANGLES);
+
+            step = rotate_vector(
                 edge_in,
-                edge_out,
-            ),
-        );
+                facing_normal,
+                vec2f(
+                    cos(along * sweep),
+                    sin(along * sweep),
+                ),
+            );
 
-        /*
-        Of each triangle's three vertices, one sits at the joint and two on the arc.
-        */
-        let fan_tri =
-            2 * (
-                segment - POLYLINE_SEGMENTS
-            )
-            + tri_vert / 3;
+            /*
+            The corners reach out by this much, being a step out plus a shift along.
+            */
+            edge_dist = sqrt(
+                max(
+                    1.0 + shift * shift,
+                    0.0,
+                )
+            ) * 0.5 * width;
 
-        let fan_vert = tri_vert % 3;
+            dist_to_curve = 0.0;
 
-        let along =
-            f32(
-                fan_tri
-                + fan_vert
-                - 1
-            )
-            / f32(FAN_TRIANGLES);
-
-        step = rotate_vector(
-            edge_in,
-            facing_normal,
-            vec2f(
-                cos(along * sweep),
-                sin(along * sweep),
-            ),
-        );
-
-        /*
-        The corners reach out by this much, being a step out plus a shift along.
-        */
-        edge_dist = sqrt(
-            max(
-                1.0 + shift * shift,
-                0.0,
-            )
-        ) * 0.5 * width;
-
-        dist_to_curve = 0.0;
-
-        if (fan_vert != 0) {
-            dist_to_curve =
-                edge_dist
-                + 0.5 * aaw;
+            if (fan_vert != 0) {
+                dist_to_curve =
+                    edge_dist
+                    + 0.5 * aaw;
+            }
         }
 
     } else {
@@ -972,6 +1071,7 @@ fn vs_main(
         Regular polyline segment.
         */
         step = step_to_corner(
+            point,
             tangent,
             facing_normal,
             shift,

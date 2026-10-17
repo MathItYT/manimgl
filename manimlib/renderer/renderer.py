@@ -559,22 +559,26 @@ class Renderer(object):
                 self.drawings[mob] = drawing
                 drawn.append(drawing)
 
-        # Si la cámara tiene rotación 3D activa, ordenamos según profundidad de cámara
-        # para que la composición de capas no pinte objetos traseros sobre los delanteros
+        # Ordenamiento de dibujo:
+        # En gráficos 3D, los objetos opacos se renderizan primero con depth write,
+        # y los objetos transparentes se renderizan después con depth test pero sin depth write,
+        # para que las superficies transparentes tiñan suavemente la geometría situada detrás de ellas.
         frame = getattr(self.camera, "frame", None)
         phi = getattr(frame, "get_phi", lambda: 0.0)() if frame else 0.0
         theta = getattr(frame, "get_theta", lambda: 0.0)() if frame else 0.0
 
-        if abs(phi) > 1e-3 or abs(theta) > 1e-3:
-            cam_pos = frame.get_implied_camera_location() if frame else np.array([0, 0, 10])
-            # Ordenar de más lejano a más cercano a la cámara (Back-to-Front)
-            drawn.sort(key=lambda d: (
-                d.mobject.z_index,
-                -np.linalg.norm(d.mobject.get_center() - cam_pos)
-            ))
-        else:
-            # En 2D se respeta estrictamente el z_index
-            drawn.sort(key=lambda d: d.mobject.z_index)
+        def sort_key(d: Drawing):
+            mob = d.mobject
+            is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
+            if abs(phi) > 1e-3 or abs(theta) > 1e-3:
+                cam_pos = frame.get_implied_camera_location() if frame else np.array([0, 0, 10])
+                dist = float(np.linalg.norm(mob.get_center() - cam_pos))
+                # Opacos primero (is_transparent=0), luego transparentes (is_transparent=1) ordenados back-to-front
+                return (mob.z_index, is_transparent, -dist)
+            else:
+                return (mob.z_index, is_transparent)
+
+        drawn.sort(key=sort_key)
 
         return drawn
 

@@ -73,17 +73,17 @@ fn vs_main(
     );
 
     /*
-    Degenerate/empty curves must produce no rasterized fragments.
+    Degenerate/empty curves or transparent fills must produce no rasterized fragments.
     */
     if (
         all(
             controls[0] == controls[1]
         )
         ||
-        max(
+        min(
             mob.fill_rgba.a,
             mob.fill_rgba_end.a,
-        ) == 0.0
+        ) < 0.999
     ) {
         out.position = vec4f(
             0.0,
@@ -167,10 +167,10 @@ fn fs_main(
     );
 
     /*
-    Invisible fill must not reserve depth.
+    Invisible or transparent fill must not reserve depth.
     */
     if (
-        in.color.a == 0.0
+        in.color.a < 0.999
     ) {
         discard;
     }

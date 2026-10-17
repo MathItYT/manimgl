@@ -44,6 +44,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
+mia/
 htmlcov/
 .tox/
 .nox/
@@ -57,6 +58,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 pytestdebug.log
+enunciado_tarea_1.tex
 
 # Translations
 *.mo
