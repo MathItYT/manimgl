@@ -35,6 +35,7 @@ class _BrowserTransformer(ast.NodeTransformer):
         self.in_lambda = False
         self.in_init = False
         self.used_schedule_helper = False
+        self.used_inspect = False
         self.async_create_mobjects = set(ASYNC_CREATE_MOBJECTS)
 
     def transform(self, tree: ast.AST) -> ast.AST:
@@ -153,6 +154,54 @@ def char_to_mob(self, char: str):
 ''').body[0]
                         if not any(isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name == 'char_to_mob' for m in node.body):
                             node.body.append(char_to_mob_node)
+
+        # Phase 0.5: Transform functions registered via add_key_press_listner (and listener methods) into async
+        key_listener_methods = {
+            'add_key_press_listner', 'add_key_press_listener',
+            'add_key_release_listner', 'add_key_release_listener',
+        }
+
+        for cls_node in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
+            for method in cls_node.body:
+                if isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    for sub in ast.walk(method):
+                        if isinstance(sub, ast.Call):
+                            attr = None
+                            if isinstance(sub.func, ast.Attribute):
+                                attr = sub.func.attr
+                            elif isinstance(sub.func, ast.Name):
+                                attr = sub.func.id
+                            if attr in key_listener_methods:
+                                callback_arg = sub.args[0] if sub.args else next((k.value for k in sub.keywords if k.arg in ('callback', 'fn', 'func')), None)
+                                if callback_arg is not None:
+                                    if isinstance(callback_arg, ast.Attribute) and isinstance(callback_arg.value, ast.Name) and callback_arg.value.id == 'self':
+                                        target = next((m for m in cls_node.body if isinstance(m, ast.FunctionDef) and m.name == callback_arg.attr), None)
+                                        if target:
+                                            target.__class__ = ast.AsyncFunctionDef
+                                    elif isinstance(callback_arg, ast.Name):
+                                        target = next((m for m in cls_node.body if isinstance(m, ast.FunctionDef) and m.name == callback_arg.id), None)
+                                        if target:
+                                            target.__class__ = ast.AsyncFunctionDef
+
+        for sub in ast.walk(tree):
+            if isinstance(sub, ast.Call):
+                attr = None
+                if isinstance(sub.func, ast.Attribute):
+                    attr = sub.func.attr
+                elif isinstance(sub.func, ast.Name):
+                    attr = sub.func.id
+                if attr in key_listener_methods:
+                    callback_arg = sub.args[0] if sub.args else next((k.value for k in sub.keywords if k.arg in ('callback', 'fn', 'func')), None)
+                    if callback_arg is not None:
+                        target_name = None
+                        if isinstance(callback_arg, ast.Attribute):
+                            target_name = callback_arg.attr
+                        elif isinstance(callback_arg, ast.Name):
+                            target_name = callback_arg.id
+                        if target_name:
+                            for fn_node in ast.walk(tree):
+                                if isinstance(fn_node, ast.FunctionDef) and fn_node.name == target_name:
+                                    fn_node.__class__ = ast.AsyncFunctionDef
 
         # Phase 1: Transform built-in async primitives (Text.create, play_async, wait_async, etc.)
         tree = self.visit(tree)
@@ -337,6 +386,214 @@ def char_to_mob(self, char: str):
                         )
                         ast.copy_location(assign_node, node)
                         node.body.append(assign_node)
+
+        # Phase 2.5: Transform calls to variable functions in async functions
+        import builtins
+        try:
+            import manimlib
+            _manim_symbols = set(dir(manimlib))
+        except Exception:
+            _manim_symbols = set()
+
+        _builtin_names = set(dir(builtins))
+        top_level_names = {
+            n.name for n in getattr(tree, 'body', [])
+            if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+        imported_names = set()
+        for n in getattr(tree, 'body', []):
+            if isinstance(n, ast.Import):
+                for alias in n.names:
+                    imported_names.add(alias.asname or alias.name)
+            elif isinstance(n, ast.ImportFrom):
+                if n.module == 'manimlib' and any(alias.name == '*' for alias in n.names):
+                    imported_names.update(_manim_symbols)
+                for alias in n.names:
+                    imported_names.add(alias.asname or alias.name)
+
+        known_globals = (
+            _builtin_names
+            | _manim_symbols
+            | top_level_names
+            | imported_names
+            | {'self', 'super', 'cls'}
+            | self.async_create_mobjects
+            | SYNC_CREATE_MOBJECTS
+        )
+
+        def is_variable_call(call_node: ast.Call) -> bool:
+            if not isinstance(call_node.func, ast.Name):
+                return False
+            if call_node.func.id in known_globals:
+                return False
+            return True
+
+        def transform_statement_list(stmts: list[ast.stmt]) -> list[ast.stmt]:
+            new_stmts = []
+            for stmt in stmts:
+                if isinstance(stmt, ast.If):
+                    stmt.body = transform_statement_list(stmt.body)
+                    stmt.orelse = transform_statement_list(stmt.orelse)
+                    new_stmts.append(stmt)
+                elif isinstance(stmt, (ast.For, ast.While)):
+                    stmt.body = transform_statement_list(stmt.body)
+                    stmt.orelse = transform_statement_list(stmt.orelse)
+                    new_stmts.append(stmt)
+                elif isinstance(stmt, ast.Try):
+                    stmt.body = transform_statement_list(stmt.body)
+                    for h in stmt.handlers:
+                        h.body = transform_statement_list(h.body)
+                    stmt.orelse = transform_statement_list(stmt.orelse)
+                    stmt.finalbody = transform_statement_list(stmt.finalbody)
+                    new_stmts.append(stmt)
+                elif isinstance(stmt, ast.With):
+                    stmt.body = transform_statement_list(stmt.body)
+                    new_stmts.append(stmt)
+                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    new_stmts.append(stmt)
+                elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call) and is_variable_call(stmt.value):
+                    self.used_inspect = True
+                    temp_var = '_res'
+                    assign_node = ast.Assign(
+                        targets=[ast.Name(id=temp_var, ctx=ast.Store())],
+                        value=stmt.value
+                    )
+                    ast.copy_location(assign_node, stmt)
+                    check_node = ast.If(
+                        test=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id='inspect', ctx=ast.Load()),
+                                attr='iscoroutine',
+                                ctx=ast.Load()
+                            ),
+                            args=[ast.Name(id=temp_var, ctx=ast.Load())],
+                            keywords=[]
+                        ),
+                        body=[
+                            ast.Assign(
+                                targets=[ast.Name(id=temp_var, ctx=ast.Store())],
+                                value=ast.Await(value=ast.Name(id=temp_var, ctx=ast.Load()))
+                            )
+                        ],
+                        orelse=[]
+                    )
+                    ast.copy_location(check_node, stmt)
+                    ast.copy_location(check_node.body[0], stmt)
+                    new_stmts.extend([assign_node, check_node])
+                elif isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Call) and is_variable_call(stmt.value):
+                    self.used_inspect = True
+                    if len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                        var_name = stmt.targets[0].id
+                        new_stmts.append(stmt)
+                        check_node = ast.If(
+                            test=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id='inspect', ctx=ast.Load()),
+                                    attr='iscoroutine',
+                                    ctx=ast.Load()
+                                ),
+                                args=[ast.Name(id=var_name, ctx=ast.Load())],
+                                keywords=[]
+                            ),
+                            body=[
+                                ast.Assign(
+                                    targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                                    value=ast.Await(value=ast.Name(id=var_name, ctx=ast.Load()))
+                                )
+                            ],
+                            orelse=[]
+                        )
+                        ast.copy_location(check_node, stmt)
+                        ast.copy_location(check_node.body[0], stmt)
+                        new_stmts.append(check_node)
+                    else:
+                        temp_var = '_res'
+                        assign_node = ast.Assign(
+                            targets=[ast.Name(id=temp_var, ctx=ast.Store())],
+                            value=stmt.value
+                        )
+                        ast.copy_location(assign_node, stmt)
+                        check_node = ast.If(
+                            test=ast.Call(
+                                func=ast.Attribute(
+                                    value=ast.Name(id='inspect', ctx=ast.Load()),
+                                    attr='iscoroutine',
+                                    ctx=ast.Load()
+                                ),
+                                args=[ast.Name(id=temp_var, ctx=ast.Load())],
+                                keywords=[]
+                            ),
+                            body=[
+                                ast.Assign(
+                                    targets=[ast.Name(id=temp_var, ctx=ast.Store())],
+                                    value=ast.Await(value=ast.Name(id=temp_var, ctx=ast.Load()))
+                                )
+                            ],
+                            orelse=[]
+                        )
+                        ast.copy_location(check_node, stmt)
+                        ast.copy_location(check_node.body[0], stmt)
+                        final_assign = ast.Assign(
+                            targets=stmt.targets,
+                            value=ast.Name(id=temp_var, ctx=ast.Load())
+                        )
+                        ast.copy_location(final_assign, stmt)
+                        new_stmts.extend([assign_node, check_node, final_assign])
+                elif isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Call) and is_variable_call(stmt.value):
+                    self.used_inspect = True
+                    temp_var = '_res'
+                    assign_node = ast.Assign(
+                        targets=[ast.Name(id=temp_var, ctx=ast.Store())],
+                        value=stmt.value
+                    )
+                    ast.copy_location(assign_node, stmt)
+                    check_node = ast.If(
+                        test=ast.Call(
+                            func=ast.Attribute(
+                                value=ast.Name(id='inspect', ctx=ast.Load()),
+                                attr='iscoroutine',
+                                ctx=ast.Load()
+                            ),
+                            args=[ast.Name(id=temp_var, ctx=ast.Load())],
+                            keywords=[]
+                        ),
+                        body=[
+                            ast.Assign(
+                                targets=[ast.Name(id=temp_var, ctx=ast.Store())],
+                                value=ast.Await(value=ast.Name(id=temp_var, ctx=ast.Load()))
+                            )
+                        ],
+                        orelse=[]
+                    )
+                    ast.copy_location(check_node, stmt)
+                    ast.copy_location(check_node.body[0], stmt)
+                    ret_node = ast.Return(value=ast.Name(id=temp_var, ctx=ast.Load()))
+                    ast.copy_location(ret_node, stmt)
+                    new_stmts.extend([assign_node, check_node, ret_node])
+                else:
+                    new_stmts.append(stmt)
+            return new_stmts
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AsyncFunctionDef):
+                node.body = transform_statement_list(node.body)
+
+        if self.used_inspect:
+            has_inspect = any(
+                isinstance(n, ast.Import) and any(alias.name == 'inspect' for alias in n.names)
+                for n in getattr(tree, 'body', [])
+            )
+            if not has_inspect:
+                idx = 0
+                while idx < len(tree.body):
+                    item = tree.body[idx]
+                    if isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant) and isinstance(item.value.value, str):
+                        idx += 1
+                    elif isinstance(item, ast.ImportFrom) and item.module == '__future__':
+                        idx += 1
+                    else:
+                        break
+                tree.body.insert(idx, ast.Import(names=[ast.alias(name='inspect', asname=None)]))
 
         if self.used_schedule_helper:
             has_helper = any(
