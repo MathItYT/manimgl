@@ -26,21 +26,40 @@ def cross(
     if is2d:
         x1, y1, z1 = v1[:, 0], v1[:, 1], v1[:, 2]
         x2, y2, z2 = v2[:, 0], v2[:, 1], v2[:, 2]
+        if out is None:
+            out = np.empty_like(v1)
+        out[:, 0] = y1 * z2 - z1 * y2
+        out[:, 1] = z1 * x2 - x1 * z2
+        out[:, 2] = x1 * y2 - y1 * x2
+        return out
     else:
         x1, y1, z1 = v1
         x2, y2, z2 = v2
-    if out is None:
-        out = np.empty(np.shape(v1))
-    out.T[:] = [
-        y1 * z2 - z1 * y2,
-        z1 * x2 - x1 * z2,
-        x1 * y2 - y1 * x2,
-    ]
-    return out
+        res = [
+            y1 * z2 - z1 * y2,
+            z1 * x2 - x1 * z2,
+            x1 * y2 - y1 * x2,
+        ]
+        if out is not None:
+            out[:] = res
+            return out
+        return np.array(res, dtype=float)
 
 
 def get_norm(vect: VectN | List[float]) -> float:
-    return sum((x**2 for x in vect))**0.5
+    try:
+        n = len(vect)
+        if n == 3:
+            return math.sqrt(vect[0] * vect[0] + vect[1] * vect[1] + vect[2] * vect[2])
+        elif n == 2:
+            return math.sqrt(vect[0] * vect[0] + vect[1] * vect[1])
+        elif n == 0:
+            return 0.0
+    except (TypeError, IndexError):
+        pass
+    if isinstance(vect, np.ndarray):
+        return float(np.linalg.norm(vect))
+    return math.sqrt(sum(x * x for x in vect))
 
 
 def get_dist(vect1: VectN, vect2: VectN):
@@ -53,9 +72,9 @@ def normalize(
 ) -> VectN:
     norm = get_norm(vect)
     if norm > 0:
-        return np.array(vect) / norm
+        return np.asarray(vect) / norm
     elif fall_back is not None:
-        return np.array(fall_back)
+        return np.asarray(fall_back)
     else:
         return np.zeros(len(vect))
 
@@ -123,8 +142,8 @@ def rotate_vector(
         ])
         return np.dot(vector, matrix.T)
 
-    rot = Rotation.from_rotvec(angle * normalize(axis))
-    return np.dot(vector, rot.as_matrix().T)
+    rot_mat = rotation_matrix(angle, axis)
+    return np.dot(vector, rot_mat.T)
 
 
 def rotate_vector_2d(vector: Vect2, angle: float) -> Vect2:
@@ -143,9 +162,24 @@ def rotation_matrix_from_quaternion(quat: Vect4) -> Matrix3x3:
 
 def rotation_matrix(angle: float, axis: Vect3) -> Matrix3x3:
     """
-    Rotation in R^3 about a specified axis of rotation.
+    Rotation in R^3 about a specified axis of rotation via Rodrigues' formula.
     """
-    return Rotation.from_rotvec(angle * normalize(axis)).as_matrix()
+    norm = math.sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2])
+    if norm == 0:
+        return np.identity(3)
+    x = axis[0] / norm
+    y = axis[1] / norm
+    z = axis[2] / norm
+    c = math.cos(angle)
+    s = math.sin(angle)
+    C = 1.0 - c
+    xs, ys, zs = x * s, y * s, z * s
+    xyC, yzC, zxC = x * y * C, y * z * C, z * x * C
+    return np.array([
+        [x * x * C + c, xyC - zs, zxC + ys],
+        [xyC + zs, y * y * C + c, yzC - xs],
+        [zxC - ys, yzC + xs, z * z * C + c]
+    ], dtype=float)
 
 
 def rotation_matrix_transpose(angle: float, axis: Vect3) -> Matrix3x3:

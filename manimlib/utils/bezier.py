@@ -28,14 +28,37 @@ CLOSED_THRESHOLD = 0.001
 def bezier(
     points: Sequence[float | FloatArray] | VectNArray
 ) -> Callable[[float], float | FloatArray]:
-    if len(points) == 0:
+    n = len(points)
+    if n == 0:
         raise Exception("bezier cannot be calld on an empty list")
+    if n == 3:
+        p0, p1, p2 = points[0], points[1], points[2]
+        def quad_bezier(t: float) -> float | FloatArray:
+            omt = 1.0 - t
+            return (omt * omt) * p0 + (2.0 * omt * t) * p1 + (t * t) * p2
+        return quad_bezier
+    elif n == 4:
+        p0, p1, p2, p3 = points[0], points[1], points[2], points[3]
+        def cubic_bezier(t: float) -> float | FloatArray:
+            omt = 1.0 - t
+            omt2 = omt * omt
+            t2 = t * t
+            return (omt2 * omt) * p0 + (3.0 * omt2 * t) * p1 + (3.0 * omt * t2) * p2 + (t2 * t) * p3
+        return cubic_bezier
+    elif n == 2:
+        p0, p1 = points[0], points[1]
+        def linear_bezier(t: float) -> float | FloatArray:
+            return (1.0 - t) * p0 + t * p1
+        return linear_bezier
+    elif n == 1:
+        p0 = points[0]
+        return lambda t: p0
 
-    n = len(points) - 1
+    deg = n - 1
 
     def result(t: float) -> float | FloatArray:
         return sum(
-            ((1 - t)**(n - k)) * (t**k) * choose(n, k) * point
+            ((1 - t)**(deg - k)) * (t**k) * choose(deg, k) * point
             for k, point in enumerate(points)
         )
 
@@ -56,8 +79,31 @@ def partial_bezier_points(
 
     This algorithm is pretty nifty, and pretty dense.
     """
+    n = len(points)
     if a == 1:
-        return [points[-1]] * len(points)
+        return [points[-1]] * n
+    if n == 3:
+        return partial_quadratic_bezier_points(points, a, b)
+    if n == 4:
+        p0, p1, p2, p3 = points[0], points[1], points[2], points[3]
+        oma = 1.0 - a
+        q0 = oma * p0 + a * p1
+        q1 = oma * p1 + a * p2
+        q2 = oma * p2 + a * p3
+        r0 = oma * q0 + a * q1
+        r1 = oma * q1 + a * q2
+        s0 = oma * r0 + a * r1
+
+        end_prop = (b - a) / (1.0 - a)
+        ome = 1.0 - end_prop
+        c0 = s0
+        c1 = ome * s0 + end_prop * r1
+        c2_0 = ome * r1 + end_prop * q2
+        c2 = ome * c1 + end_prop * c2_0
+        c3_0 = ome * q2 + end_prop * p3
+        c3_1 = ome * c2_0 + end_prop * c3_0
+        c3 = ome * c2 + end_prop * c3_1
+        return [c0, c1, c2, c3]
 
     a_to_1 = [
         bezier(points[i:])(a)
@@ -77,17 +123,25 @@ def partial_quadratic_bezier_points(
     a: float,
     b: float
 ) -> list[VectN]:
+    p0, p1, p2 = points[0], points[1], points[2]
     if a == 1:
-        return 3 * [points[-1]]
+        return [p2, p2, p2]
 
-    def curve(t):
-        return points[0] * (1 - t) * (1 - t) + 2 * points[1] * t * (1 - t) + points[2] * t * t
-    # bezier(points)
-    h0 = curve(a) if a > 0 else points[0]
-    h2 = curve(b) if b < 1 else points[2]
-    h1_prime = (1 - a) * points[1] + a * points[2]
-    end_prop = (b - a) / (1. - a)
-    h1 = (1 - end_prop) * h0 + end_prop * h1_prime
+    if a > 0:
+        oma = 1.0 - a
+        h0 = (oma * oma) * p0 + (2.0 * oma * a) * p1 + (a * a) * p2
+    else:
+        h0 = p0
+
+    if b < 1:
+        omb = 1.0 - b
+        h2 = (omb * omb) * p0 + (2.0 * omb * b) * p1 + (b * b) * p2
+    else:
+        h2 = p2
+
+    h1_prime = (1.0 - a) * p1 + a * p2
+    end_prop = (b - a) / (1.0 - a)
+    h1 = (1.0 - end_prop) * h0 + end_prop * h1_prime
     return [h0, h1, h2]
 
 
@@ -287,9 +341,6 @@ def get_smooth_cubic_bezier_handle_points(
     b[0] = points[0]
     b[-1] = points[-1]
 
-    def solve_func(b):
-        return linalg.solve_banded((l, u), diag, b)
-
     use_closed_solve_function = is_closed(points)
     if use_closed_solve_function:
         # Get equations to relate first and last points
@@ -297,20 +348,14 @@ def get_smooth_cubic_bezier_handle_points(
         # last row handles second derivative
         matrix[-1, [0, 1, -2, -1]] = [2, -1, 1, -2]
         # first row handles first derivative
-        matrix[0, :] = np.zeros(matrix.shape[1])
+        matrix[0, :] = 0
         matrix[0, [0, -1]] = [1, 1]
         b[0] = 2 * points[0]
-        b[-1] = np.zeros(dim)
+        b[-1] = 0
+        handle_pairs = linalg.solve(matrix, b)
+    else:
+        handle_pairs = linalg.solve_banded((l, u), diag, b)
 
-        def closed_curve_solve_func(b):
-            return linalg.solve(matrix, b)
-
-    handle_pairs = np.zeros((2 * num_handles, dim))
-    for i in range(dim):
-        if use_closed_solve_function:
-            handle_pairs[:, i] = closed_curve_solve_func(b[:, i])
-        else:
-            handle_pairs[:, i] = solve_func(b[:, i])
     return handle_pairs[0::2], handle_pairs[1::2]
 
 

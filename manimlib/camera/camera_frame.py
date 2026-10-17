@@ -53,17 +53,36 @@ class CameraFrame(Mobject):
         self.id4x4 = np.identity(4)
         self.euler_axes = euler_axes
 
+        self._cached_quat: tuple[float, ...] | None = None
+        self._cached_euler_axes: str | None = None
+        self._cached_rot: Rotation | None = None
+        self._cached_inv_matrix: np.ndarray | None = None
+        self._cached_euler_angles: np.ndarray | None = None
+
         self.set_points(np.array([ORIGIN, LEFT, RIGHT, DOWN, UP]))
         self.set_width(frame_shape[0], stretch=True)
         self.set_height(frame_shape[1], stretch=True)
         self.move_to(center_point)
 
     def set_orientation(self, rotation: Rotation):
-        self.uniforms["orientation"] = rotation.as_quat()
+        quat = rotation.as_quat()
+        self.uniforms["orientation"] = quat
+        self._cached_quat = tuple(quat)
+        self._cached_rot = rotation
+        self._cached_inv_matrix = None
+        self._cached_euler_angles = None
         return self
 
-    def get_orientation(self):
-        return Rotation.from_quat(self.uniforms["orientation"])
+    def get_orientation(self) -> Rotation:
+        quat = tuple(self.uniforms["orientation"])
+        if self._cached_rot is not None and self._cached_quat == quat:
+            return self._cached_rot
+        rot = Rotation.from_quat(self.uniforms["orientation"])
+        self._cached_quat = quat
+        self._cached_rot = rot
+        self._cached_inv_matrix = None
+        self._cached_euler_angles = None
+        return rot
 
     def make_orientation_default(self):
         self.default_orientation = self.get_orientation()
@@ -76,21 +95,32 @@ class CameraFrame(Mobject):
         return self
 
     def get_euler_angles(self) -> np.ndarray:
+        quat = tuple(self.uniforms["orientation"])
+        if (
+            self._cached_euler_angles is not None
+            and self._cached_quat == quat
+            and self._cached_euler_axes == self.euler_axes
+        ):
+            return self._cached_euler_angles.copy()
+
         orientation = self.get_orientation()
-        if np.isclose(orientation.as_quat(), [0, 0, 0, 1]).all():
-            return np.zeros(3)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', UserWarning)  # Ignore UserWarnings
-            angles = orientation.as_euler(self.euler_axes)[::-1]
-        # Handle Gimble lock case
-        if self.euler_axes == "zxz":
-            if np.isclose(angles[1], 0, atol=1e-2):
-                angles[0] = angles[0] + angles[2]
-                angles[2] = 0
-            if np.isclose(angles[1], PI, atol=1e-2):
-                angles[0] = angles[0] - angles[2]
-                angles[2] = 0
-        return angles
+        if quat == (0.0, 0.0, 0.0, 1.0) or np.isclose(quat, (0.0, 0.0, 0.0, 1.0)).all():
+            angles = np.zeros(3)
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)  # Ignore UserWarnings
+                angles = orientation.as_euler(self.euler_axes)[::-1]
+            # Handle Gimble lock case
+            if self.euler_axes == "zxz":
+                if np.isclose(angles[1], 0, atol=1e-2):
+                    angles[0] = angles[0] + angles[2]
+                    angles[2] = 0
+                if np.isclose(angles[1], PI, atol=1e-2):
+                    angles[0] = angles[0] - angles[2]
+                    angles[2] = 0
+        self._cached_euler_axes = self.euler_axes
+        self._cached_euler_angles = angles
+        return angles.copy()
 
     def get_theta(self):
         return self.get_euler_angles()[0]
@@ -105,7 +135,11 @@ class CameraFrame(Mobject):
         return self.get_height() / FRAME_SHAPE[1]
 
     def get_inverse_camera_rotation_matrix(self):
-        return self.get_orientation().as_matrix().T
+        quat = tuple(self.uniforms["orientation"])
+        if self._cached_inv_matrix is not None and self._cached_quat == quat:
+            return self._cached_inv_matrix
+        self._cached_inv_matrix = self.get_orientation().as_matrix().T
+        return self._cached_inv_matrix
 
     def get_view_matrix(self, refresh=False):
         """
@@ -114,17 +148,19 @@ class CameraFrame(Mobject):
         which happens about once a frame, rather than cached against a note of the
         frame having moved.
         """
-        shift = self.id4x4.copy()
-        rotation = self.id4x4.copy()
-
+        R = self.get_inverse_camera_rotation_matrix()
+        c = self.get_center()
         scale = self.get_scale()
-        shift[:3, 3] = -self.get_center()
-        rotation[:3, :3] = self.get_inverse_camera_rotation_matrix()
-        np.dot(rotation, shift, out=self.view_matrix)
-        if scale > 0:
-            self.view_matrix[:3, :4] /= scale
 
-        return self.view_matrix
+        vm = self.view_matrix
+        vm[:3, :3] = R
+        vm[:3, 3] = -np.dot(R, c)
+        vm[3, :3] = 0.0
+        vm[3, 3] = 1.0
+        if scale > 0:
+            vm[:3, :4] /= scale
+
+        return vm
 
     def get_inv_view_matrix(self):
         return np.linalg.inv(self.get_view_matrix())

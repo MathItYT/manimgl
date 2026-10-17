@@ -563,22 +563,31 @@ class Renderer(object):
         # En gráficos 3D, los objetos opacos se renderizan primero con depth write,
         # y los objetos transparentes se renderizan después con depth test pero sin depth write,
         # para que las superficies transparentes tiñan suavemente la geometría situada detrás de ellas.
-        frame = getattr(self.camera, "frame", None)
-        phi = getattr(frame, "get_phi", lambda: 0.0)() if frame else 0.0
-        theta = getattr(frame, "get_theta", lambda: 0.0)() if frame else 0.0
-
-        def sort_key(d: Drawing):
-            mob = d.mobject
-            is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
+        if len(drawn) > 1:
+            frame = getattr(self.camera, "frame", None)
+            phi = frame.get_phi() if frame is not None else 0.0
+            theta = frame.get_theta() if frame is not None else 0.0
             if abs(phi) > 1e-3 or abs(theta) > 1e-3:
-                cam_pos = frame.get_implied_camera_location() if frame else np.array([0, 0, 10])
-                dist = float(np.linalg.norm(mob.get_center() - cam_pos))
-                # Opacos primero (is_transparent=0), luego transparentes (is_transparent=1) ordenados back-to-front
-                return (mob.z_index, is_transparent, -dist)
-            else:
-                return (mob.z_index, is_transparent)
+                cam_pos = frame.get_implied_camera_location() if frame is not None else np.array([0.0, 0.0, 10.0])
+                cx, cy, cz = float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])
 
-        drawn.sort(key=sort_key)
+                def sort_key_3d(d: Drawing):
+                    mob = d.mobject
+                    is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
+                    c = mob.get_center()
+                    dx = c[0] - cx
+                    dy = c[1] - cy
+                    dz = c[2] - cz
+                    return (mob.z_index, is_transparent, -(dx * dx + dy * dy + dz * dz))
+
+                drawn.sort(key=sort_key_3d)
+            else:
+                def sort_key_2d(d: Drawing):
+                    mob = d.mobject
+                    is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
+                    return (mob.z_index, is_transparent)
+
+                drawn.sort(key=sort_key_2d)
 
         return drawn
 

@@ -188,9 +188,16 @@ class Animation(object):
         return alpha
 
     def interpolate_mobject(self, alpha: float) -> None:
-        for i, mobs in enumerate(self.families):
-            sub_alpha = self.get_sub_alpha(self.time_spanned_alpha(alpha), i, len(self.families))
-            self.interpolate_submobject(*mobs, sub_alpha)
+        t_alpha = self.time_spanned_alpha(alpha)
+        n_families = len(self.families)
+        if self.lag_ratio == 0:
+            sub_alpha = self.rate_func(clip(t_alpha, 0, 1))
+            for mobs in self.families:
+                self.interpolate_submobject(*mobs, sub_alpha)
+        else:
+            for i, mobs in enumerate(self.families):
+                sub_alpha = self.get_sub_alpha(t_alpha, i, n_families)
+                self.interpolate_submobject(*mobs, sub_alpha)
 
     def interpolate_submobject(
         self,
@@ -207,10 +214,9 @@ class Animation(object):
         index: int,
         num_submobjects: int
     ) -> float:
-        # TODO, make this more understanable, and/or combine
-        # its functionality with AnimationGroup's method
-        # build_animations_with_timings
         lag_ratio = self.lag_ratio
+        if lag_ratio == 0:
+            return self.rate_func(clip(alpha, 0, 1))
         full_length = (num_submobjects - 1) * lag_ratio + 1
         value = alpha * full_length
         lower = index * lag_ratio

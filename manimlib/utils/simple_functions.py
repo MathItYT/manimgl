@@ -46,9 +46,7 @@ def clip(a: float, min_a: float, max_a: float) -> float:
 
 
 def arr_clip(arr: np.ndarray, min_a: float, max_a: float) -> np.ndarray:
-    arr[arr < min_a] = min_a
-    arr[arr > max_a] = max_a
-    return arr
+    return np.clip(arr, min_a, max_a, out=arr)
 
 
 def fdiv(a: Scalable, b: Scalable, zero_over_zero_value: Scalable | None = None) -> Scalable:

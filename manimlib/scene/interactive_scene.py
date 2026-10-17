@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import itertools as it
 import sys
 
@@ -55,6 +56,31 @@ INFORMATION_KEY = manim_config.key_bindings.information
 CURSOR_KEY = manim_config.key_bindings.cursor
 ARROW_SYMBOLS: list[int] = [Keys.LEFT, Keys.UP, Keys.RIGHT, Keys.DOWN]
 
+
+def _copy_to_clipboard(text: str) -> None:
+    if sys.platform == "emscripten":
+        try:
+            from js import navigator
+            if hasattr(navigator, "clipboard") and hasattr(navigator.clipboard, "writeText"):
+                navigator.clipboard.writeText(text)
+        except Exception:
+            pass
+    elif pyperclip is not None:
+        try:
+            pyperclip.copy(text)
+        except Exception:
+            pass
+
+
+def _paste_from_clipboard() -> str:
+    if pyperclip is not None:
+        try:
+            return pyperclip.paste()
+        except Exception:
+            return ""
+    return ""
+
+
 class InteractiveScene(Scene):
     corner_dot_config = dict(color=WHITE, radius=0.05, glow_factor=2.0)
     selection_rectangle_stroke_color = WHITE
@@ -67,20 +93,22 @@ class InteractiveScene(Scene):
     crosshair_style = dict(stroke_color=GREY_A, stroke_width=[3, 0, 3])
 
     def setup(self):
+        if sys.platform == "emscripten":
+            return self.setup_async()
+        super().setup()
+        self._init_interactive_mobjects(is_async=False)
+
+    async def setup_async(self):
+        await super().setup_async()
+        await self._init_interactive_mobjects_async()
+
+    def _init_interactive_mobjects(self, is_async: bool = False):
         self.selection = Group()
         self.selection_highlight = self.get_selection_highlight()
         self.selection_rectangle = self.get_selection_rectangle()
         self.crosshair = self.get_crosshair()
-
-        # DecimalNumber/Text creation is asynchronous in the browser. The
-        # interactive information overlay is not required by the web editor,
-        # so keep it disabled there instead of constructing it synchronously.
-        if sys.platform == "emscripten":
-            self.information_label = Group()
-            self.color_palette = Group()
-        else:
-            self.information_label = self.get_information_label()
-            self.color_palette = self.get_color_palette()
+        self.color_palette = self.get_color_palette()
+        self.information_label = self.get_information_label()
 
         self.unselectables = [
             self.selection,
@@ -88,6 +116,33 @@ class InteractiveScene(Scene):
             self.selection_rectangle,
             self.crosshair,
             self.information_label,
+            self.color_palette,
+            self.camera.frame,
+        ]
+        self.select_top_level_mobs = True
+        self.regenerate_selection_search_set()
+        self.is_selecting = False
+        self.is_grabbing = False
+        self.add(self.selection_highlight)
+
+    async def _init_interactive_mobjects_async(self):
+        self.selection = Group()
+        self.selection_highlight = self.get_selection_highlight()
+        self.selection_rectangle = self.get_selection_rectangle()
+        self.crosshair = self.get_crosshair()
+        self.color_palette = self.get_color_palette()
+        try:
+            self.information_label = await self.get_information_label_async()
+        except Exception:
+            self.information_label = Group()
+
+        self.unselectables = [
+            self.selection,
+            self.selection_highlight,
+            self.selection_rectangle,
+            self.crosshair,
+            self.information_label,
+            self.color_palette,
             self.camera.frame,
         ]
         self.select_top_level_mobs = True
@@ -162,6 +217,8 @@ class InteractiveScene(Scene):
         return palette
 
     def get_information_label(self):
+        if sys.platform == "emscripten":
+            return self.get_information_label_async()
         loc_label = VGroup(*(
             DecimalNumber(**self.cursor_location_config) for n in range(3)
         ))
@@ -174,6 +231,24 @@ class InteractiveScene(Scene):
             return loc_label
         loc_label.add_updater(update_coords)
         time_label = DecimalNumber(0, **self.time_label_config)
+        time_label.to_corner(DL, buff=SMALL_BUFF)
+        time_label.fix_in_frame()
+        time_label.add_updater(lambda m, dt: m.increment_value(dt))
+        return VGroup(loc_label, time_label)
+
+    async def get_information_label_async(self):
+        loc_label = VGroup(*(
+            [await DecimalNumber.create(**self.cursor_location_config) for _ in range(3)]
+        ))
+        def update_coords(loc_label):
+            for mob, coord in zip(loc_label, self.mouse_point.get_location()):
+                mob.set_value(coord)
+            loc_label.arrange(RIGHT, buff=loc_label.get_height())
+            loc_label.to_corner(DR, buff=SMALL_BUFF)
+            loc_label.fix_in_frame()
+            return loc_label
+        loc_label.add_updater(update_coords)
+        time_label = await DecimalNumber.create(0, **self.time_label_config)
         time_label.to_corner(DL, buff=SMALL_BUFF)
         time_label.fix_in_frame()
         time_label.add_updater(lambda m, dt: m.increment_value(dt))
@@ -304,10 +379,14 @@ class InteractiveScene(Scene):
                 if mob is value:
                     name = key
             names.append(name)
-        pyperclip.copy(", ".join(names))
+        _copy_to_clipboard(", ".join(names))
 
     def paste_selection(self):
-        clipboard_str = pyperclip.paste()
+        if sys.platform == "emscripten":
+            return self.paste_selection_async()
+        clipboard_str = _paste_from_clipboard()
+        if not clipboard_str:
+            return
         try:
             ids = map(int, clipboard_str.split(","))
             mobs = map(self.id_to_mobject, ids)
@@ -318,13 +397,50 @@ class InteractiveScene(Scene):
             return
         except ValueError:
             pass
-        if set("\^=+").intersection(clipboard_str):
+        if set(r"\^=+").intersection(clipboard_str):
             try:
                 new_mob = Tex(clipboard_str)
             except LatexError:
                 return
         else:
             new_mob = Text(clipboard_str)
+        self.clear_selection()
+        self.add(new_mob)
+        self.add_to_selection(new_mob)
+
+    async def paste_selection_async(self):
+        clipboard_str = _paste_from_clipboard()
+        if not clipboard_str:
+            return
+        try:
+            ids = map(int, clipboard_str.split(","))
+            mobs = map(self.id_to_mobject, ids)
+            mob_copies = [m.copy() for m in mobs if m is not None]
+            self.clear_selection()
+            await self.play_async(*(FadeIn(mc, run_time=0.5, scale=1.5) for mc in mob_copies), register=False)
+            self.add_to_selection(*mob_copies)
+            return
+        except ValueError:
+            pass
+        if sys.platform == "emscripten":
+            if set(r"\^=+").intersection(clipboard_str):
+                try:
+                    new_mob = await Tex.create(clipboard_str)
+                except Exception:
+                    return
+            else:
+                try:
+                    new_mob = await Text.create(clipboard_str)
+                except Exception:
+                    return
+        else:
+            if set(r"\^=+").intersection(clipboard_str):
+                try:
+                    new_mob = Tex(clipboard_str)
+                except LatexError:
+                    return
+            else:
+                new_mob = Text(clipboard_str)
         self.clear_selection()
         self.add(new_mob)
         self.add_to_selection(new_mob)
@@ -410,11 +526,26 @@ class InteractiveScene(Scene):
         self.selection.shift(nudge * vect)
 
     def on_key_press(self, symbol: int, modifiers: int) -> None:
+        if sys.platform == "emscripten":
+            return self.on_key_press_async(symbol, modifiers)
         super().on_key_press(symbol, modifiers)
         try:
             char = chr(symbol)
-        except OverflowError:
+        except (OverflowError, ValueError):
             return
+        self.handle_key_press(symbol, char, modifiers, is_async=False)
+
+    async def on_key_press_async(self, symbol: int, modifiers: int) -> None:
+        await super().on_key_press_async(symbol, modifiers)
+        try:
+            char = chr(symbol)
+        except (OverflowError, ValueError):
+            return
+        res = self.handle_key_press(symbol, char, modifiers, is_async=True)
+        if inspect.isawaitable(res):
+            await res
+
+    def handle_key_press(self, symbol: int, char: str, modifiers: int, is_async: bool = False):
         if char == SELECT_KEY and not (modifiers & Mods.ANY):
             self.enable_selection()
         if char == UNSELECT_KEY:
@@ -424,7 +555,7 @@ class InteractiveScene(Scene):
         elif char == RESIZE_KEY and (modifiers & Mods.SHIFT):
             self.prepare_resizing(about_corner=((modifiers & Mods.SHIFT) > 0))
         elif symbol == Keys.SHIFT:
-            if self.window.is_key_pressed(ord("t")):
+            if self.window and self.window.is_key_pressed(ord("t")):
                 self.prepare_resizing(about_corner=True)
         elif char == COLOR_KEY and not (modifiers & Mods.ANY):
             self.toggle_color_palette()
@@ -433,7 +564,10 @@ class InteractiveScene(Scene):
         elif char == "c" and (modifiers & Mods.CTRL_OR_CMD):
             self.copy_selection()
         elif char == "v" and (modifiers & Mods.CTRL_OR_CMD):
-            self.paste_selection()
+            if is_async:
+                return self.paste_selection_async()
+            else:
+                self.paste_selection()
         elif char == "x" and (modifiers & Mods.CTRL_OR_CMD):
             self.copy_selection()
             self.delete_selection()
@@ -468,32 +602,45 @@ class InteractiveScene(Scene):
             self.save_state()
 
     def on_key_release(self, symbol: int, modifiers: int) -> None:
+        if sys.platform == "emscripten":
+            return self.on_key_release_async(symbol, modifiers)
         super().on_key_release(symbol, modifiers)
-        if chr(symbol) == SELECT_KEY:
+        self.handle_key_release(symbol, modifiers)
+
+    async def on_key_release_async(self, symbol: int, modifiers: int) -> None:
+        await super().on_key_release_async(symbol, modifiers)
+        self.handle_key_release(symbol, modifiers)
+
+    def handle_key_release(self, symbol: int, modifiers: int) -> None:
+        try:
+            char = chr(symbol)
+        except (OverflowError, ValueError):
+            char = None
+        if char == SELECT_KEY:
             self.gather_new_selection()
-        if chr(symbol) in GRAB_KEYS:
+        if char in GRAB_KEYS:
             self.is_grabbing = False
-        elif chr(symbol) == INFORMATION_KEY:
+        elif char == INFORMATION_KEY:
             self.display_information(False)
-        elif symbol == Keys.SHIFT and self.window.is_key_pressed(ord(RESIZE_KEY)):
+        elif symbol == Keys.SHIFT and self.window and self.window.is_key_pressed(ord(RESIZE_KEY)):
             self.prepare_resizing(about_corner=False)
 
     def handle_grabbing(self, point: Vect3):
         diff = point - self.mouse_to_selection
-        if self.window.is_key_pressed(ord(GRAB_KEY)):
+        if self.window and self.window.is_key_pressed(ord(GRAB_KEY)):
             self.selection.move_to(diff)
-        elif self.window.is_key_pressed(ord(X_GRAB_KEY)):
+        elif self.window and self.window.is_key_pressed(ord(X_GRAB_KEY)):
             self.selection.set_x(diff[0])
-        elif self.window.is_key_pressed(ord(Y_GRAB_KEY)):
+        elif self.window and self.window.is_key_pressed(ord(Y_GRAB_KEY)):
             self.selection.set_y(diff[1])
-        elif self.window.is_key_pressed(ord(Z_GRAB_KEY)):
+        elif self.window and self.window.is_key_pressed(ord(Z_GRAB_KEY)):
             self.selection.set_z(diff[2])
 
     def handle_resizing(self, point: Vect3):
         if not hasattr(self, "scale_about_point"):
             return
         vect = point - self.scale_about_point
-        if self.window.is_key_pressed(Keys.CTRL):
+        if self.window and self.window.is_key_pressed(Keys.CTRL):
             for i in (0, 1):
                 scalar = vect[i] / self.scale_ref_vect[i]
                 self.selection.rescale_to_fit(
@@ -521,21 +668,45 @@ class InteractiveScene(Scene):
         self.remove(self.color_palette)
 
     def on_mouse_motion(self, point: Vect3, d_point: Vect3) -> None:
+        if sys.platform == "emscripten":
+            return self.on_mouse_motion_async(point, d_point)
         super().on_mouse_motion(point, d_point)
+        self.handle_mouse_motion(point, d_point)
+
+    async def on_mouse_motion_async(self, point: Vect3, d_point: Vect3) -> None:
+        await super().on_mouse_motion_async(point, d_point)
+        self.handle_mouse_motion(point, d_point)
+
+    def handle_mouse_motion(self, point: Vect3, d_point: Vect3) -> None:
         self.crosshair.move_to(self.frame.to_fixed_frame_point(point))
         if self.is_grabbing:
             self.handle_grabbing(point)
-        elif self.window.is_key_pressed(ord(RESIZE_KEY)):
+        elif self.window and self.window.is_key_pressed(ord(RESIZE_KEY)):
             self.handle_resizing(point)
-        elif self.window.is_key_pressed(ord(SELECT_KEY)) and self.window.is_key_pressed(Keys.SHIFT):
+        elif self.window and self.window.is_key_pressed(ord(SELECT_KEY)) and self.window.is_key_pressed(Keys.SHIFT):
             self.handle_sweeping_selection(point)
 
     def on_mouse_drag(self, point: Vect3, d_point: Vect3, buttons: int, modifiers: int) -> None:
+        if sys.platform == "emscripten":
+            return self.on_mouse_drag_async(point, d_point, buttons, modifiers)
         super().on_mouse_drag(point, d_point, buttons, modifiers)
         self.crosshair.move_to(self.frame.to_fixed_frame_point(point))
 
+    async def on_mouse_drag_async(self, point: Vect3, d_point: Vect3, buttons: int, modifiers: int) -> None:
+        await super().on_mouse_drag_async(point, d_point, buttons, modifiers)
+        self.crosshair.move_to(self.frame.to_fixed_frame_point(point))
+
     def on_mouse_release(self, point: Vect3, button: int, mods: int) -> None:
+        if sys.platform == "emscripten":
+            return self.on_mouse_release_async(point, button, mods)
         super().on_mouse_release(point, button, mods)
+        self.handle_mouse_release(point, button, mods)
+
+    async def on_mouse_release_async(self, point: Vect3, button: int, mods: int) -> None:
+        await super().on_mouse_release_async(point, button, mods)
+        self.handle_mouse_release(point, button, mods)
+
+    def handle_mouse_release(self, point: Vect3, button: int, mods: int) -> None:
         if self.color_palette in self.mobjects:
             self.choose_color(point)
         else:
@@ -553,7 +724,7 @@ class InteractiveScene(Scene):
         if height != FRAME_HEIGHT:
             call += ", %.2f" % height
         call += ")"
-        pyperclip.copy(call)
+        _copy_to_clipboard(call)
 
     def copy_cursor_position(self):
-        pyperclip.copy("(%.2f, %.2f, %.2f)" % tuple(self.mouse_point.get_center()))
+        _copy_to_clipboard("(%.2f, %.2f, %.2f)" % tuple(self.mouse_point.get_center()))

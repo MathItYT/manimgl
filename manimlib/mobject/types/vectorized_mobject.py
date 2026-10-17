@@ -577,7 +577,12 @@ class VMobject(Mobject):
         if not self.has_stroke():
             return False
         data = self.data.rows_or_defaults
-        return bool((data['stroke_rgba'][:, 3] >= 0.999).all())
+        rgba = data['stroke_rgba']
+        if len(rgba) == 0:
+            return True
+        if rgba[0, 3] < 0.999:
+            return False
+        return bool((rgba[:, 3] >= 0.999).all())
 
     def is_opaque(self) -> bool:
         has_f = self.has_fill()
@@ -964,7 +969,15 @@ class VMobject(Mobject):
 
     #
     def consider_points_equal(self, p0: Vect3, p1: Vect3) -> bool:
-        return all(abs(p1 - p0) < self.tolerance_for_point_equality)
+        tol = self.tolerance_for_point_equality
+        try:
+            return (
+                abs(p1[0] - p0[0]) < tol and
+                abs(p1[1] - p0[1]) < tol and
+                abs(p1[2] - p0[2]) < tol
+            )
+        except (IndexError, TypeError):
+            return bool((np.abs(p1 - p0) < tol).all())
 
     # Information about the curve
     def get_bezier_tuples_from_points(self, points: Vect3Array) -> Iterable[Vect3Array]:
@@ -975,6 +988,8 @@ class VMobject(Mobject):
         return self.get_bezier_tuples_from_points(self.get_points())
 
     def get_subpath_end_indices_from_points(self, points: Vect3Array) -> np.ndarray:
+        if len(points) < 3:
+            return np.array([len(points) - 1])
         atol = 1e-4  # TODO, this is too unsystematic
         a0, h, a1 = points[0:-1:2], points[1::2], points[2::2]
         # An anchor point is considered the end of a path
@@ -983,8 +998,7 @@ class VMobject(Mobject):
         # curves in a row, we also check that the following
         # anchor is genuinely distinct
         is_end = (a0 == h).all(1) & (abs(h - a1) > atol).any(1)
-        end_indices = (2 * n for n, end in enumerate(is_end) if end)
-        return np.array([*end_indices, len(points) - 1])
+        return np.append(np.where(is_end)[0] * 2, len(points) - 1)
 
     def set_subpath_range(self) -> Self:
         """
@@ -999,7 +1013,8 @@ class VMobject(Mobject):
         structural_data_keys.
         """
         points = self.get_points()
-        if len(points) == 0:
+        n_points = len(points)
+        if n_points == 0:
             return self
         ends = self.get_subpath_end_indices_from_points(points)
         starts = [0, *(ends[:-1] + 2)]
@@ -1009,7 +1024,9 @@ class VMobject(Mobject):
                 # Reaching one past the end takes in the null curve's handle sitting
                 # there, which belongs to no subpath, so that every point gets written
                 ranges[start:end + 2] = (-start, end)
-            ranges += np.arange(len(points))[:, np.newaxis] * (1, -1)
+            idx = np.arange(n_points)
+            ranges[:, 0] += idx
+            ranges[:, 1] -= idx
         return self
 
     def get_subpath_range(self, index: int = -1) -> Tuple[int, int]:
@@ -1312,6 +1329,9 @@ class VMobject(Mobject):
             self.set_points(vm_points, refresh=False)
             return self
         num_curves = vmobject.get_num_curves()
+        if num_curves == 0:
+            self.set_points(np.zeros_like(vm_points), refresh=False)
+            return self
 
         # Partial curve includes three portions:
         # - A start, which is some ending portion of an inner quadratic
@@ -1326,9 +1346,6 @@ class VMobject(Mobject):
         i4 = 2 * upper_index + 3
 
         new_points = vm_points.copy()
-        if num_curves == 0:
-            new_points[:] = 0
-            return self
         if lower_index == upper_index:
             tup = partial_quadratic_bezier_points(vm_points[i1:i2], lower_residue, upper_residue)
             new_points[:i1] = tup[0]

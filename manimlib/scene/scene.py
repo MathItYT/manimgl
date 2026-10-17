@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 import platform
 import random
 import time
@@ -180,6 +180,14 @@ class Scene(object):
         self.file_writer.begin()
         self.setup()
 
+    async def _begin_build_async(self) -> None:
+        self.virtual_animation_start_time = 0
+        self.real_animation_start_time = time.time()
+        self.file_writer.begin()
+        setup_res = self.setup()
+        if inspect.isawaitable(setup_res):
+            await setup_res
+
     def build(self):
         if sys.platform == "emscripten":
             raise RuntimeError("Use await build_async() in Pyodide")
@@ -197,7 +205,7 @@ class Scene(object):
         """Construct a browser scene without blocking the event loop."""
         if sys.platform != "emscripten":
             return self.build()
-        self._begin_build()
+        await self._begin_build_async()
         try:
             result = self.construct()
             if inspect.isawaitable(result):
@@ -214,10 +222,7 @@ class Scene(object):
         if sys.platform != "emscripten":
             return self.run()
 
-        self.virtual_animation_start_time = 0
-        self.real_animation_start_time = time.time()
-        self.file_writer.begin()
-        self.setup()
+        await self._begin_build_async()
 
         try:
             result = self.construct()
@@ -251,10 +256,15 @@ class Scene(object):
 
     def setup(self) -> None:
         """
-        This is meant to be implement by any scenes which
-        are comonly subclassed, and have some common setup
+        This is meant to be implemented by any scenes which
+        are commonly subclassed, and have some common setup
         involved before the construct method is called.
         """
+        if sys.platform == "emscripten":
+            return self.setup_async()
+        pass
+
+    async def setup_async(self) -> None:
         pass
 
     def construct(self) -> None:
@@ -496,15 +506,14 @@ class Scene(object):
         # Return only those which are not in the family
         # of another mobject from the scene
         mobjects = self.get_mobjects()
-        families = [m.get_family() for m in mobjects]
+        if len(mobjects) <= 1:
+            return list(mobjects)
 
-        def is_top_level(mobject):
-            num_families = sum([
-                (mobject in family)
-                for family in families
-            ])
-            return num_families == 1
-        return list(filter(is_top_level, mobjects))
+        counts = Counter()
+        for m in mobjects:
+            counts.update(set(m.get_family()))
+
+        return [m for m in mobjects if counts[m] == 1]
 
     def get_mobject_family_members(self) -> list[Mobject]:
         return extract_mobject_family_members(self.mobjects)

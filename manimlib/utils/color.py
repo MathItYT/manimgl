@@ -12,11 +12,18 @@ from manimlib.constants import WHITE
 from manimlib.utils.bezier import interpolate
 from manimlib.utils.iterables import resize_with_interpolation
 
+from functools import lru_cache
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Iterable, Sequence, Callable
     from manimlib.typing import ManimColor, Vect3, Vect4, Vect3Array, Vect4Array, NDArray
+
+
+@lru_cache(maxsize=1024)
+def _cached_hex_to_rgb(hex_code: str) -> tuple[float, float, float]:
+    return hex2rgb(hex_code)
 
 
 def color_to_rgb(color: ManimColor) -> Vect3:
@@ -29,7 +36,8 @@ def color_to_rgb(color: ManimColor) -> Vect3:
 
 
 def color_to_rgba(color: ManimColor, alpha: float = 1.0) -> Vect4:
-    return np.array([*color_to_rgb(color), alpha])
+    rgb = color_to_rgb(color)
+    return np.array([rgb[0], rgb[1], rgb[2], alpha], dtype=float)
 
 
 def rgb_to_color(rgb: Vect3 | Sequence[float]) -> Color:
@@ -48,7 +56,7 @@ def rgb_to_hex(rgb: Vect3 | Sequence[float]) -> str:
 
 
 def hex_to_rgb(hex_code: str) -> Vect3:
-    return np.array(hex2rgb(hex_code))
+    return np.array(_cached_hex_to_rgb(hex_code), dtype=float)
 
 
 def invert_color(color: ManimColor) -> Color:

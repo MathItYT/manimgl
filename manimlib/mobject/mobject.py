@@ -263,10 +263,11 @@ class Mobject(object):
         if about_point is None and about_edge is not None:
             about_point = self.get_bounding_box_point(about_edge)
 
-        def moved(points: Vect3Array) -> Vect3Array:
-            if about_point is None:
-                return func(points)
-            return func(points - about_point) + about_point
+        if about_point is None:
+            moved = func
+        else:
+            def moved(points: Vect3Array) -> Vect3Array:
+                return func(points - about_point) + about_point
 
         for mob in self.get_family():
             # Asked for before the points move, since a stale one is worked out from
@@ -330,6 +331,14 @@ class Mobject(object):
 
     def compute_bounding_box(self) -> Vect3Array:
         pts = self.get_points()
+        if not self.submobjects:
+            if len(pts) == 0:
+                return np.zeros((3, self.dim))
+            mins = pts.min(0)
+            maxs = pts.max(0)
+            mids = (mins + maxs) / 2
+            return np.array([mins, mids, maxs])
+
         sub_bbs = [
             sm.get_bounding_box()
             for sm in self.submobjects
@@ -417,8 +426,11 @@ class Mobject(object):
             return [self]
         if self.family is None:
             # Reconstruct and save
-            sub_families = (sm.get_family() for sm in self.submobjects)
-            self.family = [self, *it.chain(*sub_families)]
+            if not self.submobjects:
+                self.family = [self]
+            else:
+                sub_families = (sm.get_family() for sm in self.submobjects)
+                self.family = [self, *it.chain(*sub_families)]
         return self.family
 
     def family_members_with_points(self) -> list[Mobject]:
@@ -680,10 +692,12 @@ class Mobject(object):
         result.updaters = list(self.updaters)
 
         family = self.get_family()
+        id_to_result = {id(sm): res_sm for sm, res_sm in zip(family, result.family)}
         for attr, value in self.__dict__.items():
             if isinstance(value, Mobject) and value is not self:
-                if value in family:
-                    setattr(result, attr, result.family[family.index(value)])
+                res_val = id_to_result.get(id(value))
+                if res_val is not None:
+                    setattr(result, attr, res_val)
             elif isinstance(value, np.ndarray):
                 setattr(result, attr, value.copy())
         return result
@@ -723,9 +737,12 @@ class Mobject(object):
             sm1.depth_test = sm2.depth_test
             sm1._needs_new_bounding_box = sm2._needs_new_bounding_box
         # Make sure named family members carry over
-        for attr, value in list(mobject.__dict__.items()):
-            if isinstance(value, Mobject) and value in family2:
-                setattr(self, attr, family1[family2.index(value)])
+        id_to_fam1 = {id(sm2): sm1 for sm1, sm2 in zip(family1, family2)}
+        for attr, value in mobject.__dict__.items():
+            if isinstance(value, Mobject):
+                target = id_to_fam1.get(id(value))
+                if target is not None:
+                    setattr(self, attr, target)
         if match_updaters:
             self.match_updaters(mobject)
         return self

@@ -134,11 +134,10 @@ def resize_with_interpolation(nparray: np.ndarray, length: int) -> np.ndarray:
     if length == 0:
         return np.zeros((0, *nparray.shape[1:]))
     cont_indices = np.linspace(0, len(nparray) - 1, length)
-    return np.array([
-        (1 - a) * nparray[lh] + a * nparray[rh]
-        for ci in cont_indices
-        for lh, rh, a in [(int(ci), int(np.ceil(ci)), ci % 1)]
-    ])
+    lh = cont_indices.astype(int)
+    rh = np.minimum(lh + 1, len(nparray) - 1)
+    a = (cont_indices - lh).reshape((length,) + (1,) * (nparray.ndim - 1))
+    return (1.0 - a) * nparray[lh] + a * nparray[rh]
 
 
 def make_even(
@@ -157,11 +156,15 @@ def make_even(
 
 
 def arrays_match(arr1: np.ndarray, arr2: np.ndarray) -> bool:
-    return arr1.shape == arr2.shape and (arr1 == arr2).all()
+    return np.array_equal(arr1, arr2)
 
 
 def array_is_constant(arr: np.ndarray) -> bool:
-    return len(arr) > 0 and (arr == arr[0]).all()
+    if len(arr) == 0:
+        return False
+    if len(arr) == 1:
+        return True
+    return bool((arr == arr[0]).all())
 
 
 def index_within_group(counts: np.ndarray) -> np.ndarray:
