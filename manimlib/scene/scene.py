@@ -158,6 +158,8 @@ class Scene(object):
         self.checkpoints: list[tuple[SceneState, list[Animation], float, Optional[Callable[[], bool]]]] = []
         self.paused: bool = False
         self.current_checkpoint: Optional[int] = None
+        self._is_torn_down: bool = False
+        self._stop_requested: bool = False
 
     def __str__(self) -> str:
         return self.__class__.__name__
@@ -290,11 +292,20 @@ class Scene(object):
             self._active_sound_processes.append(process)
 
     def tear_down(self) -> None:
+        self._is_torn_down = True
+        self._stop_requested = True
+        self.hold_on_wait = False
+        self.quit_interaction = True
+        self.should_end_playing = True
+
         self.stop_sound_processes()
         self.stop_skipping()
 
-        # Stop browser tasks owned by this scene before the shared Window is
-        # handed to the next scene.
+        # Stop browser tasks owned by this scene
+        build_task = getattr(self, "_build_task", None)
+        if build_task is not None and not build_task.done():
+            build_task.cancel()
+
         interaction_task = getattr(self, "_browser_interaction_task", None)
         if interaction_task is not None and not interaction_task.done():
             interaction_task.cancel()
@@ -313,6 +324,13 @@ class Scene(object):
                 for listener in tuple(member.get_event_listners()):
                     EVENT_DISPATCHER.remove_listner(listener)
                 member.event_listners.clear()
+        if hasattr(EVENT_DISPATCHER, "clear"):
+            EVENT_DISPATCHER.clear()
+        else:
+            for et in tuple(getattr(EVENT_DISPATCHER, "event_listners", {}).keys()):
+                EVENT_DISPATCHER.event_listners[et].clear()
+            EVENT_DISPATCHER.draggable_object_listners.clear()
+            EVENT_DISPATCHER.pressed_keys.clear()
 
         self.file_writer.finish()
         if self.window:
@@ -957,6 +975,8 @@ class Scene(object):
         last_frame_time = await self._browser_frame()
         elapsed = 0.0
         while elapsed < duration:
+            if self.is_window_closing() or self.window is None:
+                break
             self.window.poll_events()
             if self.should_end_playing:
                 self.should_end_playing = False
@@ -1037,6 +1057,8 @@ class Scene(object):
             last_frame_time = await self._browser_frame()
             elapsed = 0.0
             while elapsed < duration:
+                if self.is_window_closing() or self.window is None:
+                    break
                 self.window.poll_events()
                 if self.should_end_playing and register:
                     self.should_end_playing = False
@@ -1082,8 +1104,12 @@ class Scene(object):
         if sys.platform != "emscripten":
             return self.hold_loop()
         last_frame_time = await self._browser_frame()
-        while self.hold_on_wait:
+        while self.hold_on_wait and not self.is_window_closing():
+            if self.window is None:
+                break
             self.window.poll_events()
+            if self.is_window_closing():
+                break
             frame_time = await self._browser_frame()
             dt = max(0.0, float(frame_time - last_frame_time))
             last_frame_time = frame_time
@@ -1307,6 +1333,8 @@ class Scene(object):
             if self.window is None:
                 break
             current_time = await next_animation_frame()
+            if self.is_window_closing() or self.window is None:
+                break
             dt = max(0.0, current_time - previous_time)
             previous_time = current_time
 
@@ -1403,7 +1431,9 @@ class Scene(object):
         return stack
 
     def is_window_closing(self):
-        return self.window and (self.window.is_closing or self.quit_interaction)
+        if getattr(self, "_is_torn_down", False) or getattr(self, "_stop_requested", False) or self.window is None:
+            return True
+        return self.window.is_closing or self.quit_interaction
 
     # Event handling
     def set_floor_plane(self, plane: str = "xy"):

@@ -155,19 +155,23 @@ class Window(object):
 
         from pyodide.ffi import jsnull
 
-        adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
-        if adapter is None or adapter is jsnull:
-            raise RuntimeError(
-                "WebGPU no está disponible en este navegador. "
-                "Se necesita un navegador compatible con WebGPU para ejecutar ManimGL."
-            )
+        adapter = kwargs.pop("adapter", None)
+        if adapter is None:
+            adapter = await wgpu.gpu.request_adapter_async(power_preference="high-performance")
+            if adapter is None or adapter is jsnull:
+                raise RuntimeError(
+                    "WebGPU no está disponible en este navegador. "
+                    "Se necesita un navegador compatible con WebGPU para ejecutar ManimGL."
+                )
 
-        device = await adapter.request_device_async()
-        if device is None or device is jsnull:
-            raise RuntimeError(
-                "WebGPU no pudo crear un dispositivo en este navegador. "
-                "Comprueba que WebGPU esté habilitado y que el dispositivo sea compatible."
-            )
+        device = kwargs.pop("device", None)
+        if device is None:
+            device = await adapter.request_device_async()
+            if device is None or device is jsnull:
+                raise RuntimeError(
+                    "WebGPU no pudo crear un dispositivo en este navegador. "
+                    "Comprueba que WebGPU esté habilitado y que el dispositivo sea compatible."
+                )
 
         return cls(canvas_id=canvas_id, adapter=adapter, device=device, **kwargs)
 
@@ -630,15 +634,17 @@ if sys.platform == "emscripten":
         canvas_id: str,
         size: tuple[int, int] = (1920, 1080),
         window: Window | None = None,
+        adapter=None,
+        device=None,
     ) -> Scene:
         """Build a Manim scene in an HTML canvas without blocking the caller."""
         import asyncio
 
         if window is None:
-            window = await Window.create_for_pyodide(canvas_id, size=size)
+            window = await Window.create_for_pyodide(
+                canvas_id, size=size, adapter=adapter, device=device
+            )
         else:
-            # The editor reuses its canvas Window. Wait for the previous scene's
-            # animation loop to stop before Window.init_for_scene changes ownership.
             previous_task = getattr(window, "_browser_interaction_task", None)
             if previous_task is not None and not previous_task.done():
                 previous_task.cancel()
@@ -649,17 +655,12 @@ if sys.platform == "emscripten":
 
         scene = scene_class(window=window)
 
-        # Execute the scene itself as the awaited operation. The browser
-        # interaction loop is intentionally not awaited here because it is
-        # long-lived and would prevent the scene runner from returning.
         await scene.build_async()
-        await scene.update_frame_async(force_draw=True)
-
-        # Keep browser input and redraws alive after construction without
-        # blocking the caller that awaits the completed scene.
-        scene._browser_interaction_task = asyncio.create_task(
-            scene.browser_interaction_loop()
-        )
-        window._browser_interaction_task = scene._browser_interaction_task
+        if not scene.is_window_closing():
+            await scene.update_frame_async(force_draw=True)
+            scene._browser_interaction_task = asyncio.create_task(
+                scene.browser_interaction_loop()
+            )
+            window._browser_interaction_task = scene._browser_interaction_task
         return scene
 
