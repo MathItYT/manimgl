@@ -1431,8 +1431,10 @@ class Scene(object):
         return stack
 
     def is_window_closing(self):
-        if getattr(self, "_is_torn_down", False) or getattr(self, "_stop_requested", False) or self.window is None:
+        if getattr(self, "_is_torn_down", False) or getattr(self, "_stop_requested", False):
             return True
+        if self.window is None:
+            return False
         return self.window.is_closing or self.quit_interaction
 
     # Event handling

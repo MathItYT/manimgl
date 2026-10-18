@@ -181,3 +181,6 @@ emsdk/
 pango-cairo-wasm/
 !examples/browser_wasm/dist/
 !examples/browser_wasm/dist/wheels
+llm_course/
+scratch/
+loquendo/
