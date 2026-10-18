@@ -405,6 +405,7 @@ class Window(object):
         glfw.focus_window(self.glfw_window)
 
     def destroy(self) -> None:
+        self.scene = None
         if sys.platform != "emscripten":
             self.canvas.close()
 
@@ -529,7 +530,7 @@ class Window(object):
         explicitly or their awaits (including play_async/wait_async) never run.
         Keep strong references to outstanding tasks for the lifetime of the window.
         """
-        if self.scene is None:
+        if self.scene is None or getattr(self.scene, "window", None) is None:
             return None
         result = getattr(self.scene, method_name)(*args)
         if sys.platform == "emscripten":

@@ -316,6 +316,8 @@ class Scene(object):
 
         self.file_writer.finish()
         if self.window:
+            if getattr(self.window, "scene", None) is self:
+                self.window.scene = None
             self.window.destroy()
             self.window = None
 
@@ -1302,10 +1304,14 @@ class Scene(object):
         postprocess_settle_seconds = 0.5
 
         while not self.is_window_closing():
+            if self.window is None:
+                break
             current_time = await next_animation_frame()
             dt = max(0.0, current_time - previous_time)
             previous_time = current_time
 
+            if self.window is None:
+                break
             self.window.poll_events()
             has_undrawn_event = self.window.has_undrawn_event()
 
@@ -1415,7 +1421,8 @@ class Scene(object):
     ) -> None:
         if sys.platform == "emscripten":
             return self.on_mouse_motion_async(point, d_point)
-        assert self.window is not None
+        if self.window is None:
+            return
         self.mouse_point.move_to(point)
 
         event_data = {"point": point, "d_point": d_point}
@@ -1440,7 +1447,8 @@ class Scene(object):
         point: Vect3,
         d_point: Vect3
     ) -> None:
-        assert self.window is not None
+        if self.window is None:
+            return
         self.mouse_point.move_to(point)
 
         event_data = {"point": point, "d_point": d_point}
