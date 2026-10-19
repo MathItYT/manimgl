@@ -12,8 +12,8 @@ from manimlib.mobject.types.vectorized_mobject import VGroup
 from manimlib.mobject.types.vectorized_mobject import VMobject
 from manimlib.utils.color import color_to_hex
 from manimlib.utils.color import hex_to_int
-from manimlib.utils.tex_file_writing import latex_to_svg
-from manimlib.utils.tex import num_tex_symbols
+from manimlib.utils.typst_file_writing import typst_to_svg
+from manimlib.utils.tex import num_tex_symbols, parse_tex_submob_map
 from manimlib.logger import log
 
 from typing import TYPE_CHECKING
@@ -22,12 +22,12 @@ if TYPE_CHECKING:
     from manimlib.typing import ManimColor, Span, Selector, Self
 
 
-@lru_cache(maxsize=1)
-def get_tex_mob_scale_factor() -> float:
+@lru_cache(maxsize=8)
+def get_tex_mob_scale_factor(text_mode: bool = False, font: str = "New Computer Modern") -> float:
     # Render a reference "0" and calibrate so that font_size_for_unit_height
-    # gives a height of 1 manim unit. Compensates for platform dvisvgm differences.
+    # gives a height of 1 manim unit.
     font_size_for_unit_height = manim_config.tex.font_size_for_unit_height
-    svg_string = latex_to_svg("0", show_message_during_execution=False)
+    svg_string = typst_to_svg(Tex._make_mitex_source("0", text_mode=text_mode, font=font))
     svg_height = get_svg_content_height(svg_string)
     return 1.0 / (font_size_for_unit_height * svg_height)
 
@@ -39,6 +39,7 @@ class Tex(StringMobject):
         self,
         *tex_strings: str,
         font_size: int = 48,
+        font: str = "New Computer Modern",
         alignment: str = R"\centering",
         template: str = "",
         additional_preamble: str = "",
@@ -61,10 +62,13 @@ class Tex(StringMobject):
             tex_string = R"\\"
 
         self.tex_string = tex_string
+        self.font = font
         self.alignment = alignment
         self.template = template
         self.additional_preamble = additional_preamble
         self.tex_to_color_map = dict(**t2c, **tex_to_color_map)
+
+        text_mode = not bool(self.tex_environment)
 
         super().__init__(
             tex_string,
@@ -79,26 +83,35 @@ class Tex(StringMobject):
         # The browser renders TeX through MiTeX inside typst-wasm. Its SVG is
         # asynchronous, so browser scaling is applied by create() after rendering.
         if sys.platform != "emscripten":
-            self.scale(get_tex_mob_scale_factor() * font_size)
-            self.scale_stroke_widths(get_tex_mob_scale_factor() * font_size)
+            scale_factor = get_tex_mob_scale_factor(text_mode=text_mode, font=self.font) * font_size
+            self.scale(scale_factor)
+            self.scale_stroke_widths(scale_factor)
 
         self.font_size = font_size  # Important for this to go after the scale call
 
     @classmethod
     def create(cls, *tex_strings: str, **kwargs):
-        """Create Tex/TexText, using MiTeX in the browser and native LaTeX otherwise."""
+        """Create Tex/TexText, using MiTeX."""
         if sys.platform != "emscripten":
             return cls(*tex_strings, **kwargs)
         return cls._create_browser(*tex_strings, **kwargs)
 
     @staticmethod
-    def _make_mitex_source(content: str, *, text_mode: bool = False) -> str:
-        font_rule = f'#set text(font: "New Computer Modern")\n'
+    def _make_mitex_source(
+        content: str,
+        *,
+        text_mode: bool = False,
+        font: str = "New Computer Modern",
+        is_labelled: bool = False,
+    ) -> str:
+        fill_col = "#000000" if is_labelled else "#ffffff"
+        font_rule = f'#set text(font: "{font}")\n' if font else ""
         doc_head = (
             f'#set page(width: auto, height: auto, margin: 0pt, fill: none)\n'
-            f'#set text(fill: rgb("#ffffff"), size: 10pt, ligatures: false)\n'
+            f'#set text(fill: rgb("{fill_col}"), size: 10pt, ligatures: false)\n'
             f'{font_rule}'
             f'#show math.equation: set text(ligatures: false)\n'
+            f'#set line(stroke: rgb("{fill_col}"))\n'
             f'#let _mc(c, it) = if c != "" {{ text(fill: rgb(c), it) }} else {{ it }}\n'
         ).strip()
 
@@ -136,7 +149,12 @@ class Tex(StringMobject):
             if probe.additional_preamble:
                 content = probe.additional_preamble + "\n" + content
             svg = await typst_to_svg_async(
-                cls._make_mitex_source(content, text_mode=text_mode)
+                cls._make_mitex_source(
+                    content,
+                    text_mode=text_mode,
+                    font=probe.font,
+                    is_labelled=is_labelled,
+                )
             )
             return svg
 
@@ -161,7 +179,7 @@ class Tex(StringMobject):
             Tex._browser_scale_cache = scale_cache
         if scale_key not in scale_cache:
             reference_svg = await typst_to_svg_async(
-                cls._make_mitex_source("0", text_mode=text_mode)
+                cls._make_mitex_source("0", text_mode=text_mode, font=probe.font)
             )
             svg_height = get_svg_content_height(reference_svg)
             scale_cache[scale_key] = (
@@ -174,7 +192,19 @@ class Tex(StringMobject):
         return obj
 
     def get_svg_string_by_content(self, content: str) -> str:
-        return latex_to_svg(content, self.template, self.additional_preamble, short_tex=self.tex_string)
+        text_mode = not bool(self.tex_environment)
+        is_labelled = "\\color[RGB]{" in content
+        if self.alignment and self.alignment in content:
+            content = content.replace(self.alignment, "")
+        if self.additional_preamble:
+            content = self.additional_preamble + "\n" + content
+        mitex_src = self._make_mitex_source(
+            content,
+            text_mode=text_mode,
+            font=getattr(self, "font", "New Computer Modern"),
+            is_labelled=is_labelled,
+        )
+        return typst_to_svg(mitex_src)
 
     def _handle_scale_side_effects(self, scale_factor: float) -> Self:
         if hasattr(self, "font_size"):
@@ -311,10 +341,33 @@ class Tex(StringMobject):
         return self.get_string()
 
     # Specific to Tex
+    def _get_char_to_submob_indices(self) -> list[list[int]]:
+        if not hasattr(self, "_char_to_submob_map"):
+            _, _, self._char_to_submob_map = parse_tex_submob_map(self.string)
+        return self._char_to_submob_map
+
+    def get_submob_indices_for_span(self, span: Span) -> list[int]:
+        mapping = self._get_char_to_submob_indices()
+        indices = []
+        for c in range(span[0], min(span[1], len(mapping))):
+            for idx in mapping[c]:
+                if idx not in indices and idx < len(self.submobjects):
+                    indices.append(idx)
+        return sorted(indices)
+
+    def select_unisolated_substring(self, pattern: str | re.Pattern) -> VGroup:
+        spans = self.find_spans_by_selector(pattern)
+        indices_list = [self.get_submob_indices_for_span(span) for span in spans]
+        indices_list = [idx for idx in indices_list if idx]
+        return self.build_parts_from_indices_lists(indices_list)
+
+    def get_submob_indices_list_by_span(self, arbitrary_span: Span) -> list[int]:
+        result = super().get_submob_indices_list_by_span(arbitrary_span)
+        if not result:
+            return self.get_submob_indices_for_span(arbitrary_span)
+        return result
+
     def substr_to_path_count(self, substr: str) -> int:
-        tex = self.get_tex()
-        if len(self) != num_tex_symbols(tex):
-            log.warning(f"Estimated size of {tex} does not match true size")
         return num_tex_symbols(substr)
 
     def get_symbol_substrings(self):

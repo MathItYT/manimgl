@@ -46,6 +46,7 @@ class InteractiveSceneEmbed:
         Create embedded IPython terminal configured to have access to
         the local namespace of the caller
         """
+        import manimlib
         # Triple back should take us to the context in a user's scene definition
         # which is calling "self.embed"
         caller_frame = inspect.currentframe().f_back.f_back.f_back
@@ -54,6 +55,7 @@ class InteractiveSceneEmbed:
         module = ModuleLoader.get_module(caller_frame.f_globals["__file__"])
         module.__dict__.update(caller_frame.f_locals)
         module.__dict__.update(self.get_shortcuts())
+        module.__dict__.update(manimlib.__dict__)
         exception_mode = manim_config.embed.exception_mode
 
         return InteractiveShellEmbed(

@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from functools import lru_cache
 import xml.etree.ElementTree as ET
@@ -152,7 +153,7 @@ def flatten_typst_svg(svg_path: str) -> None:
     tree.write(svg_path, encoding="utf-8", xml_declaration=True)
 
 
-def typst_to_svg(content: str):
+def typst_to_svg(content: str) -> str:
     if sys.platform == "emscripten":
         from manimlib.utils.browser_typst import typst_to_svg_async
         return typst_to_svg_async(content)
@@ -160,16 +161,16 @@ def typst_to_svg(content: str):
 
 
 @lru_cache()
-def _native_typst_to_svg(content: str):
+def _native_typst_to_svg(content: str) -> str:
     try:
         import typst
-        return typst.compile(content.encode(), format="svg")
+        res = typst.compile(content.encode(), format="svg")
+        if isinstance(res, bytes):
+            res = res.decode("utf-8")
+        return res
     except ImportError:
         raise RuntimeError(
             "Typst no está instalado. Por favor, instálalo siguiendo las instrucciones en https://typst.app/install"
         )
     except Exception as e:
         raise RuntimeError(f"Error de sintaxis en Typst:\n{e}")
-
-    # flatten_typst_svg(svg_path)
-    # return svg_path

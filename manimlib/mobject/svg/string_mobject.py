@@ -15,7 +15,7 @@ from manimlib.utils.color import color_to_hex
 from manimlib.utils.color import hex_to_int
 from manimlib.utils.color import int_to_hex
 
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typing import Callable
@@ -49,7 +49,8 @@ class StringMobject(SVGMobject, ABC):
         fill_color: ManimColor = DEFAULT_MOBJECT_COLOR,
         fill_border_width: float = 0.5,
         stroke_color: ManimColor = DEFAULT_MOBJECT_COLOR,
-        stroke_width: float = 0,
+        stroke_width: float | None = None,
+        color: Optional[ManimColor] = None,
         base_color: ManimColor = DEFAULT_MOBJECT_COLOR,
         isolate: Selector = (),
         protect: Selector = (),
@@ -70,8 +71,10 @@ class StringMobject(SVGMobject, ABC):
         self.parse()
         svg_string = self._svg_override if self._svg_override is not None else self.get_svg_string()
         super().__init__(svg_string=svg_string, **kwargs)
-        self.set_stroke(stroke_color, stroke_width)
-        self.set_fill(fill_color, border_width=fill_border_width)
+        self.set_fill(color=fill_color, border_width=fill_border_width)
+        self.set_stroke(color=stroke_color, width=stroke_width)
+        if color is not None:
+            self.set_color(color)
         self.labels = [submob.label for submob in self.submobjects]
         # Glyphs are placed by the typesetter, which does not lay one over another, so they
         # may share a draw. Take it back with draw_fills_together(False) for the rare string
@@ -88,9 +91,9 @@ class StringMobject(SVGMobject, ABC):
 
     def assign_labels_by_color(self, mobjects: list[VMobject]) -> None:
         """
-        Assuming each mobject in the list `mobjects` has a fill color
+        Assuming each mobject in the list `mobjects` has a color
         meant to represent a numerical label, this assigns those
-        those numerical labels to each mobject as an attribute
+        numerical labels to each mobject as an attribute
         """
         labels_count = len(self.labelled_spans)
         if labels_count == 1:
@@ -100,7 +103,8 @@ class StringMobject(SVGMobject, ABC):
 
         unrecognizable_colors = []
         for mob in mobjects:
-            label = hex_to_int(color_to_hex(mob.get_fill_color()))
+            color = mob.get_color()
+            label = hex_to_int(color_to_hex(color))
             if label >= labels_count:
                 unrecognizable_colors.append(label)
                 label = 0

@@ -390,6 +390,7 @@ class Circle(Arc):
         self,
         start_angle: float = 0,
         stroke_color: ManimColor = RED,
+        color: Optional[ManimColor] = None,
         **kwargs
     ):
         super().__init__(
@@ -397,6 +398,8 @@ class Circle(Arc):
             stroke_color=stroke_color,
             **kwargs
         )
+        if color is not None:
+            self.set_color(color)
 
     def surround(
         self,
@@ -444,6 +447,7 @@ class Dot(Circle):
         stroke_width: float = 0.0,
         fill_opacity: float = 1.0,
         fill_color: ManimColor = DEFAULT_MOBJECT_COLOR,
+        color: Optional[ManimColor] = None,
         **kwargs
     ):
         super().__init__(
@@ -453,6 +457,7 @@ class Dot(Circle):
             stroke_width=stroke_width,
             fill_opacity=fill_opacity,
             fill_color=fill_color,
+            color=color,
             **kwargs
         )
 
@@ -676,6 +681,7 @@ class Line(TipableVMobject):
         end: Vect3 | Mobject = RIGHT,
         buff: float = 0.0,
         path_arc: float = 0.0,
+        color: Optional[ManimColor] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -683,6 +689,8 @@ class Line(TipableVMobject):
         self.buff = buff
         self.set_start_and_end_attrs(start, end)
         self.set_points_by_ends(self.start, self.end, buff, path_arc)
+        if color is not None:
+            self.set_color(color)
 
     def set_points_by_ends(
         self,
@@ -978,6 +986,8 @@ class StrokeArrow(Line):
             buff=buff,
             **kwargs
         )
+        if color is not None:
+            self.set_color(color)
 
     def set_points_by_ends(
         self,
@@ -1307,10 +1317,13 @@ class Polygon(VMobject):
     def __init__(
         self,
         *vertices: Vect3,
+        color: Optional[ManimColor] = None,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.set_points_as_corners([*vertices, vertices[0]])
+        if color is not None:
+            self.set_color(color)
 
     def get_vertices(self) -> Vect3Array:
         return self.get_start_anchors()
