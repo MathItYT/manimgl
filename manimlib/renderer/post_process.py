@@ -119,7 +119,11 @@ class MobjectPostProcessor:
         self.samples = current_samples
         self._bind_group_cache.clear()
 
-        usage = wgpu.TextureUsage.RENDER_ATTACHMENT | wgpu.TextureUsage.TEXTURE_BINDING
+        usage = (
+            wgpu.TextureUsage.RENDER_ATTACHMENT
+            | wgpu.TextureUsage.TEXTURE_BINDING
+            | wgpu.TextureUsage.COPY_SRC
+        )
 
         self.layer_texture = self.device.create_texture(size=(width, height, 1), format=COLOR_FORMAT, usage=usage)
         self.layer_view = self.layer_texture.create_view()
@@ -141,9 +145,10 @@ class MobjectPostProcessor:
         )
         self.bg_view = self.bg_texture.create_view()
 
+        self.scene_texture = self.device.create_texture(size=(width, height, 1), format=COLOR_FORMAT, usage=usage)
+        self.scene_view = self.scene_texture.create_view()
+
         if self.samples > 1:
-            self.scene_texture = self.device.create_texture(size=(width, height, 1), format=COLOR_FORMAT, usage=usage | wgpu.TextureUsage.COPY_SRC)
-            self.scene_view = self.scene_texture.create_view()
             self.msaa_layer_texture = self.device.create_texture(size=(width, height, 1), format=COLOR_FORMAT, sample_count=self.samples, usage=wgpu.TextureUsage.RENDER_ATTACHMENT)
             self.msaa_layer_view = self.msaa_layer_texture.create_view()
             self.msaa_mask_texture = self.device.create_texture(size=(width, height, 1), format=COLOR_FORMAT, sample_count=self.samples, usage=wgpu.TextureUsage.RENDER_ATTACHMENT)
@@ -151,8 +156,6 @@ class MobjectPostProcessor:
             self.layer_depth_texture = self.device.create_texture(size=(width, height, 1), format=DEPTH_STENCIL_FORMAT, sample_count=self.samples, usage=wgpu.TextureUsage.RENDER_ATTACHMENT)
             self.layer_depth_view = self.layer_depth_texture.create_view()
         else:
-            self.scene_texture = None
-            self.scene_view = None
             self.msaa_layer_texture = None
             self.msaa_layer_view = None
             self.msaa_mask_texture = None
@@ -439,3 +442,55 @@ class MobjectPostProcessor:
 
             if not is_last:
                 curr_in, curr_out = curr_out, curr_in
+
+    def process_frame(
+        self,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        effects: list[Any],
+    ) -> None:
+        """Aplica una cadena de efectos de post-procesamiento al frame renderizado completo."""
+        active_effects = [
+            e for e in effects
+            if getattr(e, "is_active", lambda p: True)(self)
+        ]
+
+        if not active_effects:
+            if input_view is not target_view:
+                self.blit_fullscreen(encoder, input_view, target_view)
+            return
+
+        ordered_effects = sorted(active_effects, key=lambda e: getattr(e, "order", 50))
+        num_effects = len(ordered_effects)
+
+        if num_effects == 1:
+            effect = ordered_effects[0]
+            if getattr(effect, "needs_bg", False):
+                self.copy_target_to_bg(encoder, input_view)
+                self.blit_fullscreen(encoder, input_view, target_view)
+                effect.apply(self, encoder, input_view, target_view, scissor=None, load_op=wgpu.LoadOp.load)
+            else:
+                effect.apply(self, encoder, input_view, target_view, scissor=None, load_op=wgpu.LoadOp.clear)
+            return
+
+        curr_in = input_view
+        curr_out = self.layer_view
+
+        for i, effect in enumerate(ordered_effects):
+            is_last = (i == num_effects - 1)
+            dest_view = target_view if is_last else curr_out
+
+            if getattr(effect, "needs_bg", False):
+                self.copy_target_to_bg(encoder, curr_in)
+                self.blit_fullscreen(encoder, curr_in, dest_view)
+                effect.apply(self, encoder, curr_in, dest_view, scissor=None, load_op=wgpu.LoadOp.load)
+            else:
+                effect.apply(self, encoder, curr_in, dest_view, scissor=None, load_op=wgpu.LoadOp.clear)
+
+            if not is_last:
+                if i == 0:
+                    curr_in = self.layer_view
+                    curr_out = self.layer_view_b
+                else:
+                    curr_in, curr_out = curr_out, curr_in

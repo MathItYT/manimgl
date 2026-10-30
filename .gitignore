@@ -3,6 +3,7 @@
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
+.vscode/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -185,3 +186,6 @@ llm_course/
 scratch/
 loquendo/
 manimgl_generative/
+
+loquendo.py
+real_analysis.py

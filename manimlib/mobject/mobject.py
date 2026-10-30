@@ -700,6 +700,19 @@ class Mobject(object):
                     setattr(result, attr, res_val)
             elif isinstance(value, np.ndarray):
                 setattr(result, attr, value.copy())
+        if hasattr(self, "_vfx_effects"):
+            new_effects = []
+            for eff in self._vfx_effects:
+                eff_copy = eff.copy()
+                src = getattr(eff, "_source_effect", eff)
+                eff_copy._source_effect = src
+                if not hasattr(src, "_attached_effects"):
+                    src._attached_effects = []
+                if eff_copy not in src._attached_effects:
+                    src._attached_effects.append(eff_copy)
+                eff_copy.attach(result)
+                new_effects.append(eff_copy)
+            result._vfx_effects = new_effects
         return result
 
     def generate_target(self, use_deepcopy: bool = False) -> Self:
@@ -736,8 +749,30 @@ class Mobject(object):
             sm1.texture_filter = sm2.texture_filter
             sm1.depth_test = sm2.depth_test
             sm1._needs_new_bounding_box = sm2._needs_new_bounding_box
+            if hasattr(sm2, "_vfx_effects"):
+                new_effects = []
+                for eff in sm2._vfx_effects:
+                    eff_copy = eff.copy()
+                    src = getattr(eff, "_source_effect", eff)
+                    eff_copy._source_effect = src
+                    if not hasattr(src, "_attached_effects"):
+                        src._attached_effects = []
+                    if eff_copy not in src._attached_effects:
+                        src._attached_effects.append(eff_copy)
+                    eff_copy.attach(sm1)
+                    new_effects.append(eff_copy)
+                sm1._vfx_effects = new_effects
+            elif hasattr(sm1, "_vfx_effects"):
+                sm1._vfx_effects.clear()
         # Make sure named family members carry over
         id_to_fam1 = {id(sm2): sm1 for sm1, sm2 in zip(family1, family2)}
+        for sm1, sm2 in zip(family1, family2):
+            for vfx_attr in ("_vfx_group", "_vfx_local"):
+                if hasattr(sm2, vfx_attr):
+                    val = getattr(sm2, vfx_attr)
+                    setattr(sm1, vfx_attr, id_to_fam1.get(id(val), val))
+                elif hasattr(sm1, vfx_attr):
+                    delattr(sm1, vfx_attr)
         for attr, value in mobject.__dict__.items():
             if isinstance(value, Mobject):
                 target = id_to_fam1.get(id(value))
@@ -2154,31 +2189,49 @@ class Mobject(object):
     def is_hidden(self) -> bool:
         return getattr(self, "hidden", False)
 
-    def add_vfx(self, effect: Any, recurse: bool = False) -> Self:
+    def add_vfx(self, *effects: Any, recurse: bool = False) -> Self:
         if not hasattr(self, "_vfx_effects"):
             self._vfx_effects = []
-        eff = effect.copy()
-        eff._source_effect = effect
-        effect._target_effect = eff
-        eff.attach(self)
-        if not getattr(eff, "allow_multiple", False):
-            existing = [e for e in self._vfx_effects if e.name == eff.name]
-            if existing:
-                self._vfx_effects.remove(existing[0])
-        self._vfx_effects.append(eff)
-        is_group = getattr(eff, "is_group_effect", False) or eff.name in (
-            "Glow", "Mask", "LiquidGlass", "DropShadow", "GaussianBlur", "Vignette"
-        )
-        for mob in self.get_family():
-            if is_group:
-                mob._vfx_group = self
+        flat_effects: list[Any] = []
+        for item in effects:
+            if item is None:
+                continue
+            if isinstance(item, (list, tuple, set)):
+                flat_effects.extend(item)
             else:
-                mob._vfx_local = self
-                if not hasattr(mob, "_vfx_group"):
-                    mob._vfx_group = self
+                flat_effects.append(item)
+
+        is_camera_frame = self.__class__.__name__ == "CameraFrame"
+        for effect in flat_effects:
+            eff = effect.copy()
+            eff._source_effect = effect
+            effect._target_effect = eff
+            if not hasattr(effect, "_attached_effects"):
+                effect._attached_effects = []
+            if eff not in effect._attached_effects:
+                effect._attached_effects.append(eff)
+            eff.attach(self)
+            if not getattr(eff, "allow_multiple", False):
+                existing = [e for e in self._vfx_effects if e.name == eff.name]
+                if existing:
+                    self._vfx_effects.remove(existing[0])
+            self._vfx_effects.append(eff)
+            if not is_camera_frame:
+                is_group = getattr(eff, "is_group_effect", False) or eff.name in (
+                    "Glow", "Mask", "LiquidGlass", "DropShadow", "GaussianBlur", "Vignette"
+                )
+                for mob in self.get_family():
+                    if is_group:
+                        mob._vfx_group = self
+                    else:
+                        mob._vfx_local = self
+                        if not hasattr(mob, "_vfx_group"):
+                            mob._vfx_group = self
         return self
 
-    def remove_vfx(self, effect_type_or_name: Any, recurse: bool = False) -> Self:
+    def remove_vfx(self, effect_type_or_name: Any = None, recurse: bool = False) -> Self:
+        if effect_type_or_name is None:
+            return self.clear_vfx(recurse=recurse)
         if hasattr(self, "_vfx_effects"):
             if isinstance(effect_type_or_name, str):
                 self._vfx_effects = [e for e in self._vfx_effects if e.name != effect_type_or_name]
@@ -2219,6 +2272,12 @@ class Mobject(object):
 
     def get_vfx_list(self) -> list[Any]:
         return getattr(self, "_vfx_effects", [])
+
+    add_post_process = add_vfx
+    remove_post_process = remove_vfx
+    clear_post_process = clear_vfx
+    has_post_process = has_vfx
+    get_post_process_list = get_vfx_list
 
     def set_mask(
         self,
@@ -2309,6 +2368,78 @@ class Mobject(object):
     def set_liquid_glass(self, **kwargs: Any) -> Self:
         from manimlib.utils.vfx_presets import LiquidGlass
         self.add_vfx(LiquidGlass(**kwargs))
+        return self
+
+    def set_glow(
+        self,
+        radius: float = 30.0,
+        intensity: float = 1.5,
+        threshold: float = 0.0,
+        softness: float = 0.5,
+        color: Sequence[float] | str | None = None,
+    ) -> Self:
+        from manimlib.utils.vfx_presets import Glow
+        self.add_vfx(Glow(
+            radius=radius, intensity=intensity, threshold=threshold,
+            softness=softness, color=color,
+        ))
+        return self
+
+    def set_glitch(
+        self,
+        intensity: float = 0.6,
+        speed: float = 8.0,
+        slice_height: float = 16.0,
+    ) -> Self:
+        from manimlib.utils.vfx_presets import Glitch
+        self.add_vfx(Glitch(intensity=intensity, speed=speed, slice_height=slice_height))
+        return self
+
+    def set_chromatic_aberration(self, offset: float = 0.02) -> Self:
+        from manimlib.utils.vfx_presets import ChromaticAberration
+        self.add_vfx(ChromaticAberration(offset=offset))
+        return self
+
+    def set_motion_blur(
+        self,
+        direction: Sequence[float] | None = None,
+        strength: float = 1.0,
+        auto_direction: bool | None = None,
+        max_blur: float = 0.25,
+    ) -> Self:
+        from manimlib.utils.vfx_presets import MotionBlur
+        self.add_vfx(MotionBlur(
+            direction=direction, strength=strength,
+            auto_direction=auto_direction, max_blur=max_blur, mobject=self,
+        ))
+        return self
+
+    def set_zoom_blur(
+        self,
+        strength: float = 1.0,
+        center: Sequence[float] | None = None,
+        uv_center: Sequence[float] | None = None,
+        decay: float = 0.98,
+        mode: str = "auto",
+        auto_scale: bool = True,
+        max_blur: float = 0.45,
+    ) -> Self:
+        from manimlib.utils.vfx_presets import ZoomBlur
+        self.add_vfx(ZoomBlur(
+            strength=strength, center=center, uv_center=uv_center,
+            decay=decay, mode=mode, auto_scale=auto_scale,
+            max_blur=max_blur, mobject=self,
+        ))
+        return self
+
+    def set_custom_vfx(
+        self,
+        fragment_wgsl: str,
+        uniforms: Any = None,
+        **kwargs: Any,
+    ) -> Self:
+        from manimlib.utils.vfx_presets import CustomVFX
+        self.add_vfx(CustomVFX(fragment_wgsl, uniforms=uniforms, **kwargs))
         return self
 
 

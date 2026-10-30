@@ -120,10 +120,12 @@ const SAMPLES: i32 = 16;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let r = max(params.radius, 0.5);
-    let step_px = max(r / f32(SAMPLES), 1.0);
-    let actual_radius = step_px * f32(SAMPLES);
-    let sigma = max(actual_radius * 0.38, 1.0);
+    let r = max(params.radius, 0.0);
+    if (r <= 1e-3) {
+        return textureSample(in_tex, in_smp, in.uv);
+    }
+    let step_px = r / f32(SAMPLES);
+    let sigma = max(r * 0.38, 1e-3);
     let two_sigma_sq = 2.0 * sigma * sigma;
 
     let inv_res_x = 1.0 / params.resolution.x;
@@ -164,10 +166,16 @@ const SAMPLES: i32 = 16;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-    let r = max(params.radius, 0.5);
-    let step_px = max(r / f32(SAMPLES), 1.0);
-    let actual_radius = step_px * f32(SAMPLES);
-    let sigma = max(actual_radius * 0.38, 1.0);
+    let r = max(params.radius, 0.0);
+    if (r <= 1e-3) {
+        let col = textureSample(in_tex, in_smp, in.uv);
+        if (col.a <= 1e-5 && dot(col.rgb, vec3f(1.0)) <= 1e-5) {
+            discard;
+        }
+        return col;
+    }
+    let step_px = r / f32(SAMPLES);
+    let sigma = max(r * 0.38, 1e-3);
     let two_sigma_sq = 2.0 * sigma * sigma;
 
     let inv_res_y = 1.0 / params.resolution.y;
@@ -200,7 +208,7 @@ class GaussianBlur(PostProcessEffect):
     order = PostProcessEffect.STAGE_FILTER
 
     def is_active(self, processor: Any) -> bool:
-        return self.radius > 0.1
+        return self.radius > 1e-3
 
     def __init__(self, radius: float = 12.0, downscale: float = 1.0):
         super().__init__(name="GaussianBlur", allow_multiple=False)
@@ -272,10 +280,10 @@ class GaussianBlur(PostProcessEffect):
         ], dtype=np.float32)
         self.upload_uniforms_if_changed(processor, self.buf, data)
 
-        intermediate_view = processor.scratch_view
+        intermediate_view = self._ensure_intermediate_texture(processor)
         bg_pass1_tex = processor.get_single_tex_bind_group(input_view)
 
-        # Pase 1: Horizontal -> scratch_view (escalado a media resolución)
+        # Pase 1: Horizontal -> intermediate_view
         p1 = encoder.begin_render_pass(color_attachments=[{
             "view": intermediate_view,
             "load_op": wgpu.LoadOp.clear,
@@ -283,7 +291,21 @@ class GaussianBlur(PostProcessEffect):
             "clear_value": (0.0, 0.0, 0.0, 0.0),
         }])
         if scissor is not None:
-            p1.set_scissor_rect(*processor.get_scratch_scissor(scissor))
+            if self._temp_size == (processor.width, processor.height):
+                p1.set_scissor_rect(*scissor)
+            else:
+                sx, sy, sw, sh = scissor
+                tw, th = self._temp_size
+                rx = tw / max(processor.width, 1)
+                ry = th / max(processor.height, 1)
+                p1.set_scissor_rect(*processor.clamp_scissor(
+                    int(np.floor(sx * rx)),
+                    int(np.floor(sy * ry)),
+                    int(np.ceil((sx + sw) * rx)),
+                    int(np.ceil((sy + sh) * ry)),
+                    tw,
+                    th,
+                ))
         p1.set_pipeline(self.pipeline_p1)
         p1.set_bind_group(0, bg_pass1_tex)
         p1.set_bind_group(1, self.bg_uniform)
@@ -1191,8 +1213,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
         let sample_r = textureSample(layer_tex, in_smp, uv + offset);
         let sample_c = textureSample(layer_tex, in_smp, uv - offset);
 
-        let red_fringe = vec3f(1.0, 0.08, 0.25) * sample_r.a;
-        let cyan_fringe = vec3f(0.05, 0.85, 1.0) * sample_c.a;
+        let energy_r = max(max(sample_r.r, sample_r.g), sample_r.b) * sample_r.a;
+        let energy_c = max(max(sample_c.r, sample_c.g), sample_c.b) * sample_c.a;
+        let red_fringe = vec3f(1.0, 0.08, 0.25) * energy_r;
+        let cyan_fringe = vec3f(0.05, 0.85, 1.0) * energy_c;
         let fringe_a = max(sample_r.a, sample_c.a) * 0.8;
 
         final_rgb = max(final_rgb, max(red_fringe, cyan_fringe) * 0.85);
@@ -1449,6 +1473,9 @@ class MotionBlur(PostProcessEffect):
         self._prev_projected_pos: (
             np.ndarray | None
         ) = None
+        self._prev_camera_state: (
+            tuple[np.ndarray, np.ndarray] | None
+        ) = None
 
         # Time corresponding to _prev_projected_pos.
         self._last_motion_time: (
@@ -1488,6 +1515,7 @@ class MotionBlur(PostProcessEffect):
         self.mobject = mobject
 
         self._prev_projected_pos = None
+        self._prev_camera_state = None
         self._last_motion_time = None
 
         self._cached_dir = (
@@ -2150,64 +2178,94 @@ class MotionBlur(PostProcessEffect):
         # AUTOMATIC 3D TRACKING
         # ==============================================================
 
-        world_pos = self._get_world_center(
-            processor
-        )
+        if (
+            self.mobject is not None
+            and self.mobject.__class__.__name__ == "CameraFrame"
+        ):
+            try:
+                curr_center = np.asarray(self.mobject.get_center(), dtype=np.float64)
+                curr_cam_loc = np.asarray(self.mobject.get_implied_camera_location(), dtype=np.float64)
+            except Exception:
+                self._last_motion_time = curr_time
+                self._cached_strength = 0.0
+                return (self._cached_dir[0], self._cached_dir[1], 0.0)
 
-        if world_pos is None:
-            self._last_motion_time = (
-                curr_time
+            if self._prev_camera_state is None:
+                self._prev_camera_state = (curr_center.copy(), curr_cam_loc.copy())
+                self._last_motion_time = curr_time
+                self._cached_dir = (1.0, 0.0)
+                self._cached_strength = 0.0
+                return (1.0, 0.0, 0.0)
+
+            prev_center, prev_cam_loc = self._prev_camera_state
+            curr_proj_center = self._project_world_point(processor, curr_center)
+            pan_delta = self._project_world_point(processor, prev_center) - curr_proj_center
+            if np.linalg.norm(pan_delta) > 1e-8:
+                delta = pan_delta
+            else:
+                rot_world = curr_center - 0.25 * (curr_cam_loc - prev_cam_loc)
+                delta = self._project_world_point(processor, rot_world) - curr_proj_center
+            self._prev_camera_state = (curr_center.copy(), curr_cam_loc.copy())
+            current_projected = curr_proj_center
+        else:
+            world_pos = self._get_world_center(
+                processor
             )
 
-            self._cached_strength = 0.0
+            if world_pos is None:
+                self._last_motion_time = (
+                    curr_time
+                )
 
-            return (
-                self._cached_dir[0],
-                self._cached_dir[1],
-                0.0,
+                self._cached_strength = 0.0
+
+                return (
+                    self._cached_dir[0],
+                    self._cached_dir[1],
+                    0.0,
+                )
+
+            current_projected = (
+                self._project_world_point(
+                    processor,
+                    world_pos,
+                )
             )
 
-        current_projected = (
-            self._project_world_point(
-                processor,
-                world_pos,
+            # ==============================================================
+            # FIRST FRAME
+            # ==============================================================
+
+            if self._prev_projected_pos is None:
+                self._prev_projected_pos = (
+                    current_projected.copy()
+                )
+
+                self._last_motion_time = (
+                    curr_time
+                )
+
+                self._cached_dir = (
+                    1.0,
+                    0.0,
+                )
+
+                self._cached_strength = 0.0
+
+                return (
+                    1.0,
+                    0.0,
+                    0.0,
+                )
+
+            # ==============================================================
+            # SCREEN-SPACE DISPLACEMENT
+            # ==============================================================
+
+            delta = (
+                current_projected
+                - self._prev_projected_pos
             )
-        )
-
-        # ==============================================================
-        # FIRST FRAME
-        # ==============================================================
-
-        if self._prev_projected_pos is None:
-            self._prev_projected_pos = (
-                current_projected.copy()
-            )
-
-            self._last_motion_time = (
-                curr_time
-            )
-
-            self._cached_dir = (
-                1.0,
-                0.0,
-            )
-
-            self._cached_strength = 0.0
-
-            return (
-                1.0,
-                0.0,
-                0.0,
-            )
-
-        # ==============================================================
-        # SCREEN-SPACE DISPLACEMENT
-        # ==============================================================
-
-        delta = (
-            current_projected
-            - self._prev_projected_pos
-        )
 
         fw, fh = (
             self._get_frame_dimensions(
@@ -2592,6 +2650,11 @@ class ZoomBlur(PostProcessEffect):
     def _get_mobject_scale_uv(self, processor: Any) -> float | None:
         if self.mobject is None:
             return None
+        if self.mobject.__class__.__name__ == "CameraFrame":
+            try:
+                return 1.0 / max(float(self.mobject.get_scale()), 1e-5)
+            except Exception:
+                return None
         try:
             w = float(self.mobject.get_width())
             h = float(self.mobject.get_height())
@@ -3060,14 +3123,29 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
 class VFXAnimation(Animation):
     def __init__(
         self,
-        mobject: Mobject,
-        effect: PostProcessEffect,
-        update_params_func: Callable[[float], dict],
+        mobject_or_effect: Mobject | PostProcessEffect | Any,
+        effect_or_func: PostProcessEffect | Callable[[float], dict],
+        update_params_func: Callable[[float], dict] | None = None,
         **kwargs,
     ):
-        super().__init__(mobject, **kwargs)
+        if isinstance(mobject_or_effect, PostProcessEffect) and callable(effect_or_func):
+            effect = mobject_or_effect
+            func = effect_or_func
+            target_eff = getattr(effect, "_target_effect", None)
+            mob = (
+                getattr(effect, "mobject", None)
+                or (getattr(target_eff, "mobject", None) if target_eff is not None else None)
+                or Mobject()
+            )
+        else:
+            mob = mobject_or_effect
+            if not isinstance(mob, Mobject) and hasattr(mob, "frame") and isinstance(mob.frame, Mobject):
+                mob = mob.frame
+            effect = effect_or_func
+            func = update_params_func
+        super().__init__(mob, **kwargs)
         self.effect = effect
-        self.update_params_func = update_params_func
+        self.update_params_func = func
 
     def interpolate_mobject(self, alpha: float):
         alpha = self.rate_func(alpha)
@@ -3193,6 +3271,22 @@ class LiquidGlass(PostProcessEffect):
 
     def _get_quad_world(self) -> np.ndarray:
         """Build an oriented scene-space rectangle around the mobject."""
+        if self.mobject is not None and self.mobject.__class__.__name__ == "CameraFrame":
+            try:
+                center = np.asarray(self.mobject.get_center(), dtype=np.float64)
+                hw = max(float(self.mobject.get_width()) * 0.5, 1e-4)
+                hh = max(float(self.mobject.get_height()) * 0.5, 1e-4)
+                R = np.asarray(self.mobject.get_inverse_camera_rotation_matrix(), dtype=np.float64)
+                u = R[0]
+                v = R[1]
+                return np.array([
+                    center - u * hw - v * hh,
+                    center + u * hw - v * hh,
+                    center + u * hw + v * hh,
+                    center - u * hw + v * hh,
+                ], dtype=np.float64)
+            except Exception:
+                pass
         pts = self._get_world_points()
         if pts is None:
             mob = self.mobject
@@ -3815,9 +3909,204 @@ class DropShadow(PostProcessEffect):
         return self.copy()
 
 
+# =====================================================================
+# Preset: Custom WGSL Post-Processing Shader
+# =====================================================================
+
+CUSTOM_VFX_TEMPLATE_WGSL = """
+@group(0) @binding(0) var in_tex: texture_2d<f32>;
+@group(0) @binding(1) var in_smp: sampler;
+
+struct CustomParams {
+    time: f32,
+    dt: f32,
+    resolution: vec2f,
+    u0: vec4f,
+    u1: vec4f,
+    u2: vec4f,
+    u3: vec4f,
+};
+@group(1) @binding(0) var<uniform> params: CustomParams;
+
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+
+__USER_FUNCTIONS__
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+    let uv = in.uv;
+    let time = params.time;
+    let resolution = params.resolution;
+    var color = textureSample(in_tex, in_smp, uv);
+    __USER_BODY__
+}
+"""
+
+
+class CustomVFX(PostProcessEffect):
+    """Efecto de post-procesamiento personalizado en WGSL para mobjects o para el frame final."""
+    name = "CustomVFX"
+    is_group_effect = True
+    allow_multiple = True
+    needs_bg = False
+    order = PostProcessEffect.STAGE_FILTER
+
+    def __init__(
+        self,
+        fragment_wgsl: str,
+        uniforms: Sequence[float] | np.ndarray | Callable[[Any], Sequence[float] | np.ndarray] | None = None,
+        order: int = PostProcessEffect.STAGE_FILTER,
+        needs_bg: bool = False,
+        name: str = "CustomVFX",
+        allow_multiple: bool = True,
+    ):
+        super().__init__(name=name, allow_multiple=allow_multiple)
+        self.fragment_wgsl = fragment_wgsl
+        self.uniforms = uniforms
+        self.order = int(order)
+        self.needs_bg = bool(needs_bg)
+        self._initialized = False
+
+    def _build_shader_code(self) -> str:
+        code = self.fragment_wgsl.strip()
+        if "@fragment" in code:
+            if "@group(0)" not in code:
+                tex_name = "u_tex" if "u_tex" in code else ("tex" if "tex" in code and "in_tex" not in code else "in_tex")
+                smp_name = "u_samp" if "u_samp" in code else ("samp" if "samp" in code and "in_smp" not in code else "in_smp")
+                header = f"""
+@group(0) @binding(0) var {tex_name}: texture_2d<f32>;
+@group(0) @binding(1) var {smp_name}: sampler;
+struct CustomParams {{
+    time: f32,
+    dt: f32,
+    resolution: vec2f,
+    u0: vec4f,
+    u1: vec4f,
+    u2: vec4f,
+    u3: vec4f,
+}};
+@group(1) @binding(0) var<uniform> params: CustomParams;
+"""
+                if "struct VertexOutput" not in code:
+                    header += "\nstruct VertexOutput {\n    @builtin(position) position: vec4f,\n    @location(0) uv: vec2f,\n};\n"
+                if "Varyings" in code and "struct Varyings" not in code:
+                    header += "\nalias Varyings = VertexOutput;\n"
+                return header + "\n" + code
+            return code
+        if "fn process(" in code:
+            return (
+                CUSTOM_VFX_TEMPLATE_WGSL
+                .replace("__USER_FUNCTIONS__", code)
+                .replace("__USER_BODY__", "return process(uv, color);")
+            )
+        body = code if "return " in code else f"{code}\n    return color;"
+        return (
+            CUSTOM_VFX_TEMPLATE_WGSL
+            .replace("__USER_FUNCTIONS__", "")
+            .replace("__USER_BODY__", body)
+        )
+
+    def _init_gpu(self, processor: Any) -> None:
+        device = processor.device
+        self.uniform_layout = device.create_bind_group_layout(entries=[{
+            "binding": 0,
+            "visibility": wgpu.ShaderStage.FRAGMENT,
+            "buffer": {"type": wgpu.BufferBindingType.uniform},
+        }])
+        self.buf = device.create_buffer(
+            size=80,
+            usage=wgpu.BufferUsage.UNIFORM | wgpu.BufferUsage.COPY_DST,
+        )
+        self.bg_uniform = device.create_bind_group(
+            layout=self.uniform_layout,
+            entries=[{"binding": 0, "resource": {"buffer": self.buf, "offset": 0, "size": 80}}],
+        )
+        shader_code = self._build_shader_code()
+        layouts = [processor.single_tex_layout]
+        if "@group(1)" in shader_code:
+            layouts.append(self.uniform_layout)
+        self.pipeline = processor.create_fullscreen_pipeline(
+            shader_code,
+            layouts,
+            blend=PREMULTIPLIED_ADDITIVE_BLEND,
+        )
+        self._use_uniform_group = "@group(1)" in shader_code
+        self._initialized = True
+
+    def _pack_uniforms(self, processor: Any) -> np.ndarray:
+        data = np.zeros(20, dtype=np.float32)
+        fps = getattr(getattr(processor, "camera", None), "fps", 30.0) or 30.0
+        data[0] = float(getattr(processor, "time", 0.0))
+        data[1] = 1.0 / max(float(fps), 1.0)
+        data[2] = float(processor.width)
+        data[3] = float(processor.height)
+
+        u_val = self.uniforms(processor) if callable(self.uniforms) else self.uniforms
+        if u_val is not None:
+            arr = np.asarray(u_val, dtype=np.float32).reshape(-1)
+            n = min(len(arr), 16)
+            data[4:4 + n] = arr[:n]
+        return data
+
+    def apply(
+        self,
+        processor: Any,
+        encoder: Any,
+        input_view: Any,
+        target_view: Any,
+        scissor: tuple[int, int, int, int] | None = None,
+        load_op: wgpu.LoadOp = wgpu.LoadOp.load,
+        **kwargs,
+    ) -> None:
+        if not self._initialized:
+            self._init_gpu(processor)
+
+        if self._use_uniform_group:
+            data = self._pack_uniforms(processor)
+            self.upload_uniforms_if_changed(processor, self.buf, data)
+
+        tex_bg = processor.get_single_tex_bind_group(input_view)
+
+        p = encoder.begin_render_pass(color_attachments=[{
+            "view": target_view,
+            "load_op": load_op,
+            "store_op": wgpu.StoreOp.store,
+            "clear_value": (0.0, 0.0, 0.0, 0.0),
+        }])
+        if scissor is not None:
+            p.set_scissor_rect(*scissor)
+        p.set_pipeline(self.pipeline)
+        p.set_bind_group(0, tex_bg)
+        if self._use_uniform_group:
+            p.set_bind_group(1, self.bg_uniform)
+        p.draw(3)
+        p.end()
+
+    def copy(self) -> CustomVFX:
+        new_obj = CustomVFX(
+            fragment_wgsl=self.fragment_wgsl,
+            uniforms=self.uniforms,
+            order=self.order,
+            needs_bg=self.needs_bg,
+            name=self.name,
+            allow_multiple=self.allow_multiple,
+        )
+        new_obj.mobject = self.mobject
+        return new_obj
+
+    def __deepcopy__(self, memo: dict) -> CustomVFX:
+        return self.copy()
+
+
 # Aliases
 Blur = GaussianBlur
 FilmGrain = Grain
 
 Shadow = DropShadow
 ShadowEffect = DropShadow
+PostProcessShader = CustomVFX
+ShaderVFX = CustomVFX
+CustomPostProcess = CustomVFX

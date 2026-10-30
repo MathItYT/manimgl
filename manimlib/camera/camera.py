@@ -24,7 +24,7 @@ from manimlib.utils.color import color_to_rgba
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Optional
+    from typing import Any, Callable, Iterable, Optional, Sequence
     from manimlib.typing import ManimColor, Vect3
     from manimlib.window import Window
 
@@ -124,6 +124,8 @@ class Camera(object):
         # without multisampling, for 3d scenes one might want
         # to set samples to be greater than 0.
         samples: int = 0,
+        vfx: Optional[Iterable[Any]] = None,
+        post_process: Optional[Iterable[Any]] = None,
     ):
         self.window = window
         self.default_pixel_shape = resolution  # Rename?
@@ -145,6 +147,11 @@ class Camera(object):
         self.init_renderer()
         self.init_target()
         self.init_light_source()
+
+        if vfx is not None:
+            self.add_vfx(vfx)
+        if post_process is not None:
+            self.add_vfx(post_process)
 
     def init_frame(self, **config) -> None:
         self.frame = CameraFrame(**config)
@@ -353,6 +360,161 @@ class Camera(object):
             camera_position=frame.get_implied_camera_location(),
             light_position=self.light_source.get_location(),
         )
+
+    # Full-frame post-processing effects (delegated to self.frame)
+    def add_vfx(self, *effects: Any) -> Camera:
+        self.frame.add_vfx(*effects)
+        return self
+
+    def remove_vfx(self, effect_type_or_name: Any = None) -> Camera:
+        self.frame.remove_vfx(effect_type_or_name)
+        return self
+
+    def clear_vfx(self) -> Camera:
+        self.frame.clear_vfx()
+        return self
+
+    def has_vfx(self) -> bool:
+        return self.frame.has_vfx()
+
+    def get_vfx_list(self) -> list[Any]:
+        return self.frame.get_vfx_list()
+
+    add_post_process = add_vfx
+    remove_post_process = remove_vfx
+    clear_post_process = clear_vfx
+    has_post_process = has_vfx
+    get_post_process_list = get_vfx_list
+
+    def set_mask(
+        self,
+        mask: Mobject | Sequence[Mobject],
+        invert: bool = False,
+        use_luminance: bool = False,
+        mode: str = "intersect",
+    ) -> Camera:
+        self.frame.set_mask(mask, invert=invert, use_luminance=use_luminance, mode=mode)
+        return self
+
+    def add_mask(
+        self,
+        mask: Mobject | Sequence[Mobject],
+        invert: bool = False,
+        use_luminance: bool = False,
+        mode: str = "intersect",
+    ) -> Camera:
+        self.frame.add_mask(mask, invert=invert, use_luminance=use_luminance, mode=mode)
+        return self
+
+    def remove_mask(self, mask: Mobject | None = None) -> Camera:
+        self.frame.remove_mask(mask)
+        return self
+
+    def set_gaussian_blur(self, radius: float = 12.0, downscale: float = 1.0) -> Camera:
+        self.frame.set_gaussian_blur(radius=radius, downscale=downscale)
+        return self
+
+    def set_grain(self, intensity: float = 0.08, speed: float = 24.0, colored: bool = False) -> Camera:
+        self.frame.set_grain(intensity=intensity, speed=speed, colored=colored)
+        return self
+
+    def set_vignette(
+        self,
+        radius: float = 0.5,
+        softness: float = 0.45,
+        intensity: float = 0.7,
+        center: Sequence[float] = (0.5, 0.5),
+        color: Sequence[float] | str | None = None,
+        keep_circular: bool = True,
+    ) -> Camera:
+        self.frame.set_vignette(
+            radius=radius, softness=softness, intensity=intensity,
+            center=center, color=color, keep_circular=keep_circular,
+        )
+        return self
+
+    def set_drop_shadow(
+        self,
+        offset: Sequence[float] = (6.0, -6.0),
+        radius: float = 12.0,
+        opacity: float = 0.75,
+        color: Sequence[float] | str | None = None,
+        shadow_only: bool = False,
+    ) -> Camera:
+        self.frame.set_drop_shadow(
+            offset=offset, radius=radius, opacity=opacity,
+            color=color, shadow_only=shadow_only,
+        )
+        return self
+
+    def set_liquid_glass(self, **kwargs: Any) -> Camera:
+        self.frame.set_liquid_glass(**kwargs)
+        return self
+
+    def set_glow(
+        self,
+        radius: float = 30.0,
+        intensity: float = 1.5,
+        threshold: float = 0.0,
+        softness: float = 0.5,
+        color: Sequence[float] | str | None = None,
+    ) -> Camera:
+        self.frame.set_glow(
+            radius=radius, intensity=intensity, threshold=threshold,
+            softness=softness, color=color,
+        )
+        return self
+
+    def set_glitch(
+        self,
+        intensity: float = 0.6,
+        speed: float = 8.0,
+        slice_height: float = 16.0,
+    ) -> Camera:
+        self.frame.set_glitch(intensity=intensity, speed=speed, slice_height=slice_height)
+        return self
+
+    def set_chromatic_aberration(self, offset: float = 0.02) -> Camera:
+        self.frame.set_chromatic_aberration(offset=offset)
+        return self
+
+    def set_motion_blur(
+        self,
+        direction: Sequence[float] | None = None,
+        strength: float = 1.0,
+        auto_direction: bool | None = None,
+        max_blur: float = 0.25,
+    ) -> Camera:
+        self.frame.set_motion_blur(
+            direction=direction, strength=strength,
+            auto_direction=auto_direction, max_blur=max_blur,
+        )
+        return self
+
+    def set_zoom_blur(
+        self,
+        strength: float = 1.0,
+        center: Sequence[float] | None = None,
+        uv_center: Sequence[float] | None = None,
+        decay: float = 0.98,
+        mode: str = "auto",
+        auto_scale: bool = True,
+        max_blur: float = 0.45,
+    ) -> Camera:
+        self.frame.set_zoom_blur(
+            strength=strength, center=center, uv_center=uv_center,
+            decay=decay, mode=mode, auto_scale=auto_scale, max_blur=max_blur,
+        )
+        return self
+
+    def set_custom_vfx(
+        self,
+        fragment_wgsl: str,
+        uniforms: Any = None,
+        **kwargs: Any,
+    ) -> Camera:
+        self.frame.set_custom_vfx(fragment_wgsl, uniforms=uniforms, **kwargs)
+        return self
 
 
 # Mostly just defined so old scenes don't break

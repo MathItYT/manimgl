@@ -1133,6 +1133,8 @@ class Scene(object):
     ):
         if duration is None:
             duration = self.default_wait_time
+        if duration <= 0 and stop_condition is None and not (self.presenter_mode and not self.skip_animations and not ignore_presenter_mode):
+            return
         self.pre_play()
         self.update_mobjects(dt=0)  # Any problems with this?
         if self.presenter_mode and not self.skip_animations and not ignore_presenter_mode:
@@ -1760,6 +1762,156 @@ class Scene(object):
         self.camera.background_rgba = list(color_to_rgba(
             background_color, background_opacity
         ))
+
+    # Full-frame post-processing effects (delegated to self.camera)
+    def add_vfx(self, *effects) -> Scene:
+        self.camera.add_vfx(*effects)
+        return self
+
+    def remove_vfx(self, effect_type_or_name=None) -> Scene:
+        self.camera.remove_vfx(effect_type_or_name)
+        return self
+
+    def clear_vfx(self) -> Scene:
+        self.camera.clear_vfx()
+        return self
+
+    def has_vfx(self) -> bool:
+        return self.camera.has_vfx()
+
+    def get_vfx_list(self) -> list:
+        return self.camera.get_vfx_list()
+
+    add_post_process = add_vfx
+    remove_post_process = remove_vfx
+    clear_post_process = clear_vfx
+    has_post_process = has_vfx
+    get_post_process_list = get_vfx_list
+
+    def set_mask(
+        self,
+        mask: Mobject,
+        invert: bool = False,
+        use_luminance: bool = False,
+        mode: str = "intersect",
+    ) -> Scene:
+        self.camera.set_mask(mask, invert=invert, use_luminance=use_luminance, mode=mode)
+        return self
+
+    def add_mask(
+        self,
+        mask: Mobject,
+        invert: bool = False,
+        use_luminance: bool = False,
+        mode: str = "intersect",
+    ) -> Scene:
+        self.camera.add_mask(mask, invert=invert, use_luminance=use_luminance, mode=mode)
+        return self
+
+    def remove_mask(self, mask: Mobject | None = None) -> Scene:
+        self.camera.remove_mask(mask)
+        return self
+
+    def set_gaussian_blur(self, radius: float = 12.0, downscale: float = 1.0) -> Scene:
+        self.camera.set_gaussian_blur(radius=radius, downscale=downscale)
+        return self
+
+    def set_grain(self, intensity: float = 0.08, speed: float = 24.0, colored: bool = False) -> Scene:
+        self.camera.set_grain(intensity=intensity, speed=speed, colored=colored)
+        return self
+
+    def set_vignette(
+        self,
+        radius: float = 0.5,
+        softness: float = 0.45,
+        intensity: float = 0.7,
+        center=(0.5, 0.5),
+        color=None,
+        keep_circular: bool = True,
+    ) -> Scene:
+        self.camera.set_vignette(
+            radius=radius, softness=softness, intensity=intensity,
+            center=center, color=color, keep_circular=keep_circular,
+        )
+        return self
+
+    def set_drop_shadow(
+        self,
+        offset=(6.0, -6.0),
+        radius: float = 12.0,
+        opacity: float = 0.75,
+        color=None,
+        shadow_only: bool = False,
+    ) -> Scene:
+        self.camera.set_drop_shadow(
+            offset=offset, radius=radius, opacity=opacity,
+            color=color, shadow_only=shadow_only,
+        )
+        return self
+
+    def set_liquid_glass(self, **kwargs) -> Scene:
+        self.camera.set_liquid_glass(**kwargs)
+        return self
+
+    def set_glow(
+        self,
+        radius: float = 30.0,
+        intensity: float = 1.5,
+        threshold: float = 0.0,
+        softness: float = 0.5,
+        color=None,
+    ) -> Scene:
+        self.camera.set_glow(
+            radius=radius, intensity=intensity, threshold=threshold,
+            softness=softness, color=color,
+        )
+        return self
+
+    def set_glitch(
+        self,
+        intensity: float = 0.6,
+        speed: float = 8.0,
+        slice_height: float = 16.0,
+    ) -> Scene:
+        self.camera.set_glitch(intensity=intensity, speed=speed, slice_height=slice_height)
+        return self
+
+    def set_chromatic_aberration(self, offset: float = 0.02) -> Scene:
+        self.camera.set_chromatic_aberration(offset=offset)
+        return self
+
+    def set_motion_blur(
+        self,
+        direction=None,
+        strength: float = 1.0,
+        auto_direction: bool | None = None,
+        max_blur: float = 0.25,
+    ) -> Scene:
+        self.camera.set_motion_blur(
+            direction=direction, strength=strength,
+            auto_direction=auto_direction, max_blur=max_blur,
+        )
+        return self
+
+    def set_zoom_blur(
+        self,
+        strength: float = 1.0,
+        center=None,
+        uv_center=None,
+        decay: float = 0.98,
+        mode: str = "auto",
+        auto_scale: bool = True,
+        max_blur: float = 0.45,
+    ) -> Scene:
+        self.camera.set_zoom_blur(
+            strength=strength, center=center, uv_center=uv_center,
+            decay=decay, mode=mode, auto_scale=auto_scale, max_blur=max_blur,
+        )
+        return self
+
+    def set_custom_vfx(self, fragment_wgsl: str, uniforms=None, **kwargs) -> Scene:
+        self.camera.set_custom_vfx(fragment_wgsl, uniforms=uniforms, **kwargs)
+        return self
 
 
 class SceneState():

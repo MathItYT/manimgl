@@ -57,15 +57,41 @@ class Renderer(object):
         self.samples = gpu.samples
 
     def get_vfx_group(self, mob: Mobject) -> Mobject | None:
+        from manimlib.camera.camera_frame import CameraFrame
         group = getattr(mob, "_vfx_group", None)
-        if group is not None and getattr(group, "has_vfx", lambda: False)():
+        if group is not None and not isinstance(group, CameraFrame) and getattr(group, "has_vfx", lambda: False)():
             return group
         local = getattr(mob, "_vfx_local", None)
-        if local is not None and getattr(local, "has_vfx", lambda: False)():
+        if local is not None and not isinstance(local, CameraFrame) and getattr(local, "has_vfx", lambda: False)():
             return local
-        if getattr(mob, "has_vfx", lambda: False)():
+        if not isinstance(mob, CameraFrame) and getattr(mob, "has_vfx", lambda: False)():
             return mob
         return None
+
+    def get_frame_vfx_list(self, mobjects: Iterable[Mobject] | None = None) -> list[Any]:
+        effects: list[Any] = []
+        seen_ids: set[int] = set()
+        cam = self.camera
+        if cam is not None:
+            for eff in getattr(cam, "get_vfx_list", lambda: getattr(cam, "_vfx_effects", []))():
+                if id(eff) not in seen_ids:
+                    seen_ids.add(id(eff))
+                    effects.append(eff)
+            frame = getattr(cam, "frame", None)
+            if frame is not None:
+                for eff in getattr(frame, "get_vfx_list", lambda: [])():
+                    if id(eff) not in seen_ids:
+                        seen_ids.add(id(eff))
+                        effects.append(eff)
+        if mobjects is not None:
+            from manimlib.camera.camera_frame import CameraFrame
+            for mob in mobjects:
+                if isinstance(mob, CameraFrame):
+                    for eff in mob.get_vfx_list():
+                        if id(eff) not in seen_ids:
+                            seen_ids.add(id(eff))
+                            effects.append(eff)
+        return effects
 
     def optimize_leaders_dag(self, leaders: list[Drawing]) -> list[Drawing]:
         """Reordena líderes mediante un DAG de oclusión para agrupar pases de VFX
@@ -245,7 +271,10 @@ class Renderer(object):
         self.samples = gpu.samples
 
         has_any_vfx = any(self.get_vfx_group(leader.mobject) is not None for leader in self.leaders)
-        if not has_any_vfx:
+        frame_effects = self.get_frame_vfx_list(mobjects)
+        has_frame_vfx = len(frame_effects) > 0
+
+        if not has_any_vfx and not has_frame_vfx:
             bundle = self.bundling.take(lambda: gpu.bundle(self.make_draws))
             with gpu.render_pass(attachments) as render_pass:
                 if bundle is None:
@@ -254,8 +283,8 @@ class Renderer(object):
                     render_pass.replay(bundle)
             return
 
-        self.bundling.invalidate()
         target_view = attachments["color_attachments"][0]["view"]
+        final_target = attachments["color_attachments"][0].get("resolve_target") or target_view
         color_tex = getattr(target_view, "texture", getattr(target_view, "_texture", None))
         width = int(color_tex.size[0])
         height = int(color_tex.size[1])
@@ -265,6 +294,22 @@ class Renderer(object):
         # Avanza el tiempo continuo del pipeline en cada frame
         fps = getattr(self.camera, "fps", 30.0) if self.camera else 30.0
         self.post_processor.time += 1.0 / max(float(fps), 1.0)
+
+        active_frame_effects = [
+            e for e in frame_effects
+            if getattr(e, "is_active", lambda p: True)(self.post_processor)
+        ]
+
+        if not has_any_vfx and not active_frame_effects:
+            bundle = self.bundling.take(lambda: gpu.bundle(self.make_draws))
+            with gpu.render_pass(attachments) as render_pass:
+                if bundle is None:
+                    self.make_draws(render_pass)
+                else:
+                    render_pass.replay(bundle)
+            return
+
+        self.bundling.invalidate()
 
         # -------------------------------------------------------------
         # 1. Agrupamiento contiguo por grupo de VFX optimizado por DAG
@@ -292,7 +337,8 @@ class Renderer(object):
         encoder = gpu.device.create_command_encoder()
         first_draw = True
         clear_color = tuple(attachments["color_attachments"][0]["clear_value"])
-        accum_view = self.post_processor.scene_view if self.samples > 1 else target_view
+        use_scene_buffer = (self.samples > 1) or bool(active_frame_effects)
+        accum_view = self.post_processor.scene_view if use_scene_buffer else target_view
         scene_depth_view = attachments["depth_stencil_attachment"]["view"]
 
         for batch_leaders, group in batches:
@@ -321,7 +367,7 @@ class Renderer(object):
                     else:
                         pass_att = {
                             "color_attachments": [{
-                                "view": target_view,
+                                "view": accum_view,
                                 "load_op": wgpu.LoadOp.clear,
                                 "store_op": wgpu.StoreOp.store,
                                 "clear_value": clear_color,
@@ -356,7 +402,7 @@ class Renderer(object):
                     else:
                         pass_att = {
                             "color_attachments": [{
-                                "view": target_view,
+                                "view": accum_view,
                                 "load_op": wgpu.LoadOp.load,
                                 "store_op": wgpu.StoreOp.store,
                                 "clear_value": clear_color,
@@ -409,7 +455,7 @@ class Renderer(object):
                     else:
                         clear_pass = encoder.begin_render_pass(
                             color_attachments=[{
-                                "view": target_view,
+                                "view": accum_view,
                                 "load_op": wgpu.LoadOp.clear,
                                 "store_op": wgpu.StoreOp.store,
                                 "clear_value": clear_color,
@@ -499,11 +545,23 @@ class Renderer(object):
                 # Procesar la cadena de efectos del grupo y componer sobre accum_view
                 self.post_processor.process_mobject(encoder, accum_view, group)
 
+        if first_draw:
+            clear_pass_empty = encoder.begin_render_pass(
+                color_attachments=[{
+                    "view": accum_view,
+                    "load_op": wgpu.LoadOp.clear,
+                    "store_op": wgpu.StoreOp.store,
+                    "clear_value": clear_color,
+                }]
+            )
+            clear_pass_empty.end()
+
         # -------------------------------------------------------------
-        # 3. Resolución final y envío a GPU
+        # 3. Post-procesamiento del frame final, resolución y envío a GPU
         # -------------------------------------------------------------
-        if self.samples > 1:
-            final_target = attachments["color_attachments"][0].get("resolve_target") or target_view
+        if active_frame_effects:
+            self.post_processor.process_frame(encoder, accum_view, final_target, active_frame_effects)
+        elif self.samples > 1:
             self.post_processor.blit_fullscreen(encoder, accum_view, final_target)
 
         # Un solo buffer de comandos enviado a la cola del dispositivo
