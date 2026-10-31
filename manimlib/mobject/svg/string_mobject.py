@@ -572,6 +572,25 @@ class StringMobject(SVGMobject, ABC):
     def get_symbol_substrings(self):
         return list(re.sub(r"\s", "", self.string))
 
+    def get_token_submob_map(self) -> list[tuple[Span, list[int], str]]:
+        syms = self.get_symbol_substrings()
+        counts = list(map(self.substr_to_path_count, syms))
+        tokens: list[tuple[Span, list[int], str]] = []
+        submob_idx = 0
+        pos = 0
+        for sym, count in zip(syms, counts):
+            idx = self.string.find(sym, pos)
+            if idx == -1:
+                span = (pos, pos + len(sym))
+            else:
+                span = (idx, idx + len(sym))
+                pos = span[1]
+            indices = [i for i in range(submob_idx, submob_idx + count) if i < len(self.submobjects)]
+            submob_idx += count
+            if indices:
+                tokens.append((span, indices, sym))
+        return tokens
+
     def select_unisolated_substring(self, pattern: str | re.Pattern) -> VGroup:
         if isinstance(pattern, str):
             pattern = re.compile(re.escape(pattern))

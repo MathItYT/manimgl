@@ -343,8 +343,16 @@ class Tex(StringMobject):
     # Specific to Tex
     def _get_char_to_submob_indices(self) -> list[list[int]]:
         if not hasattr(self, "_char_to_submob_map"):
-            _, _, self._char_to_submob_map = parse_tex_submob_map(self.string)
+            _, self._token_spans, self._char_to_submob_map = parse_tex_submob_map(self.string)
         return self._char_to_submob_map
+
+    def get_token_submob_map(self) -> list[tuple[Span, list[int], str]]:
+        if not hasattr(self, "_token_spans"):
+            _, self._token_spans, self._char_to_submob_map = parse_tex_submob_map(self.string)
+        return sorted(
+            [(span, idxs, "/" if tok == "frac_bar" else tok) for span, idxs, tok in self._token_spans if idxs],
+            key=lambda item: item[0][0]
+        )
 
     def get_submob_indices_for_span(self, span: Span) -> list[int]:
         mapping = self._get_char_to_submob_indices()

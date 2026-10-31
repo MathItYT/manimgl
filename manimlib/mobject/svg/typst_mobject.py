@@ -165,6 +165,7 @@ class SingleStringTypst(StringMobject):
 
     def _build_char_to_submob_map(self) -> list[list[int]]:
         mapping: list[list[int]] = [[] for _ in range(len(self.string))]
+        token_spans: list[tuple[Span, list[int], str]] = []
         total_submobs = len(self.submobjects)
         submob_idx = 0
 
@@ -185,21 +186,70 @@ class SingleStringTypst(StringMobject):
             else:
                 is_math.append(curr_math)
 
+        def find_matching_paren(open_idx: int) -> int:
+            depth = 1
+            for j in range(open_idx + 1, len(self.string)):
+                if self.string[j] == "(":
+                    depth += 1
+                elif self.string[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        return j
+            return -1
+
         # 2. Identificar paréntesis de funciones (sqrt, root)
         func_paren_indices = set()
         for func_pat in (r"sqrt\s*\(", r"root\s*\("):
             for m in re.finditer(func_pat, self.string):
                 open_paren = m.end() - 1
-                func_paren_indices.add(open_paren)
-                depth = 1
-                for j in range(open_paren + 1, len(self.string)):
-                    if self.string[j] == "(":
-                        depth += 1
-                    elif self.string[j] == ")":
-                        depth -= 1
-                        if depth == 0:
-                            func_paren_indices.add(j)
-                            break
+                if is_math[open_paren]:
+                    func_paren_indices.add(open_paren)
+                    close_paren = find_matching_paren(open_paren)
+                    if close_paren != -1:
+                        func_paren_indices.add(close_paren)
+
+        def consume_atom(idx: int) -> tuple[int, tuple[int, int] | None]:
+            while idx < len(self.string) and self.string[idx].isspace():
+                idx += 1
+            if idx >= len(self.string) or not is_math[idx]:
+                return idx, None
+            if self.string[idx] == "(":
+                close_p = find_matching_paren(idx)
+                if close_p != -1 and is_math[close_p]:
+                    return close_p + 1, (idx, close_p)
+                return len(self.string), None
+            m_op = re.match(r'op\s*\(\s*"[^"]*"\s*\)', self.string[idx:])
+            if m_op:
+                return idx + m_op.end(), None
+            m = re.match(r"[a-zA-Z0-9_.]+", self.string[idx:])
+            if m:
+                end = idx + m.end()
+                next_k = end
+                while next_k < len(self.string) and self.string[next_k].isspace():
+                    next_k += 1
+                if next_k < len(self.string) and self.string[next_k] == "(" and is_math[next_k]:
+                    close_p = find_matching_paren(next_k)
+                    if close_p != -1:
+                        end = close_p + 1
+                return end, None
+            return idx + 1, None
+
+        def consume_term(idx: int, strip_unscripted_parens: bool = False) -> tuple[int, tuple[int, int] | None]:
+            end, parens = consume_atom(idx)
+            has_script = False
+            while end < len(self.string) and is_math[end] and self.string[end] in "^_":
+                has_script = True
+                script_op_idx = end
+                end, _ = consume_term(script_op_idx + 1, strip_unscripted_parens=True)
+            if strip_unscripted_parens and parens is not None and not has_script:
+                func_paren_indices.add(parens[0])
+                func_paren_indices.add(parens[1])
+            return end, (parens if not has_script else None)
+
+        # Detectar paréntesis de agrupación eliminados por Typst tras ^ o _
+        for idx, ch in enumerate(self.string):
+            if is_math[idx] and ch in "^_":
+                consume_term(idx + 1, strip_unscripted_parens=True)
 
         # 3. Analizar fracciones: detectar paréntesis invisibles y el fin del denominador
         # slash_info: {slash_idx: denom_end}
@@ -236,7 +286,7 @@ class SingleStringTypst(StringMobject):
                     while prev_char_idx >= 0 and self.string[prev_char_idx].isspace():
                         prev_char_idx -= 1
                     is_func_call = prev_char_idx >= 0 and (
-                        self.string[prev_char_idx].isalnum() or self.string[prev_char_idx] == "_"
+                        self.string[prev_char_idx].isalnum() or self.string[prev_char_idx] in '_"'
                     )
                     if not is_func_call:
                         func_paren_indices.add(open_paren)
@@ -248,48 +298,11 @@ class SingleStringTypst(StringMobject):
                 right_idx += 1
 
             if right_idx < len(self.string) and is_math[right_idx]:
-                if self.string[right_idx] == "(":
-                    open_paren = right_idx
-                    depth = 1
-                    close_paren = -1
-                    for j in range(open_paren + 1, len(self.string)):
-                        if self.string[j] == "(":
-                            depth += 1
-                        elif self.string[j] == ")":
-                            depth -= 1
-                            if depth == 0:
-                                close_paren = j
-                                break
-                    if close_paren != -1 and is_math[close_paren]:
-                        func_paren_indices.add(open_paren)
-                        func_paren_indices.add(close_paren)
-                        slash_info[slash_idx] = close_paren + 1
-                    else:
-                        slash_info[slash_idx] = len(self.string)
-                else:
-                    # Denominador simple (variable, número o identificador)
-                    m = re.match(r"[a-zA-Z0-9_.]+", self.string[right_idx:])
-                    if m:
-                        denom_end = right_idx + m.end()
-                        # Si es una función como sqrt(x) o sin(x), incluir sus argumentos
-                        next_k = denom_end
-                        while next_k < len(self.string) and self.string[next_k].isspace():
-                            next_k += 1
-                        if next_k < len(self.string) and self.string[next_k] == "(":
-                            depth = 1
-                            for j in range(next_k + 1, len(self.string)):
-                                if self.string[j] == "(":
-                                    depth += 1
-                                elif self.string[j] == ")":
-                                    depth -= 1
-                                    if depth == 0:
-                                        denom_end = j + 1
-                                        break
-                        slash_info[slash_idx] = denom_end
-                    else:
-                        slash_info[slash_idx] = right_idx + 1
+                denom_end, _ = consume_term(right_idx, strip_unscripted_parens=True)
+                slash_info[slash_idx] = denom_end
 
         token_regex = re.compile(
+            r'(?P<op_func>op\s*\(\s*"(?P<op_text>[^"]*)"\s*\))|'
             r"(?P<sqrt>sqrt)|"
             r"(?P<root>root)|"
             r"(?P<syntax>"
@@ -316,8 +329,8 @@ class SingleStringTypst(StringMobject):
         )
 
         in_math = self.math_mode
-        # Pila de barras pospuestas: [(slash_start, slash_end, denom_end)]
-        pending_slashes: list[tuple[int, int, int]] = []
+        # Pila de barras pospuestas: [(slash_start, slash_end, denom_end, assigned_ref)]
+        pending_slashes: list[tuple[int, int, int, list[int]]] = []
 
         for match in token_regex.finditer(self.string):
             start, end = match.span()
@@ -327,7 +340,20 @@ class SingleStringTypst(StringMobject):
                 for k in range(start, end):
                     mapping[k] = []
 
-            elif match.group("sqrt") or match.group("root"):
+            elif match.group("op_func") and in_math:
+                text_start, text_end = match.span("op_text")
+                for k in range(start, end):
+                    if text_start <= k < text_end and not self.string[k].isspace():
+                        assigned = []
+                        if submob_idx < total_submobs:
+                            assigned.append(submob_idx)
+                            submob_idx += 1
+                        mapping[k] = assigned
+                        token_spans.append(((k, k + 1), assigned, self.string[k]))
+                    else:
+                        mapping[k] = []
+
+            elif (match.group("sqrt") or match.group("root")) and in_math:
                 assigned = []
                 for _ in range(2):
                     if submob_idx < total_submobs:
@@ -335,6 +361,7 @@ class SingleStringTypst(StringMobject):
                         submob_idx += 1
                 for k in range(start, end):
                     mapping[k] = assigned
+                token_spans.append(((start, end), assigned, match.group()))
 
             elif match.group("syntax") or match.group("space"):
                 for k in range(start, end):
@@ -347,42 +374,62 @@ class SingleStringTypst(StringMobject):
                     submob_idx += 1
                 for k in range(start, end):
                     mapping[k] = assigned
+                token_spans.append(((start, end), assigned, match.group("multi")))
 
             else:
                 if start in func_paren_indices:
                     mapping[start] = []
                 elif start in slash_info:
                     # Se pospone la barra: se asignará cuando termine el denominador
-                    pending_slashes.append((start, end, slash_info[start]))
-                    mapping[start] = []
-                else:
                     assigned = []
-                    if submob_idx < total_submobs:
-                        assigned.append(submob_idx)
-                        submob_idx += 1
-                    mapping[start] = assigned
+                    for k in range(start, end):
+                        mapping[k] = assigned
+                    token_spans.append(((start, end), assigned, "/"))
+                    pending_slashes.append((start, end, slash_info[start], assigned))
+                else:
+                    for k in range(start, end):
+                        assigned = []
+                        if submob_idx < total_submobs:
+                            assigned.append(submob_idx)
+                            submob_idx += 1
+                        mapping[k] = assigned
+                        token_spans.append(((k, k + 1), assigned, self.string[k]))
 
             # Al finalizar el denominador, se asigna el submob a la barra pospuesta
             while pending_slashes and end >= pending_slashes[-1][2]:
-                slash_start, slash_end, _ = pending_slashes.pop()
-                assigned = []
+                slash_start, slash_end, _, slash_assigned = pending_slashes.pop()
                 if submob_idx < total_submobs:
-                    assigned.append(submob_idx)
+                    slash_assigned.append(submob_idx)
                     submob_idx += 1
-                for k in range(slash_start, slash_end):
-                    mapping[k] = assigned
 
         # Asegurar asignación si la expresión termina justo en el denominador
         while pending_slashes:
-            slash_start, slash_end, _ = pending_slashes.pop()
-            assigned = []
+            slash_start, slash_end, _, slash_assigned = pending_slashes.pop()
             if submob_idx < total_submobs:
-                assigned.append(submob_idx)
+                slash_assigned.append(submob_idx)
                 submob_idx += 1
-            for k in range(slash_start, slash_end):
-                mapping[k] = assigned
 
+        self._token_spans = [item for item in token_spans if item[1]]
         return mapping
+
+    def get_token_submob_map(self) -> list[tuple[Span, list[int], str]]:
+        if not hasattr(self, "_token_spans"):
+            self._char_to_submob_map = self._build_char_to_submob_map()
+        return list(self._token_spans)
+
+    def get_submob_indices_list_by_span(self, arbitrary_span: Span) -> list[int]:
+        return self.find_submobject_indices_by_span(arbitrary_span)
+
+    def get_symbol_substrings(self) -> list[str]:
+        return [tok for _, _, tok in self.get_token_submob_map()]
+
+    def substr_to_path_count(self, substr: str) -> int:
+        if substr in ("sqrt", "root"):
+            return 2
+        spans = self.find_spans_by_selector(substr)
+        if spans:
+            return len(self.find_submobject_indices_by_span(spans[0]))
+        return len(re.sub(r"\s", "", substr))
 
     def find_submobject_indices_by_span(self, span: Span) -> list[int]:
         submob_indices = []

@@ -801,14 +801,19 @@ class Mobject(object):
         return True
 
     def has_same_shape_as(self, mobject: Mobject) -> bool:
-        # Normalize both point sets by centering and making height 1
-        points1, points2 = (
-            (m.get_all_points() - m.get_center()) / m.get_height()
-            for m in (self, mobject)
-        )
-        if len(points1) != len(points2):
+        pts1 = self.get_all_points()
+        pts2 = mobject.get_all_points()
+        if len(pts1) != len(pts2):
             return False
-        return bool(np.isclose(points1, points2, atol=self.get_width() * 1e-2).all())
+        if len(pts1) == 0:
+            return True
+        size1 = float(np.linalg.norm(self.get_shape()))
+        size2 = float(np.linalg.norm(mobject.get_shape()))
+        if size1 < 1e-8 or size2 < 1e-8:
+            return size1 < 1e-8 and size2 < 1e-8
+        points1 = (pts1 - self.get_center()) / size1
+        points2 = (pts2 - mobject.get_center()) / size2
+        return bool(np.isclose(points1, points2, atol=1e-2).all())
 
     # Creating new Mobjects from this one
 
