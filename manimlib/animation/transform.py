@@ -127,6 +127,16 @@ class Transform(Animation):
 class ReplacementTransform(Transform):
     replace_mobject_with_target_in_scene: bool = True
 
+    def begin(self) -> None:
+        if self.mobject is not self.target_mobject:
+            self._pre_transform_mobject = self.mobject.copy()
+        super().begin()
+
+    def clean_up_from_scene(self, scene: Scene) -> None:
+        super().clean_up_from_scene(scene)
+        if self.mobject is not self.target_mobject and hasattr(self, "_pre_transform_mobject"):
+            self.mobject.become(self._pre_transform_mobject)
+
 
 class TransformFromCopy(Transform):
     replace_mobject_with_target_in_scene: bool = True

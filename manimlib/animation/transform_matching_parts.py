@@ -32,6 +32,7 @@ class TransformMatchingParts(AnimationGroup):
     ):
         self.source = source
         self.target = target
+        self._source_starting_copy = source.copy() if source is not target else None
         self.match_animation = match_animation
         self.mismatch_animation = mismatch_animation
         self.anim_config = dict(**kwargs)
@@ -112,6 +113,8 @@ class TransformMatchingParts(AnimationGroup):
     def clean_up_from_scene(self, scene: Scene) -> None:
         super().clean_up_from_scene(scene)
         scene.remove(self.mobject, self.source)
+        if self._source_starting_copy is not None and self.source is not self.target:
+            self.source.become(self._source_starting_copy)
         scene.add(self.target)
 
 

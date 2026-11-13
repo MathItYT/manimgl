@@ -9,7 +9,8 @@ from manimlib.module_loader import ModuleLoader
 from manimlib.config import manim_config
 from manimlib.logger import log
 from manimlib.scene.interactive_scene import InteractiveScene
-from manimlib.scene.scene import Scene
+from manimlib.scene.presentation_scene import PresentationScene
+from manimlib.scene.scene import Scene, ThreeDScene
 
 from typing import TYPE_CHECKING
 
@@ -30,7 +31,7 @@ def is_child_scene(obj, module):
         return False
     if not issubclass(obj, Scene):
         return False
-    if obj == Scene:
+    if obj in (Scene, InteractiveScene, ThreeDScene, PresentationScene) or inspect.isabstract(obj):
         return False
     if not obj.__module__.startswith(module.__name__):
         return False

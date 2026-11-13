@@ -16,6 +16,7 @@ from manimlib.mobject.geometry import Line
 from manimlib.mobject.geometry import Rectangle
 from manimlib.mobject.geometry import RoundedRectangle
 from manimlib.mobject.geometry import Square
+from manimlib.mobject.number_line import NumberLine
 from manimlib.mobject.svg.text_mobject import Text
 from manimlib.mobject.types.vectorized_mobject import VGroup
 from manimlib.mobject.value_tracker import ValueTracker
@@ -68,6 +69,12 @@ class Button(Mobject):
     def mob_on_mouse_press(self, mob: Mobject, event_data) -> bool:
         self.on_click(mob)
         return False
+
+    def disable(self) -> None:
+        self.mobject.remove_mouse_press_listner(self.mob_on_mouse_press)
+
+    def enable(self) -> None:
+        self.mobject.add_mouse_press_listner(self.mob_on_mouse_press)
 
 
 # Controls
@@ -285,6 +292,77 @@ class LinearNumberSlider(ControlMobject):
         no_of_steps = int((value - self.min_value) / self.step)
         value_nearest_to_step = self.min_value + no_of_steps * self.step
         return value_nearest_to_step
+
+
+class NumberLineSlider(ControlMobject):
+    def __init__(
+        self,
+        value: float = 0,
+        value_type: type = np.float64,
+        min_value: float = -10.0,
+        max_value: float = 10.0,
+        step: float | None = None,
+        number_line_kwargs: dict = {
+            "width": 2,
+        },
+        circle_kwargs: dict = {
+            "radius": 0.1,
+            "stroke_color": GREY_A,
+            "fill_color": GREY_A,
+            "fill_opacity": 1.0
+        },
+        number_line_step: float | None = None,
+        **kwargs
+    ):
+        nl_kwargs = dict(number_line_kwargs)
+        if "x_range" in nl_kwargs:
+            raise ValueError("x_range should not be specified in number_line_kwargs. Use min_value, max_value and step instead.")
+        else:
+            nl_kwargs["x_range"] = (min_value, max_value, number_line_step) if number_line_step is not None else (min_value, max_value, step) if step is not None else (min_value, max_value)
+
+        if "width" not in nl_kwargs and "unit_size" not in nl_kwargs:
+            nl_kwargs["width"] = 2
+
+        self.value_type = value_type
+        self.min_value = min_value
+        self.max_value = max_value
+        self.step = step
+        self.number_line_kwargs = nl_kwargs
+        self.circle_kwargs = dict(circle_kwargs)
+
+        self.bar = NumberLine(**self.number_line_kwargs)
+        self.slider = Circle(**self.circle_kwargs)
+        self.set_value_anim(value)
+
+        self.slider.add_mouse_drag_listner(self.slider_on_mouse_drag)
+        self.bar.add_mouse_press_listner(self.bar_on_mouse_press)
+        self.bar.add_mouse_drag_listner(self.slider_on_mouse_drag)
+
+        super().__init__(value, self.bar, self.slider, **kwargs)
+
+    def assert_value(self, value: float) -> None:
+        assert self.min_value <= value <= self.max_value
+
+    def set_value_anim(self, value: float) -> None:
+        self.slider.move_to(self.bar.n2p(value))
+
+    def bar_on_mouse_press(self, mob, event_data: dict[str, np.ndarray]) -> bool:
+        self.set_value(self.get_value_from_point(event_data["point"]))
+        return False
+
+    def slider_on_mouse_drag(self, mob, event_data: dict[str, np.ndarray]) -> bool:
+        self.set_value(self.get_value_from_point(event_data["point"]))
+        return False
+
+    # Helper Methods
+
+    def get_value_from_point(self, point: np.ndarray) -> float:
+        value = float(np.clip(self.bar.p2n(point), self.min_value, self.max_value))
+        if self.step is not None:
+            no_of_steps = int((value - self.min_value) / self.step)
+            value_nearest_to_step = self.min_value + no_of_steps * self.step
+            return value_nearest_to_step
+        return value
 
 
 class ColorSliders(Group):

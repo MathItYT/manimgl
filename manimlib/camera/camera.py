@@ -169,7 +169,12 @@ class Camera(object):
 
     def get_target_shape(self) -> tuple[int, int]:
         if self.draw_at_window_size and self.window is not None:
-            return self.window.get_size()
+            width, height = self.window.get_size()
+            if width <= 0 or height <= 0:
+                if self.pixel_shape[0] > 0 and self.pixel_shape[1] > 0:
+                    return self.pixel_shape
+                return self.default_pixel_shape
+            return (width, height)
         return self.default_pixel_shape
 
     def resize_target(self) -> None:
@@ -205,8 +210,9 @@ class Camera(object):
         is resolved down to.
         """
         device = self.gpu.device
-        self.pixel_shape = self.get_target_shape()
-        width, height = self.pixel_shape
+        width, height = self.get_target_shape()
+        width, height = max(1, int(width)), max(1, int(height))
+        self.pixel_shape = (width, height)
         samples = self.gpu.samples = max(1, self.samples)
 
         self.color_texture = device.create_texture(
@@ -335,6 +341,11 @@ class Camera(object):
 
     # Rendering
     def capture(self, *mobjects: Mobject) -> None:
+        if self.draw_at_window_size and self.window is not None:
+            width, height = self.window.get_size()
+            if width <= 0 or height <= 0:
+                self.window.poll_events()
+                return
         self.resize_target()
         self.refresh_uniforms()
         self.gpu.send_frame_uniforms()

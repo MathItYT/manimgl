@@ -62,11 +62,13 @@ class Uncreate(ShowCreation):
         should_match_start: bool = True,
         **kwargs,
     ):
+        final_alpha_value = kwargs.pop("final_alpha_value", 0.0 if remover else 1.0)
         super().__init__(
             mobject,
             rate_func=rate_func,
             remover=remover,
             should_match_start=should_match_start,
+            final_alpha_value=final_alpha_value,
             **kwargs,
         )
 

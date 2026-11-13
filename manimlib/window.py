@@ -311,18 +311,23 @@ class Window(object):
         so the frame is handed over and then asked for.
         """
         self.frame_view = frame_view
-        self.canvas.force_draw()
-        if sys.platform == "emscripten":
-            # Snapshot the completed WebGPU canvas as a VideoFrame after
-            # rendercanvas has completed its draw/present cycle.
-            from js import window
-            capture_frame = getattr(window, "__manimCaptureWebGPUFrame", None)
-            if capture_frame:
-                capture_frame()
+        width, height = self.get_size()
+        if width > 0 and height > 0:
+            self.canvas.force_draw()
+            if sys.platform == "emscripten":
+                # Snapshot the completed WebGPU canvas as a VideoFrame after
+                # rendercanvas has completed its draw/present cycle.
+                from js import window
+                capture_frame = getattr(window, "__manimCaptureWebGPUFrame", None)
+                if capture_frame:
+                    capture_frame()
         self.undrawn_event = False
         self.poll_events()
 
     def draw(self) -> None:
+        width, height = self.get_size()
+        if width <= 0 or height <= 0:
+            return
         self.present(self.context.get_current_texture().create_view())
 
     def init_present_resources(self) -> None:
@@ -464,6 +469,8 @@ class Window(object):
         pixel_shape = np.array(
             self.render_size if sys.platform == "emscripten" else self.canvas.get_logical_size()
         )
+        if np.any(pixel_shape <= 0):
+            return np.zeros(3)
         fixed_frame_shape = np.array(FRAME_SHAPE)
         frame = self.scene.frame
 

@@ -29,5 +29,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     let layer = u32(index);
     var color = textureSample(Texture, image_sampler, in.im_coords, layer);
     color.a *= in.opacity;
+    if (color.a == 0.0) {
+        discard;
+    }
     return color;
 }

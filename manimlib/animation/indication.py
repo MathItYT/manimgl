@@ -33,7 +33,7 @@ from manimlib.utils.rate_functions import wiggle
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Callable
+    from typing import Callable, Optional
     from manimlib.typing import ManimColor
     from manimlib.mobject.mobject import Mobject
 
@@ -75,7 +75,7 @@ class Indicate(Transform):
         self,
         mobject: Mobject,
         scale_factor: float = 1.2,
-        color: ManimColor = YELLOW,
+        color: Optional[ManimColor] = YELLOW,
         rate_func: Callable[[float], float] = there_and_back,
         **kwargs
     ):
@@ -86,7 +86,8 @@ class Indicate(Transform):
     def create_target(self) -> Mobject:
         target = self.mobject.copy()
         target.scale(self.scale_factor)
-        target.set_color(self.color)
+        if self.color is not None:
+            target.set_color(self.color)
         return target
 
 

@@ -77,6 +77,7 @@ from manimlib.mobject.value_tracker import *
 from manimlib.mobject.vector_field import *
 
 from manimlib.scene.interactive_scene import *
+from manimlib.scene.presentation_scene import *
 from manimlib.scene.scene import *
 
 from manimlib.renderer.shader_source import get_colormap_code

@@ -81,6 +81,7 @@ class SingleStringTypst(StringMobject):
         font_size: float = 48.0,
         t2c: dict[Any, ManimColor] | None = None,
         typst_to_color_map: dict[Any, ManimColor] | None = None,
+        typst_width: float | None = None,
         **kwargs,
     ):
         self.font_size = font_size
@@ -100,9 +101,10 @@ class SingleStringTypst(StringMobject):
             if cleaned_string.startswith("$") and cleaned_string.endswith("$") and len(cleaned_string) >= 2:
                 cleaned_string = cleaned_string[1:-1].strip()
 
+        self.typst_width = typst_width
         super().__init__(
             cleaned_string,
-            base_color=None,
+            base_color=self.base_color,
             fill_color=None,
             stroke_color=None,
             isolate=isolate,
@@ -504,9 +506,10 @@ class SingleStringTypst(StringMobject):
         font_rule = f'#set text(font: "{self.font}")\n' if self.font else ""
         code_font_rule = f'#show raw: set text(font: "{self.code_font}")\n' if self.code_font else ""
         code_theme_rule = f'#set raw(theme: "{self.code_theme_file}")\n' if self.code_theme_file else ""
+        width = "auto" if self.typst_width is None else self.typst_width
 
         doc_head = (
-            f'#set page(width: auto, height: auto, margin: 0pt, fill: none)\n'
+            f'#set page(width: {width}, height: auto, margin: 0pt, fill: none)\n'
             f'#set text(fill: rgb("{hex_color}"), size: 10pt, ligatures: false)\n'
             f'{font_rule}'
             f'{code_theme_rule}'

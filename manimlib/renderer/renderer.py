@@ -622,30 +622,34 @@ class Renderer(object):
         # y los objetos transparentes se renderizan después con depth test pero sin depth write,
         # para que las superficies transparentes tiñan suavemente la geometría situada detrás de ellas.
         if len(drawn) > 1:
-            frame = getattr(self.camera, "frame", None)
-            phi = frame.get_phi() if frame is not None else 0.0
-            theta = frame.get_theta() if frame is not None else 0.0
-            if abs(phi) > 1e-3 or abs(theta) > 1e-3:
-                cam_pos = frame.get_implied_camera_location() if frame is not None else np.array([0.0, 0.0, 10.0])
-                cx, cy, cz = float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])
+            drawn.sort(key=lambda d: d.mobject.z_index)
+            if any(d.mobject.depth_test for d in drawn):
+                frame = getattr(self.camera, "frame", None)
+                phi = frame.get_phi() if frame is not None else 0.0
+                theta = frame.get_theta() if frame is not None else 0.0
+                if abs(phi) > 1e-3 or abs(theta) > 1e-3:
+                    cam_pos = frame.get_implied_camera_location() if frame is not None else np.array([0.0, 0.0, 10.0])
+                    cx, cy, cz = float(cam_pos[0]), float(cam_pos[1]), float(cam_pos[2])
 
-                def sort_key_3d(d: Drawing):
-                    mob = d.mobject
-                    is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
-                    c = mob.get_center()
-                    dx = c[0] - cx
-                    dy = c[1] - cy
-                    dz = c[2] - cz
-                    return (mob.z_index, is_transparent, -(dx * dx + dy * dy + dz * dz))
+                    def depth_sort_key(d: Drawing):
+                        mob = d.mobject
+                        is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
+                        c = mob.get_center()
+                        dx = c[0] - cx
+                        dy = c[1] - cy
+                        dz = c[2] - cz
+                        return (mob.z_index, is_transparent, -(dx * dx + dy * dy + dz * dz))
+                else:
+                    def depth_sort_key(d: Drawing):
+                        mob = d.mobject
+                        is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
+                        return (mob.z_index, is_transparent)
 
-                drawn.sort(key=sort_key_3d)
-            else:
-                def sort_key_2d(d: Drawing):
-                    mob = d.mobject
-                    is_transparent = 0 if getattr(mob, "is_opaque", lambda: True)() else 1
-                    return (mob.z_index, is_transparent)
-
-                drawn.sort(key=sort_key_2d)
+                depth_indices = [i for i, d in enumerate(drawn) if d.mobject.depth_test]
+                depth_drawings = [drawn[i] for i in depth_indices]
+                depth_drawings.sort(key=depth_sort_key)
+                for idx, d in zip(depth_indices, depth_drawings):
+                    drawn[idx] = d
 
         return drawn
 

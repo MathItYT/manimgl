@@ -43,6 +43,14 @@ DEFAULT_DEVICE_FORMATS: dict[str, str] = {
     "Windows": "dshow",
 }
 
+# FFmpeg's built-in vp8/vp9 decoders ignore WebM/Matroska alpha side-data
+# (BlockAdditional / alpha_mode=1) and output opaque yuv420p. Using libvpx /
+# libvpx-vp9 decodes the alpha plane into yuva420p when present.
+ALPHA_CAPABLE_DECODERS: dict[str, str] = {
+    "vp8": "libvpx",
+    "vp9": "libvpx-vp9",
+}
+
 
 class VideoSource(object):
     """
@@ -169,6 +177,8 @@ class VideoSource(object):
 
         self.container = None
         self.stream = None
+        self.codec_context = None
+        self._premultiplied: bool | None = None
         self.browser_video = browser_video
         self.browser_url = browser_url
         self.browser_canvas = None
@@ -386,6 +396,74 @@ class VideoSource(object):
                 seek_latest()
             )
 
+    def _select_video_stream(self):
+        """Select the main video stream, skipping attached poster pictures when possible."""
+        streams = list(self.container.streams.video)
+        if not streams:
+            raise RuntimeError(f"No video stream was found in {self.path!r}.")
+        for stream in streams:
+            disposition = getattr(stream, "disposition", 0)
+            try:
+                is_attached_pic = bool(disposition & av.stream.Disposition.attached_pic)
+            except Exception:
+                is_attached_pic = False
+            if not is_attached_pic:
+                return stream
+        return streams[0]
+
+    def _create_alpha_codec_context(self):
+        """
+        Create an explicit libvpx/libvpx-vp9 decoder context when needed so
+        transparent VP8/VP9 videos (.webm, .mov, .mkv) retain their alpha plane.
+        """
+        if av is None or self.stream is None:
+            return None
+        src_ctx = self.stream.codec_context
+        codec_name = getattr(src_ctx, "name", None)
+        alt_decoder = ALPHA_CAPABLE_DECODERS.get(codec_name)
+        if alt_decoder is None:
+            return None
+        try:
+            ctx = av.Codec(alt_decoder, "r").create()
+            if src_ctx.extradata:
+                ctx.extradata = src_ctx.extradata
+            if src_ctx.width:
+                ctx.width = src_ctx.width
+            if src_ctx.height:
+                ctx.height = src_ctx.height
+            if self.stream.time_base:
+                ctx.pkt_timebase = self.stream.time_base
+            ctx.thread_type = "AUTO"
+            ctx.open()
+            return ctx
+        except Exception:
+            return None
+
+    def _decode_stream(self):
+        """
+        Yield decoded frames from the video stream, using the alpha-capable
+        codec context when present.
+        """
+        if self.codec_context is not None:
+            try:
+                self.codec_context.flush_buffers()
+            except Exception:
+                pass
+            for packet in self.container.demux(self.stream):
+                try:
+                    frames = self.codec_context.decode(packet)
+                except EOFError:
+                    break
+                except Exception as exc:
+                    if av is not None and isinstance(exc, av.error.EOFError):
+                        break
+                    raise
+                for frame in frames:
+                    yield frame
+        else:
+            for frame in self.container.decode(self.stream):
+                yield frame
+
     def _init_file(self, preload: bool | None) -> None:
         if av is None:
             raise RuntimeError(
@@ -393,8 +471,9 @@ class VideoSource(object):
                 "Use a browser HTMLVideoElement-backed video source instead."
             )
         self.container = av.open(self.path)
-        self.stream = self.container.streams.video[0]
+        self.stream = self._select_video_stream()
         self.stream.thread_type = "AUTO"
+        self.codec_context = self._create_alpha_codec_context()
 
         self.width = self.stream.codec_context.width
         self.height = self.stream.codec_context.height
@@ -626,10 +705,12 @@ class VideoSource(object):
                 round(seconds * float(self.frame_rate)),
             )
 
-        return sum(
+        count = sum(
             1
-            for _ in self.container.decode(self.stream)
+            for _ in self._decode_stream()
         )
+        self.container.seek(0, stream=self.stream)
+        return max(1, count)
 
     def fits_at_once(self) -> bool:
         """
@@ -673,7 +754,7 @@ class VideoSource(object):
 
         frames = [
             self.to_rgba(frame)
-            for frame in self.container.decode(self.stream)
+            for frame in self._decode_stream()
         ]
 
         # What was actually decoded is authoritative.
@@ -706,11 +787,64 @@ class VideoSource(object):
             dtype=np.uint8,
         )
 
+    def _detect_premultiplied(self, rgba: np.ndarray) -> bool | None:
+        """
+        Detect whether semi-transparent pixels in a frame carry premultiplied
+        RGB values (matted with black) rather than straight RGB.
+        """
+        a = rgba[:, :, 3]
+        semi = (a >= 16) & (a <= 235)
+        if not np.any(semi):
+            return None
+        rgb = rgba[semi, :3].astype(np.float32)
+        af = a[semi].astype(np.float32)
+        luma = 0.299 * rgb[:, 0] + 0.587 * rgb[:, 1] + 0.114 * rgb[:, 2]
+        colored = luma > 4.0
+        if int(np.sum(colored)) < 16:
+            return None
+        luma = luma[colored]
+        af = af[colored]
+        if float(np.mean(luma <= af + 5.0)) < 0.95:
+            return False
+        low = af < 100.0
+        high = af > 150.0
+        if np.any(low) and np.any(high):
+            return float(np.mean(luma[low])) < 0.7 * float(np.mean(luma[high]))
+        return True
+
     def to_rgba(self, frame) -> np.ndarray:
         """
         Convert a decoded PyAV frame into straight RGBA bytes.
         """
-        return frame.to_ndarray(format="rgba")
+        rgba = frame.to_ndarray(format="rgba")
+        alpha = rgba[:, :, 3]
+        if np.all(alpha == 255):
+            return rgba
+
+        if not rgba.flags.writeable:
+            rgba = rgba.copy()
+
+        # Clear RGB in fully transparent pixels (fixes YUV/YUVA chroma bleed
+        # such as green [0, 136, 0, 0] in ProRes 4444 .mov or subsampling
+        # spillover in VP8/VP9 .webm).
+        zero_mask = alpha == 0
+        if np.any(zero_mask):
+            rgba[zero_mask, :3] = 0
+
+        if self._premultiplied is None:
+            self._premultiplied = self._detect_premultiplied(rgba)
+
+        if self._premultiplied:
+            semi_mask = (alpha > 0) & (alpha < 255)
+            if np.any(semi_mask):
+                scale = 255.0 / alpha[semi_mask, np.newaxis].astype(np.float32)
+                rgba[semi_mask, :3] = np.clip(
+                    np.rint(rgba[semi_mask, :3].astype(np.float32) * scale),
+                    0.0,
+                    255.0,
+                ).astype(np.uint8)
+
+        return rgba
 
     # ======================================================================
     # Random/sequential decoding for normal files
@@ -733,7 +867,8 @@ class VideoSource(object):
             )
         )
 
-        offset = int(
+        start_time = self.stream.start_time or 0
+        offset = start_time + int(
             index
             / self.frame_rate
             / time_base
@@ -746,9 +881,7 @@ class VideoSource(object):
             any_frame=False,
         )
 
-        self.decoder = self.container.decode(
-            self.stream
-        )
+        self.decoder = self._decode_stream()
 
         self.next_index = None
 
@@ -854,18 +987,23 @@ class VideoSource(object):
         """
         Determine the frame number from its timestamp.
         """
+        time_base = self.stream.time_base or getattr(frame, "time_base", None)
         if (
             frame.pts is None
-            or self.stream.time_base is None
+            or time_base is None
         ):
             return self.next_index or 0
 
+        start_time = self.stream.start_time or 0
         seconds = float(
-            frame.pts * self.stream.time_base
+            (frame.pts - start_time) * time_base
         )
 
-        return round(
-            seconds * float(self.frame_rate)
+        return max(
+            0,
+            round(
+                seconds * float(self.frame_rate)
+            ),
         )
 
     def remember(

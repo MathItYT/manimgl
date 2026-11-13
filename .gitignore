@@ -190,3 +190,7 @@ manimgl_generative/
 
 loquendo.py
 real_analysis.py
+*.tgs
+*.webm
+convert.py
+live_stream.py

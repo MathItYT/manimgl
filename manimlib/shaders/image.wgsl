@@ -18,5 +18,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     clip_test(in.clip_distances);
     var color = textureSample(Texture, image_sampler, in.im_coords);
     color.a *= in.opacity;
+    if (color.a == 0.0) {
+        discard;
+    }
     return color;
 }
