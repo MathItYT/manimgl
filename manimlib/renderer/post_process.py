@@ -55,6 +55,8 @@ class MobjectPostProcessor:
         self.layer_view: Optional[Any] = None
         self.layer_texture_b: Optional[Any] = None
         self.layer_view_b: Optional[Any] = None
+        self.layer_texture_c: Optional[Any] = None
+        self.layer_view_c: Optional[Any] = None
 
         # Scratch Pool compartido para efectos de 2 pases (Glow, Blur, Shadow)
         self.scratch_texture: Optional[Any] = None
@@ -130,6 +132,9 @@ class MobjectPostProcessor:
 
         self.layer_texture_b = self.device.create_texture(size=(width, height, 1), format=COLOR_FORMAT, usage=usage)
         self.layer_view_b = self.layer_texture_b.create_view()
+
+        self.layer_texture_c = self.device.create_texture(size=(width, height, 1), format=COLOR_FORMAT, usage=usage)
+        self.layer_view_c = self.layer_texture_c.create_view()
 
         # Textura scratch compartida (a media resolución para acelerar pases intermedios)
         sw, sh = max(1, width // 2), max(1, height // 2)
@@ -416,6 +421,9 @@ class MobjectPostProcessor:
             offset = getattr(e, "offset", None)
             if offset is not None:
                 pad = max(pad, int(np.hypot(offset[0], offset[1]) + r * 2.2))
+            blur_strength = float(getattr(e, "_cached_strength", 0.0))
+            if blur_strength > 0:
+                pad = max(pad, int(blur_strength * max(self.width, self.height) * 0.6) + 16)
 
         scissor = self.get_scissor_rect(mobject, padding=pad)
 

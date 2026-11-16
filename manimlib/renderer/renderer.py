@@ -51,6 +51,8 @@ class Renderer(object):
         self.bundling = Bundling(allowed=bundle)
         self.materials: dict[tuple, Material] = dict()
         self.drawings: dict[Mobject, Drawing] = dict()
+        self.offscreen_drawings: dict[Mobject, Drawing] = dict()
+        self.offscreen_leaders: dict[Mobject, list[Drawing]] = dict()
         self.drawn: list[Drawing] = []
         self.leaders: list[Drawing] = []
         self.run_lengths: tuple = ()
@@ -172,6 +174,84 @@ class Renderer(object):
 
         return ordered
 
+    def _prepare_offscreen_mobject(
+        self,
+        mobject: Mobject,
+        held: dict[Mobject, Drawing],
+    ) -> list[Drawing]:
+        mob_drawings: list[Drawing] = []
+        for sm in mobject.get_family():
+            drawing_class = sm.drawing_class
+            if len(sm.data) == 0 or not drawing_class.draws(sm):
+                continue
+            drawing = held.get(sm)
+            if drawing is None or drawing.replacements is not sm.shader_code_replacements:
+                drawing = drawing_class(self.material_for(sm, drawing_class), sm)
+            self.offscreen_drawings[sm] = drawing
+            drawing.write_uniforms()
+            drawing.realize_textures()
+            mob_drawings.append(drawing)
+
+        if not mob_drawings:
+            return []
+
+        if not self.may_merge or len(mob_drawings) == 1:
+            for d in mob_drawings:
+                d.members = None
+            leaders = list(mob_drawings)
+        else:
+            self.compare_uniforms(mob_drawings)
+            runs = batch_by_comparison(
+                mob_drawings,
+                lambda prev, d: d.can_follow(prev),
+            )
+            leaders = []
+            for run in runs:
+                run[0].members = run if len(run) > 1 else None
+                leaders.append(run[0])
+
+        for leader in leaders:
+            leader.write_records()
+
+        return leaders
+
+    def prepare_offscreen_mobjects(self, mobjects: Iterable[Mobject]) -> None:
+        held = self.offscreen_drawings
+        self.offscreen_drawings = dict()
+        self.offscreen_leaders = dict()
+
+        candidate_effects: list[Any] = []
+        seen_effect_ids: set[int] = set()
+        seen_holder_ids: set[int] = set()
+
+        def collect_from_holder(holder: Any) -> None:
+            if holder is None or id(holder) in seen_holder_ids:
+                return
+            seen_holder_ids.add(id(holder))
+            for eff in getattr(holder, "get_vfx_list", lambda: [])():
+                if id(eff) not in seen_effect_ids:
+                    seen_effect_ids.add(id(eff))
+                    candidate_effects.append(eff)
+
+        for mobject in mobjects:
+            for mob in mobject.get_family():
+                collect_from_holder(mob)
+                collect_from_holder(getattr(mob, "_vfx_group", None))
+                collect_from_holder(getattr(mob, "_vfx_local", None))
+
+        for eff in self.get_frame_vfx_list(mobjects):
+            if id(eff) not in seen_effect_ids:
+                seen_effect_ids.add(id(eff))
+                candidate_effects.append(eff)
+
+        for eff in candidate_effects:
+            mask_mob = getattr(eff, "mask", None)
+            if mask_mob is None or mask_mob in self.offscreen_leaders:
+                continue
+            if hasattr(eff, "_ensure_solid_stencil"):
+                eff._ensure_solid_stencil(mask_mob)
+            self.offscreen_leaders[mask_mob] = self._prepare_offscreen_mobject(mask_mob, held)
+
     def render_mobject_to_view(
         self,
         encoder: Any,
@@ -179,21 +259,12 @@ class Renderer(object):
         view: Any,
         load_op: wgpu.LoadOp = wgpu.LoadOp.clear
     ) -> None:
-        drawings = []
-        for sm in mobject.get_family():
-            drawing_class = sm.drawing_class
-            if len(sm.data) == 0 or not drawing_class.draws(sm):
-                continue
-            drawing = self.drawings.get(sm)
-            if drawing is None or drawing.replacements is not sm.shader_code_replacements:
-                drawing = drawing_class(self.material_for(sm, drawing_class), sm)
-                self.drawings[sm] = drawing
-            drawing.write_uniforms()
-            drawing.realize_textures()
-            drawing.write_records()
-            drawings.append(drawing)
-
-        self.gpu.end_writes()
+        leaders = self.offscreen_leaders.get(mobject)
+        if leaders is None:
+            self.gpu.begin_writes()
+            leaders = self._prepare_offscreen_mobject(mobject, self.offscreen_drawings)
+            self.offscreen_leaders[mobject] = leaders
+            self.gpu.end_writes()
 
         if self.samples > 1:
             att = {
@@ -233,8 +304,8 @@ class Renderer(object):
                 },
             }
         rp = RenderPass(encoder.begin_render_pass(**att), self.gpu.frame_bind_group)
-        for drw in drawings:
-            drw.draw(rp)
+        for ldr in leaders:
+            ldr.draw(rp)
         rp.encoder.end()
 
     def draw(self, mobjects: Iterable[Mobject], attachments: dict) -> None:
@@ -251,6 +322,14 @@ class Renderer(object):
             if drawing.write_uniforms():
                 regroup = True
             drawing.realize_textures()
+            vfx_sig = (
+                self.get_vfx_group(drawing.mobject),
+                getattr(drawing.mobject, "_vfx_local", None),
+            )
+            if getattr(drawing, "_vfx_sig", (None, None)) != vfx_sig:
+                drawing._vfx_sig = vfx_sig
+                regroup = True
+                self.bundling.invalidate()
             if drawing.invalidated:
                 self.bundling.invalidate()
 
@@ -264,6 +343,7 @@ class Renderer(object):
             leader.write_records()
             if leader.invalidated:
                 self.bundling.invalidate()
+        self.prepare_offscreen_mobjects(mobjects)
         gpu.end_writes()
 
         if gpu.rebinds != rebinds or gpu.samples != self.samples:
@@ -473,9 +553,9 @@ class Renderer(object):
                         clear_pass.end()
                     first_draw = False
 
-                # Separar estáticos de mobjects locales dinámicos
-                static_leaders: list[Drawing] = []
-                moving_local_map: dict[Mobject, list[Drawing]] = dict()
+                # Agrupar líderes preservando el orden de profundidad (z-order) entre estáticos y locales
+                segments: list[tuple[Mobject | None, list[Drawing]]] = []
+                local_segment_map: dict[Mobject, list[Drawing]] = dict()
                 for ldr in batch_leaders:
                     local_mob = getattr(ldr.mobject, "_vfx_local", None)
                     if local_mob is not None and local_mob is not group and getattr(local_mob, "has_vfx", lambda: False)():
@@ -484,24 +564,105 @@ class Renderer(object):
                             for e in local_mob.get_vfx_list()
                         )
                         if is_active:
-                            if local_mob not in moving_local_map:
-                                moving_local_map[local_mob] = []
-                            moving_local_map[local_mob].append(ldr)
+                            if local_mob in local_segment_map:
+                                local_segment_map[local_mob].append(ldr)
+                            else:
+                                seg_ldrs = [ldr]
+                                local_segment_map[local_mob] = seg_ldrs
+                                segments.append((local_mob, seg_ldrs))
                             continue
-                    static_leaders.append(ldr)
+                    if segments and segments[-1][0] is None:
+                        segments[-1][1].append(ldr)
+                    else:
+                        segments.append((None, [ldr]))
 
-                # Renderizar la capa base del grupo
-                layer_att = self.post_processor.get_layer_attachments(
-                    depth_view=scene_depth_view,
-                    clear_color=True,
-                    depth_load_op=wgpu.LoadOp.load,
-                )
-                if static_leaders:
-                    layer_rp = RenderPass(encoder.begin_render_pass(**layer_att), gpu.frame_bind_group)
-                    for ldr in static_leaders:
-                        ldr.draw(layer_rp)
-                    layer_rp.encoder.end()
-                else:
+                layer_initialized = False
+                for local_mob, seg_ldrs in segments:
+                    if local_mob is None:
+                        if not layer_initialized:
+                            layer_att = self.post_processor.get_layer_attachments(
+                                depth_view=scene_depth_view,
+                                clear_color=True,
+                                depth_load_op=wgpu.LoadOp.load,
+                            )
+                            layer_rp = RenderPass(encoder.begin_render_pass(**layer_att), gpu.frame_bind_group)
+                            for ldr in seg_ldrs:
+                                ldr.draw(layer_rp)
+                            layer_rp.encoder.end()
+                            layer_initialized = True
+                        elif self.samples > 1:
+                            scratch_att = self.post_processor.get_scratch_attachments(
+                                depth_view=scene_depth_view,
+                                clear_color=True,
+                                depth_load_op=wgpu.LoadOp.load,
+                            )
+                            scratch_rp = RenderPass(encoder.begin_render_pass(**scratch_att), gpu.frame_bind_group)
+                            for ldr in seg_ldrs:
+                                ldr.draw(scratch_rp)
+                            scratch_rp.encoder.end()
+                            self.post_processor.blit(encoder, self.post_processor.layer_view_b, self.post_processor.layer_view)
+                        else:
+                            layer_att = self.post_processor.get_layer_attachments(
+                                depth_view=scene_depth_view,
+                                clear_color=False,
+                                depth_load_op=wgpu.LoadOp.load,
+                            )
+                            layer_rp = RenderPass(encoder.begin_render_pass(**layer_att), gpu.frame_bind_group)
+                            for ldr in seg_ldrs:
+                                ldr.draw(layer_rp)
+                            layer_rp.encoder.end()
+                    else:
+                        if not layer_initialized:
+                            clear_pass = encoder.begin_render_pass(color_attachments=[{
+                                "view": self.post_processor.layer_view,
+                                "load_op": wgpu.LoadOp.clear,
+                                "store_op": wgpu.StoreOp.store,
+                                "clear_value": (0.0, 0.0, 0.0, 0.0),
+                            }])
+                            clear_pass.end()
+                            layer_initialized = True
+
+                        scratch_att = self.post_processor.get_scratch_attachments(
+                            depth_view=scene_depth_view,
+                            clear_color=True,
+                            depth_load_op=wgpu.LoadOp.load,
+                        )
+                        scratch_rp = RenderPass(encoder.begin_render_pass(**scratch_att), gpu.frame_bind_group)
+                        for ldr in seg_ldrs:
+                            ldr.draw(scratch_rp)
+                        scratch_rp.encoder.end()
+
+                        local_active_effects = sorted(
+                            [eff for eff in local_mob.get_vfx_list() if getattr(eff, "is_active", lambda p: True)(self.post_processor)],
+                            key=lambda e: getattr(e, "order", 50)
+                        )
+                        num_local = len(local_active_effects)
+                        if num_local == 1:
+                            local_active_effects[0].apply(
+                                self.post_processor,
+                                encoder,
+                                self.post_processor.layer_view_b,
+                                self.post_processor.layer_view,
+                                load_op=wgpu.LoadOp.load,
+                            )
+                        elif num_local > 1:
+                            curr_in = self.post_processor.layer_view_b
+                            curr_out = self.post_processor.layer_view_c
+                            for idx, eff in enumerate(local_active_effects):
+                                is_last = (idx == num_local - 1)
+                                dest_view = self.post_processor.layer_view if is_last else curr_out
+                                load_op = wgpu.LoadOp.load if is_last else wgpu.LoadOp.clear
+                                eff.apply(
+                                    self.post_processor,
+                                    encoder,
+                                    curr_in,
+                                    dest_view,
+                                    load_op=load_op,
+                                )
+                                if not is_last:
+                                    curr_in, curr_out = curr_out, curr_in
+
+                if not layer_initialized:
                     clear_pass = encoder.begin_render_pass(color_attachments=[{
                         "view": self.post_processor.layer_view,
                         "load_op": wgpu.LoadOp.clear,
@@ -510,28 +671,9 @@ class Renderer(object):
                     }])
                     clear_pass.end()
 
-                # Renderizar locales dinámicos en el buffer scratch
-                for local_mob, local_ldrs in moving_local_map.items():
-                    scratch_att = self.post_processor.get_scratch_attachments(
-                        depth_view=scene_depth_view,
-                        clear_color=True,
-                        depth_load_op=wgpu.LoadOp.load,
-                    )
-                    scratch_rp = RenderPass(encoder.begin_render_pass(**scratch_att), gpu.frame_bind_group)
-                    for ldr in local_ldrs:
-                        ldr.draw(scratch_rp)
-                    scratch_rp.encoder.end()
-
-                    local_active_effects = sorted(
-                        [eff for eff in local_mob.get_vfx_list() if getattr(eff, "is_active", lambda p: True)(self.post_processor)],
-                        key=lambda e: getattr(e, "order", 50)
-                    )
-                    for eff in local_active_effects:
-                        eff.apply(self.post_processor, encoder, self.post_processor.layer_view_b, self.post_processor.layer_view)
-
                 # Snapshot de fondo condicional mediante `needs_bg`
                 all_candidate_effects = list(getattr(group, "get_vfx_list", lambda: [])())
-                for local_mob in moving_local_map:
+                for local_mob in local_segment_map:
                     all_candidate_effects.extend(getattr(local_mob, "get_vfx_list", lambda: [])())
 
                 needs_bg_snapshot = any(
@@ -581,6 +723,7 @@ class Renderer(object):
             lambda prev, drawing: (
                 drawing.can_follow(prev)
                 and self.get_vfx_group(prev.mobject) is self.get_vfx_group(drawing.mobject)
+                and getattr(prev.mobject, "_vfx_local", None) is getattr(drawing.mobject, "_vfx_local", None)
             )
         )
         self.leaders = []

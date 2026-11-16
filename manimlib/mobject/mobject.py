@@ -645,8 +645,27 @@ class Mobject(object):
                     stash[attr] = value
                     null_value = [] if isinstance(value, list) else None
                     setattr(self, attr, null_value)
-            result = func(self, *args, **kwargs)
-            self.__dict__.update(stash)
+            family = self.get_family()
+            family_set = set(family)
+            external_vfx: list[tuple[int, Mobject, str, Any]] = []
+            for idx, sm in enumerate(family):
+                for vfx_attr in ("_vfx_group", "_vfx_local"):
+                    if hasattr(sm, vfx_attr):
+                        val = getattr(sm, vfx_attr)
+                        if val is not None and val not in family_set:
+                            external_vfx.append((idx, sm, vfx_attr, val))
+                            delattr(sm, vfx_attr)
+            try:
+                result = func(self, *args, **kwargs)
+            finally:
+                self.__dict__.update(stash)
+                for _, sm, vfx_attr, val in external_vfx:
+                    setattr(sm, vfx_attr, val)
+            if isinstance(result, Mobject) and external_vfx:
+                res_family = result.get_family()
+                for idx, _, vfx_attr, val in external_vfx:
+                    if idx < len(res_family):
+                        setattr(res_family[idx], vfx_attr, val)
             return result
         return wrapper
 
@@ -700,6 +719,11 @@ class Mobject(object):
                     setattr(result, attr, res_val)
             elif isinstance(value, np.ndarray):
                 setattr(result, attr, value.copy())
+        for sm, res_sm in zip(family, result.family):
+            for vfx_attr in ("_vfx_group", "_vfx_local"):
+                if hasattr(sm, vfx_attr):
+                    val = getattr(sm, vfx_attr)
+                    setattr(res_sm, vfx_attr, id_to_result.get(id(val), val))
         if hasattr(self, "_vfx_effects"):
             new_effects = []
             for eff in self._vfx_effects:
@@ -766,11 +790,19 @@ class Mobject(object):
                 sm1._vfx_effects.clear()
         # Make sure named family members carry over
         id_to_fam1 = {id(sm2): sm1 for sm1, sm2 in zip(family1, family2)}
+        family1_set = set(family1)
+        family2_set = set(family2)
         for sm1, sm2 in zip(family1, family2):
             for vfx_attr in ("_vfx_group", "_vfx_local"):
+                existing = getattr(sm1, vfx_attr, None)
+                if existing is not None and existing not in family1_set:
+                    continue
                 if hasattr(sm2, vfx_attr):
                     val = getattr(sm2, vfx_attr)
-                    setattr(sm1, vfx_attr, id_to_fam1.get(id(val), val))
+                    if val in family2_set:
+                        setattr(sm1, vfx_attr, id_to_fam1.get(id(val), val))
+                    elif existing is None:
+                        setattr(sm1, vfx_attr, val)
                 elif hasattr(sm1, vfx_attr):
                     delattr(sm1, vfx_attr)
         for attr, value in mobject.__dict__.items():
@@ -2195,6 +2227,10 @@ class Mobject(object):
         return getattr(self, "hidden", False)
 
     def add_vfx(self, *effects: Any, recurse: bool = False) -> Self:
+        if (type(self) is Group or recurse) and self.submobjects:
+            for sm in self.submobjects:
+                sm.add_vfx(*effects, recurse=recurse)
+            return self
         if not hasattr(self, "_vfx_effects"):
             self._vfx_effects = []
         flat_effects: list[Any] = []
@@ -2227,6 +2263,14 @@ class Mobject(object):
                 )
                 for mob in self.get_family():
                     if is_group:
+                        prev_group = getattr(mob, "_vfx_group", None)
+                        if (
+                            prev_group is not None
+                            and prev_group is not self
+                            and getattr(prev_group, "has_vfx", lambda: False)()
+                            and getattr(mob, "_vfx_local", None) is None
+                        ):
+                            mob._vfx_local = prev_group
                         mob._vfx_group = self
                     else:
                         mob._vfx_local = self
@@ -2237,6 +2281,9 @@ class Mobject(object):
     def remove_vfx(self, effect_type_or_name: Any = None, recurse: bool = False) -> Self:
         if effect_type_or_name is None:
             return self.clear_vfx(recurse=recurse)
+        if (type(self) is Group or recurse) and self.submobjects:
+            for sm in self.submobjects:
+                sm.remove_vfx(effect_type_or_name, recurse=recurse)
         if hasattr(self, "_vfx_effects"):
             if isinstance(effect_type_or_name, str):
                 self._vfx_effects = [e for e in self._vfx_effects if e.name != effect_type_or_name]
@@ -2273,7 +2320,11 @@ class Mobject(object):
         return self
 
     def has_vfx(self) -> bool:
-        return bool(getattr(self, "_vfx_effects", None))
+        if bool(getattr(self, "_vfx_effects", None)):
+            return True
+        if type(self) is Group and self.submobjects:
+            return any(sm.has_vfx() for sm in self.submobjects)
+        return False
 
     def get_vfx_list(self) -> list[Any]:
         return getattr(self, "_vfx_effects", [])
@@ -2310,6 +2361,9 @@ class Mobject(object):
         return self
 
     def remove_mask(self, mask: Mobject | None = None) -> Self:
+        if type(self) is Group and self.submobjects:
+            for sm in self.submobjects:
+                sm.remove_mask(mask)
         if hasattr(self, "_vfx_effects"):
             masks_to_remove = [
                 eff for eff in self._vfx_effects

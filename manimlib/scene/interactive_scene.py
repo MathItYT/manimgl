@@ -256,7 +256,7 @@ class InteractiveScene(Scene):
 
     def get_state(self, ignore: list[Mobject] | None = None) -> SceneState:
         return SceneState(self, ignore=[
-            self.selection_highlight, self.selection_rectangle, self.crosshair, *ignore
+            self.selection_highlight, self.selection_rectangle, self.crosshair, *(ignore if ignore is not None else [])
         ])
 
     def restore_state(self, scene_state: SceneState):

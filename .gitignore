@@ -194,3 +194,4 @@ real_analysis.py
 *.webm
 convert.py
 live_stream.py
+*.webp

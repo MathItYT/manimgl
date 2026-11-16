@@ -755,6 +755,11 @@ class Mask(PostProcessEffect):
             [processor.single_tex_layout, processor.single_tex_layout, self.uniform_layout],
             blend=PREMULTIPLIED_ADDITIVE_BLEND,
         )
+        self.pipeline_replace = processor.create_fullscreen_pipeline(
+            MASK_WGSL,
+            [processor.single_tex_layout, processor.single_tex_layout, self.uniform_layout],
+            blend=None,
+        )
         self._initialized = True
 
     def apply(
@@ -796,7 +801,8 @@ class Mask(PostProcessEffect):
         }])
         if scissor is not None:
             p.set_scissor_rect(*scissor)
-        p.set_pipeline(self.pipeline)
+        active_pipeline = self.pipeline_replace if load_op == wgpu.LoadOp.clear else self.pipeline
+        p.set_pipeline(active_pipeline)
         p.set_bind_group(0, bg_mob)
         p.set_bind_group(1, bg_mask)
         p.set_bind_group(2, self.bg_uniform)
@@ -804,12 +810,24 @@ class Mask(PostProcessEffect):
         p.end()
 
     def copy(self) -> Mask:
-        new_obj = Mask(
-            mask=self.mask,
-            invert=self.invert,
-            use_luminance=self.use_luminance,
-            mode=self.mode,
-        )
+        new_obj = Mask.__new__(Mask)
+        PostProcessEffect.__init__(new_obj, name="Mask", allow_multiple=True)
+        new_obj.mask = self.mask
+        new_obj.invert = self.invert
+        new_obj.use_luminance = self.use_luminance
+        new_obj.mode = self.mode
+        new_obj._initialized = self._initialized
+        if self._initialized:
+            new_obj.uniform_layout = self.uniform_layout
+            new_obj.buf = self.buf
+            new_obj.bg_uniform = self.bg_uniform
+            new_obj.pipeline = self.pipeline
+            new_obj.pipeline_replace = self.pipeline_replace
+            new_obj._last_uniform_data = (
+                self._last_uniform_data.copy()
+                if self._last_uniform_data is not None
+                else None
+            )
         new_obj.mobject = self.mobject
         return new_obj
 
