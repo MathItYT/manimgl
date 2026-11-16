@@ -242,3 +242,6 @@ class StructuredArray(object):
         # different rather than taking its own array to be the one it has already seen
         result.version += 1
         return result
+
+    def __deepcopy__(self, memo: dict) -> Self:
+        return self.copy()

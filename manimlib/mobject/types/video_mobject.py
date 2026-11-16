@@ -568,6 +568,11 @@ class VideoSource(object):
 
         self._capture_thread.start()
 
+        import time as _time
+        deadline = _time.perf_counter() + 0.5
+        while self.latest_index < 0 and self._capture_error is None and _time.perf_counter() < deadline:
+            _time.sleep(0.005)
+
     def _capture_loop(self) -> None:
         """
         Continuously decode the live source.
@@ -1215,6 +1220,10 @@ class VideoMobject(ImageMobject):
         live: bool = False,
         device_format: str | None = None,
         device_options: dict | None = None,
+        flip: bool = False,
+        mirror: bool = False,
+        flip_horizontal: bool = False,
+        flip_vertical: bool = False,
         _browser_source: VideoSource | None = None,
         **kwargs,
     ):
@@ -1232,6 +1241,10 @@ class VideoMobject(ImageMobject):
         super().__init__(
             filename,
             height=height,
+            flip=flip,
+            mirror=mirror,
+            flip_horizontal=flip_horizontal,
+            flip_vertical=flip_vertical,
             **kwargs,
         )
 

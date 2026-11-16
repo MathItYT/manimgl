@@ -209,6 +209,8 @@ class LayeredTexture(Texture):
 
     def refresh(self) -> None:
         source = self.source
+        if getattr(source, "live", False) and hasattr(source, "load"):
+            source.load(source.video.latest_index)
         if source.version == self.version:
             return
         self.version = source.version

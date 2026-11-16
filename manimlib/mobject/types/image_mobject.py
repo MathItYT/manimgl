@@ -34,10 +34,19 @@ class ImageMobject(Mobject):
         self,
         filename: str,
         height: float = 4.0,
+        flip: bool = False,
+        mirror: bool = False,
+        flip_horizontal: bool = False,
+        flip_vertical: bool = False,
         **kwargs
     ):
         self.height = height
         super().__init__(textures={"Texture": self.init_texture(filename)}, **kwargs)
+        if flip or mirror or flip_horizontal or flip_vertical:
+            self.mirror(
+                horizontal=bool(flip or mirror or flip_horizontal),
+                vertical=bool(flip_vertical),
+            )
 
     def init_texture(self, filename: str) -> TextureSource:
         """
@@ -74,6 +83,20 @@ class ImageMobject(Mobject):
 
     def set_color(self, color, opacity=None, recurse=None):
         return self
+
+    def mirror(self, horizontal: bool = True, vertical: bool = False):
+        with self.data.being_written() as data:
+            if horizontal:
+                data["im_coords"][:, 0] = 1.0 - data["im_coords"][:, 0]
+            if vertical:
+                data["im_coords"][:, 1] = 1.0 - data["im_coords"][:, 1]
+        return self
+
+    def flip_horizontal(self):
+        return self.mirror(horizontal=True, vertical=False)
+
+    def flip_vertical(self):
+        return self.mirror(horizontal=False, vertical=True)
 
     def point_to_rgb(self, point: Vect3) -> Vect3:
         x0, y0 = self.get_corner(UL)[:2]
