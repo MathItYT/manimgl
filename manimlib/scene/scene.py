@@ -381,6 +381,7 @@ class Scene(object):
 
     def get_image(self) -> Image:
         if self.window is None:
+            self.camera.capture(*self.mobjects)
             return self.camera.get_image()
         # A window has the camera drawing at its size, so the frame has to be drawn again
         # at the resolution an image of it is meant to come out at

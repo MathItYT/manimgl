@@ -313,6 +313,7 @@ class SingleStringTypst(StringMobject):
             r"|(?<!\w)_(?!\w)"
             r"|```(?:[a-zA-Z0-9]+)?"
             r"|`"
+            r"|=\s+"
             r"|\$"
             r"|\^|_"
             r")|"

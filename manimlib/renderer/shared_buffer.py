@@ -94,8 +94,7 @@ class SharedBuffer(object):
         self.bytes = memoryview(self.blocks)
         self.buffer = self.device.create_buffer(size=capacity, usage=self.usage)
         self.dirty_start = 0
-        if self.used > self.dirty_end:
-            self.dirty_end = self.used
+        self.dirty_end = max(self.dirty_end, self.used, len(held))
         return True
 
     def make_bindings(self) -> None:

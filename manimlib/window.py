@@ -129,9 +129,13 @@ class Window(object):
             self.context = self.canvas.get_context("wgpu")
             self.gpu = Gpu()
             self.configure()
-            glfw.set_window_pos(self.glfw_window, *(
-                position or self.get_position(monitor, position_string)
-            ))
+            glfw.set_window_attrib(self.glfw_window, glfw.AUTO_ICONIFY, glfw.FALSE)
+            if full_screen:
+                self.set_fullscreen(True, monitor=monitor)
+            else:
+                glfw.set_window_pos(self.glfw_window, *(
+                    position or self.get_position(monitor, position_string)
+                ))
 
         for event_type, handler in [
             ("pointer_move", self.on_pointer_move),
@@ -412,6 +416,22 @@ class Window(object):
         if sys.platform == "emscripten":
             return
         glfw.focus_window(self.glfw_window)
+
+    def set_fullscreen(self, full_screen: bool = True, monitor=None, monitor_index: int = 0) -> None:
+        if sys.platform == "emscripten":
+            return
+        win = self.glfw_window
+        if monitor is None:
+            monitor = self.get_monitor(monitor_index) or glfw.get_primary_monitor()
+        if full_screen and monitor is not None:
+            mx, my = glfw.get_monitor_pos(monitor)
+            mode = glfw.get_video_mode(monitor)
+            glfw.set_window_attrib(win, glfw.DECORATED, glfw.FALSE)
+            glfw.set_window_attrib(win, glfw.AUTO_ICONIFY, glfw.FALSE)
+            glfw.set_window_pos(win, mx, my)
+            glfw.set_window_size(win, mode.size.width, mode.size.height)
+        else:
+            glfw.set_window_attrib(win, glfw.DECORATED, glfw.TRUE)
 
     def destroy(self) -> None:
         self.scene = None

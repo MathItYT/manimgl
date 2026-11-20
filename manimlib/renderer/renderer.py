@@ -116,17 +116,49 @@ class Renderer(object):
         if not unique_groups:
             return leaders
 
+        if frame is not None:
+            cam_c = frame.get_center()
+            cam_cx, cam_cy = float(cam_c[0]), float(cam_c[1])
+            inv_scale = 1.0 / max(float(frame.get_scale()), 1e-6)
+        else:
+            cam_cx = cam_cy = 0.0
+            inv_scale = 1.0
+
         bboxes: list[tuple[np.ndarray, np.ndarray] | None] = []
-        for ldr in leaders:
-            mob = ldr.mobject
-            if mob.has_points():
+        for idx_ldr, ldr in enumerate(leaders):
+            members = ldr.members if ldr.members else (ldr,)
+            bmin: np.ndarray | None = None
+            bmax: np.ndarray | None = None
+            for d in members:
+                mob = d.mobject
+                if not mob.has_points():
+                    continue
                 bb = mob.get_bounding_box()
+                mmin = bb[0][:2]
+                mmax = bb[2][:2]
+                is_fixed = (
+                    "is_fixed_in_frame" in mob.uniforms.array.dtype.names
+                    and bool(mob.uniforms.array["is_fixed_in_frame"][0])
+                )
+                if frame is not None and not is_fixed:
+                    mmin = np.array([(mmin[0] - cam_cx) * inv_scale, (mmin[1] - cam_cy) * inv_scale])
+                    mmax = np.array([(mmax[0] - cam_cx) * inv_scale, (mmax[1] - cam_cy) * inv_scale])
+                if bmin is None:
+                    bmin = mmin.copy()
+                    bmax = mmax.copy()
+                else:
+                    np.minimum(bmin, mmin, out=bmin)
+                    np.maximum(bmax, mmax, out=bmax)
+            if bmin is not None:
                 r_extra = 0.0
-                grp = self.get_vfx_group(mob)
+                grp = groups[idx_ldr]
                 if grp is not None and hasattr(grp, "get_vfx_list"):
                     for eff in grp.get_vfx_list():
-                        r_extra = max(r_extra, float(getattr(eff, "radius", 0.0)) * 0.015)
-                bboxes.append((bb[0][:2] - r_extra, bb[2][:2] + r_extra))
+                        rad = float(getattr(eff, "radius", 0.0))
+                        off = getattr(eff, "offset", None)
+                        off_mag = float(np.hypot(off[0], off[1])) if off is not None else 0.0
+                        r_extra = max(r_extra, (rad + off_mag) * 0.015)
+                bboxes.append((bmin - r_extra, bmax + r_extra))
             else:
                 bboxes.append(None)
 
@@ -161,7 +193,7 @@ class Renderer(object):
                         break
 
             if candidate_idx is None:
-                candidate_idx = ready[0]
+                candidate_idx = min(ready)
                 current_group = groups[candidate_idx]
 
             ready.remove(candidate_idx)
